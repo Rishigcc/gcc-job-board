@@ -11,12 +11,18 @@ function Filters({
   setJobFunction,
   functions,
 }) {
+  const hasFilters =
+    search !== "" ||
+    location !== "All Locations" ||
+    company !== "All Companies" ||
+    jobFunction !== "All Functions";
+
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-8 mb-10">
 
       <input
         type="text"
-        placeholder="Search jobs..."
+        placeholder="Search GCC jobs..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full px-6 py-4 text-lg rounded-2xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
@@ -73,6 +79,22 @@ function Filters({
         </div>
 
       </div>
+
+      {hasFilters && (
+        <div className="mt-6 flex justify-center">
+          <button
+            onClick={() => {
+              setSearch("");
+              setLocation("All Locations");
+              setCompany("All Companies");
+              setJobFunction("All Functions");
+            }}
+            className="px-5 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 transition"
+          >
+            Reset Filters
+          </button>
+        </div>
+      )}
 
     </div>
   );
