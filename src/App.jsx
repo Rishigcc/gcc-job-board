@@ -173,7 +173,22 @@ function App() {
           setJobFunction={setJobFunction}
           functions={functions}
         />
+<div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 px-6 py-5 text-center">
 
+  <p className="text-slate-800 font-medium">
+    📬 <strong>We update the latest GCC jobs every Tuesday.</strong>
+  </p>
+
+  <a
+    href="https://www.linkedin.com/in/therishinigam/"
+    target="_blank"
+    rel="noreferrer"
+    className="mt-2 inline-block text-blue-600 hover:underline"
+  >
+    Want to get instantly notified as soon as the weekly update goes live? DM me your email on LinkedIn →
+  </a>
+
+</div>
         <ResultsBar
           jobCount={filteredJobs.length}
           sortBy={sortBy}

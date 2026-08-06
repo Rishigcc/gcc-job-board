@@ -53,9 +53,9 @@ function JobCard({ job, normalizeLocation }) {
               <Badge>🕒 {job.schedule_type}</Badge>
             )}
 
-            {job.posted_at && (
-              <Badge>📅 {job.posted_at}</Badge>
-            )}
+           {job.posted_at && (
+  <Badge>📅 Posted on {job.posted_at}</Badge>
+)}
 
           </div>
 
@@ -125,8 +125,8 @@ function JobCard({ job, normalizeLocation }) {
           )}
 
           {job.posted_at && (
-            <Badge>📅 {job.posted_at}</Badge>
-          )}
+  <Badge>📅 Posted on {job.posted_at}</Badge>
+)}
 
         </div>
 
