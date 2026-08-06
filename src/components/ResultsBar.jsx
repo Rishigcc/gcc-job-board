@@ -1,10 +1,16 @@
-function ResultsBar({ jobCount, sortBy, setSortBy }) {
+function ResultsBar({
+  jobCount,
+  sortBy,
+  setSortBy,
+  start,
+  end,
+}) {
   return (
     <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
 
       <div>
         <h2 className="text-2xl font-semibold text-slate-900">
-          Found {jobCount} Jobs
+          Showing {start}–{end} of {jobCount} Jobs
         </h2>
 
         <p className="text-gray-500 mt-1">

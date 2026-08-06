@@ -16,7 +16,7 @@ function Filters({
 
       <input
         type="text"
-        placeholder="Search jobs, companies or locations..."
+        placeholder="Search jobs..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full px-6 py-4 text-lg rounded-2xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
