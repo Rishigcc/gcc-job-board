@@ -18,27 +18,27 @@ function Filters({
     jobFunction !== "All Functions";
 
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-8 mb-10">
+    <div className="bg-white rounded-2xl md:rounded-3xl shadow-sm border border-gray-200 p-5 md:p-8 mb-8 md:mb-10">
 
       <input
         type="text"
         placeholder="Search GCC jobs..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full px-6 py-4 text-lg rounded-2xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+        className="w-full px-5 md:px-6 py-3 md:py-4 text-base md:text-lg rounded-xl md:rounded-2xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mt-5 md:mt-8">
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+          <label className="block text-[11px] md:text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1 md:mb-2">
             Location
           </label>
 
           <select
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            className="w-full px-5 py-3 rounded-xl border border-gray-300 bg-white hover:border-blue-400 transition"
+            className="w-full px-4 md:px-5 py-2.5 md:py-3 rounded-lg md:rounded-xl border border-gray-300 bg-white hover:border-blue-400 transition"
           >
             {locations.map((loc) => (
               <option key={loc}>{loc}</option>
@@ -47,14 +47,14 @@ function Filters({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+          <label className="block text-[11px] md:text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1 md:mb-2">
             Company
           </label>
 
           <select
             value={company}
             onChange={(e) => setCompany(e.target.value)}
-            className="w-full px-5 py-3 rounded-xl border border-gray-300 bg-white hover:border-blue-400 transition"
+            className="w-full px-4 md:px-5 py-2.5 md:py-3 rounded-lg md:rounded-xl border border-gray-300 bg-white hover:border-blue-400 transition"
           >
             {companies.map((comp) => (
               <option key={comp}>{comp}</option>
@@ -63,14 +63,14 @@ function Filters({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+          <label className="block text-[11px] md:text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1 md:mb-2">
             Function
           </label>
 
           <select
             value={jobFunction}
             onChange={(e) => setJobFunction(e.target.value)}
-            className="w-full px-5 py-3 rounded-xl border border-gray-300 bg-white hover:border-blue-400 transition"
+            className="w-full px-4 md:px-5 py-2.5 md:py-3 rounded-lg md:rounded-xl border border-gray-300 bg-white hover:border-blue-400 transition"
           >
             {functions.map((func) => (
               <option key={func}>{func}</option>
@@ -81,7 +81,7 @@ function Filters({
       </div>
 
       {hasFilters && (
-        <div className="mt-6 flex justify-center">
+        <div className="mt-5 md:mt-6 flex justify-center">
           <button
             onClick={() => {
               setSearch("");
@@ -89,7 +89,7 @@ function Filters({
               setCompany("All Companies");
               setJobFunction("All Functions");
             }}
-            className="px-5 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 transition"
+            className="px-4 md:px-5 py-2 rounded-lg md:rounded-xl border border-slate-300 text-slate-700 text-sm md:text-base hover:bg-slate-100 transition"
           >
             Reset Filters
           </button>

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "./components/Header";
 import Filters from "./components/Filters";
 import JobCard from "./components/JobCard";
 import ResultsBar from "./components/ResultsBar";
 import LoadingCard from "./components/LoadingCard";
 import Footer from "./components/Footer";
+import EmailSignup from "./components/EmailSignup";
 
 const JOBS_PER_PAGE = 20;
 
@@ -54,6 +55,21 @@ function App() {
   const [sortBy, setSortBy] = useState("newest");
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const jobsSectionRef = useRef(null);
+
+const scrollToJobs = () => {
+  if (!jobsSectionRef.current) return;
+
+  const y =
+    jobsSectionRef.current.getBoundingClientRect().top +
+    window.pageYOffset -
+    30;
+
+  window.scrollTo({
+    top: y,
+    behavior: "smooth",
+  });
+};
 
   useEffect(() => {
     setLoading(true);
@@ -158,37 +174,29 @@ function App() {
     <div className="min-h-screen bg-slate-100 py-10">
       <div className="max-w-6xl mx-auto px-6">
 
-        <Header />
+        <Header scrollToJobs={scrollToJobs} />
 
-        <Filters
-          search={search}
-          setSearch={setSearch}
-          location={location}
-          setLocation={setLocation}
-          locations={locations}
-          company={company}
-          setCompany={setCompany}
-          companies={companies}
-          jobFunction={jobFunction}
-          setJobFunction={setJobFunction}
-          functions={functions}
-        />
-<div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 px-6 py-5 text-center">
+        <EmailSignup />
 
-  <p className="text-slate-800 font-medium">
-    📬 <strong>We update the latest GCC jobs every Tuesday.</strong>
-  </p>
-
-  <a
-    href="https://www.linkedin.com/in/therishinigam/"
-    target="_blank"
-    rel="noreferrer"
-    className="mt-2 inline-block text-blue-600 hover:underline"
-  >
-    Want to get instantly notified as soon as the weekly update goes live? DM me your email on LinkedIn →
-  </a>
-
+     <div ref={jobsSectionRef}>
+  <Filters
+    search={search}
+    setSearch={setSearch}
+    location={location}
+    setLocation={setLocation}
+    locations={locations}
+    company={company}
+    setCompany={setCompany}
+    companies={companies}
+    jobFunction={jobFunction}
+    setJobFunction={setJobFunction}
+    functions={functions}
+  />
 </div>
+
+
+
+
         <ResultsBar
           jobCount={filteredJobs.length}
           sortBy={sortBy}
