@@ -11,7 +11,8 @@ function Header({ scrollToJobs }) {
   };
 
   return (
-    <div>
+    <div className="text-center py-16 md:py-24">
+
       <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-slate-900">
         iWorkAtGCC
       </h1>
@@ -52,8 +53,7 @@ function Header({ scrollToJobs }) {
           </h2>
 
           <p className="mt-4 md:mt-5 text-sm md:text-base text-slate-600 leading-7">
-            Discover the latest job openings across Global Capability
-            Centers.
+            Discover the latest job openings across Global Capability Centers.
           </p>
 
           <div className="mt-5 md:mt-8 font-semibold text-blue-700">
@@ -92,15 +92,16 @@ function Header({ scrollToJobs }) {
           </h2>
 
           <p className="mt-4 md:mt-5 text-sm md:text-base text-slate-600 leading-7">
-            Join thousands of GCC professionals learning, growing and
-            helping each other build better careers.
+            Join thousands of GCC professionals learning, growing and helping each other build better careers.
           </p>
 
           <div className="mt-5 md:mt-8 font-semibold text-blue-700">
             Join the community →
           </div>
         </a>
+
       </div>
+
     </div>
   );
 }
