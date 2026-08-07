@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { trackEvent } from "../analytics";
 
 const WEB_APP_URL =
   "https://script.google.com/macros/s/AKfycbz4_onOCW_RAXOpJrrQpembB20dGUP808zVy-8CcqRg6Spocwd6BdpYLjfX24HRKRN9BA/exec";
@@ -7,23 +8,23 @@ function EmailSignup() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [alreadySubscribed, setAlreadySubscribed] = useState(false);
-  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async () => {
-    setError("");
+    setMessage("");
 
-    const cleanedEmail = email.trim().toLowerCase();
-
-    if (!cleanedEmail) {
-      setError("Please enter your email.");
+    if (!email.trim()) {
+      setMessage("Please enter your email.");
+      setSuccess(false);
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!emailRegex.test(cleanedEmail)) {
-      setError("Please enter a valid email address.");
+    if (!emailRegex.test(email)) {
+      setMessage("Please enter a valid email address.");
+      setSuccess(false);
       return;
     }
 
@@ -33,37 +34,52 @@ function EmailSignup() {
       const response = await fetch(WEB_APP_URL, {
         method: "POST",
         body: JSON.stringify({
-          email: cleanedEmail,
+          email,
         }),
       });
 
       const data = await response.json();
 
       if (data.success) {
+        // Google Analytics Event
+        trackEvent("email_signup", {
+          method: "website",
+        });
+
         setSubmitted(true);
-      } else if (data.duplicate) {
-        setAlreadySubscribed(true);
+        setSuccess(true);
+        setMessage("You're in! We'll notify you whenever new GCC jobs go live.");
+      } else if (data.exists) {
+        setSubmitted(true);
+        setSuccess(true);
+        setMessage("You're already subscribed! We'll notify you whenever new GCC jobs go live.");
       } else {
-        setError("Something went wrong. Please try again.");
+        setSuccess(false);
+        setMessage("Something went wrong. Please try again.");
       }
     } catch (err) {
-      setError("Something went wrong. Please try again.");
+      setSuccess(false);
+      setMessage("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (submitted || alreadySubscribed) {
+  if (submitted) {
     return (
-      <div className="mb-8 rounded-2xl border border-green-200 bg-green-50 px-6 py-6 text-center">
-        <h3 className="text-xl font-bold text-green-700">
-          {alreadySubscribed
-            ? "😊 You're already subscribed!"
-            : "✅ You're in!"}
+      <div
+        className={`rounded-2xl border px-6 py-8 text-center ${
+          success
+            ? "border-green-200 bg-green-50"
+            : "border-red-200 bg-red-50"
+        }`}
+      >
+        <h3 className="text-xl font-bold">
+          ✅ {message.includes("already") ? "Already Subscribed!" : "You're In!"}
         </h3>
 
         <p className="mt-2 text-slate-700">
-          We'll notify you whenever new GCC jobs go live.
+          {message}
         </p>
       </div>
     );
@@ -98,9 +114,9 @@ function EmailSignup() {
         </button>
       </div>
 
-      {error && (
-        <p className="mt-3 text-sm text-red-600">
-          {error}
+      {message && !submitted && (
+        <p className="mt-3 text-red-600 text-sm">
+          {message}
         </p>
       )}
     </div>
