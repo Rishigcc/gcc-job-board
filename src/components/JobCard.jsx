@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { trackEvent } from "../analytics";
 
 function Badge({ children }) {
   return (
-    <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
+    <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm">
       {children}
     </span>
   );
@@ -12,8 +13,17 @@ function JobCard({ job, normalizeLocation }) {
   const isNew = (job.days_old ?? 999) <= 3;
   const [expanded, setExpanded] = useState(false);
 
+  const handleApplyClick = () => {
+    trackEvent("job_apply_clicked", {
+      company: job.company,
+      job_title: job.title,
+      location: normalizeLocation(job.location),
+      function: job.function || "Unknown",
+    });
+  };
+
   return (
-    <div className="bg-white rounded-3xl border border-gray-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 p-6 md:p-8">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
 
       {/* ===========================
           DESKTOP LAYOUT
@@ -53,9 +63,9 @@ function JobCard({ job, normalizeLocation }) {
               <Badge>🕒 {job.schedule_type}</Badge>
             )}
 
-           {job.posted_at && (
-  <Badge>📅 Posted on {job.posted_at}</Badge>
-)}
+            {job.posted_at && (
+              <Badge>📅 Posted on {job.posted_at}</Badge>
+            )}
 
           </div>
 
@@ -65,6 +75,7 @@ function JobCard({ job, normalizeLocation }) {
           href={job.apply_link}
           target="_blank"
           rel="noreferrer"
+          onClick={handleApplyClick}
           className="shrink-0 self-start px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition"
         >
           Apply →
@@ -125,13 +136,14 @@ function JobCard({ job, normalizeLocation }) {
           )}
 
           {job.posted_at && (
-  <Badge>📅 Posted on {job.posted_at}</Badge>
-)}
+            <Badge>📅 Posted on {job.posted_at}</Badge>
+          )}
 
         </div>
 
         <div className="mt-6 border-t border-gray-100 pt-6">
-                  <p
+
+          <p
             className="text-gray-700 leading-7"
             style={
               expanded
@@ -162,6 +174,7 @@ function JobCard({ job, normalizeLocation }) {
           href={job.apply_link}
           target="_blank"
           rel="noreferrer"
+          onClick={handleApplyClick}
           className="mt-6 w-full flex justify-center px-5 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
         >
           Apply →
