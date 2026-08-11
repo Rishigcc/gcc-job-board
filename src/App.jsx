@@ -55,21 +55,30 @@ function App() {
   const [sortBy, setSortBy] = useState("newest");
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+
   const jobsSectionRef = useRef(null);
 
-const scrollToJobs = () => {
-  if (!jobsSectionRef.current) return;
+  const scrollToJobs = () => {
+    if (!jobsSectionRef.current) return;
 
-  const y =
-    jobsSectionRef.current.getBoundingClientRect().top +
-    window.pageYOffset -
-    30;
+    const y =
+      jobsSectionRef.current.getBoundingClientRect().top +
+      window.pageYOffset -
+      30;
 
-  window.scrollTo({
-    top: y,
-    behavior: "smooth",
-  });
-};
+    window.scrollTo({
+      top: y,
+      behavior: "smooth",
+    });
+  };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+
+    setTimeout(() => {
+      scrollToJobs();
+    }, 50);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -169,8 +178,7 @@ const scrollToJobs = () => {
     startIndex,
     endIndex
   );
-
-  return (
+    return (
     <div className="min-h-screen bg-slate-100 py-10">
       <div className="max-w-6xl mx-auto px-6">
 
@@ -178,142 +186,162 @@ const scrollToJobs = () => {
 
         <EmailSignup />
 
-     <div ref={jobsSectionRef}>
-  <Filters
-    search={search}
-    setSearch={setSearch}
-    location={location}
-    setLocation={setLocation}
-    locations={locations}
-    company={company}
-    setCompany={setCompany}
-    companies={companies}
-    jobFunction={jobFunction}
-    setJobFunction={setJobFunction}
-    functions={functions}
-  />
-</div>
+        <div ref={jobsSectionRef}>
 
+          <Filters
+            search={search}
+            setSearch={setSearch}
+            location={location}
+            setLocation={setLocation}
+            locations={locations}
+            company={company}
+            setCompany={setCompany}
+            companies={companies}
+            jobFunction={jobFunction}
+            setJobFunction={setJobFunction}
+            functions={functions}
+          />
 
+          <ResultsBar
+            jobCount={filteredJobs.length}
+            sortBy={sortBy}
+            setSortBy={setSortBy}
+            start={
+              filteredJobs.length === 0
+                ? 0
+                : startIndex + 1
+            }
+            end={endIndex}
+          />
 
+          {loading ? (
+            <LoadingCard />
+          ) : (
+            <div className="space-y-6">
 
-        <ResultsBar
-          jobCount={filteredJobs.length}
-          sortBy={sortBy}
-          setSortBy={setSortBy}
-          start={filteredJobs.length === 0 ? 0 : startIndex + 1}
-          end={endIndex}
-        />
-                {loading ? (
-          <LoadingCard />
-        ) : (
-          <div className="space-y-6">
+              {paginatedJobs.length > 0 ? (
+                paginatedJobs.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    normalizeLocation={normalizeLocation}
+                  />
+                ))
+              ) : (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
 
-            {paginatedJobs.length > 0 ? (
-              paginatedJobs.map((job) => (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  normalizeLocation={normalizeLocation}
-                />
-              ))
-            ) : (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
-
-                <div className="text-5xl mb-4">
-                  🔍
-                </div>
-
-                <h2 className="text-2xl font-bold text-slate-800">
-                  No jobs found
-                </h2>
-
-                <p className="text-slate-500 mt-3">
-                  We couldn't find any GCC jobs matching your search.
-                </p>
-
-                <p className="text-slate-400 mt-2">
-                  Try changing your keywords or filters.
-                </p>
-
-                <button
-                  onClick={() => {
-                    setSearch("");
-                    setLocation("All Locations");
-                    setCompany("All Companies");
-                    setJobFunction("All Functions");
-                  }}
-                  className="mt-6 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl transition"
-                >
-                  Clear Filters
-                </button>
-
-              </div>
-            )}
-                      </div>
-        )}
-
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 mt-12 flex-wrap">
-
-            <button
-              onClick={() =>
-                setCurrentPage((page) => Math.max(page - 1, 1))
-              }
-              disabled={currentPage === 1}
-              className="px-4 py-2 rounded-xl border bg-white disabled:opacity-40 hover:bg-slate-50"
-            >
-              ← Previous
-            </button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((page) => {
-                return (
-                  page === 1 ||
-                  page === totalPages ||
-                  Math.abs(page - currentPage) <= 1
-                );
-              })
-              .map((page, index, pages) => {
-                const previousPage = pages[index - 1];
-
-                return (
-                  <div key={page} className="flex items-center">
-
-                    {previousPage && page - previousPage > 1 && (
-                      <span className="px-2 text-slate-500">...</span>
-                    )}
-
-                    <button
-                      onClick={() => setCurrentPage(page)}
-                      className={`w-10 h-10 rounded-xl border transition ${
-                        currentPage === page
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white hover:bg-slate-50"
-                      }`}
-                    >
-                      {page}
-                    </button>
-
+                  <div className="text-5xl mb-4">
+                    🔍
                   </div>
-                );
-              })}
 
-            <button
-              onClick={() =>
-                setCurrentPage((page) =>
-                  Math.min(page + 1, totalPages)
-                )
-              }
-              disabled={currentPage === totalPages}
-              className="px-4 py-2 rounded-xl border bg-white disabled:opacity-40 hover:bg-slate-50"
-            >
-              Next →
-            </button>
+                  <h2 className="text-2xl font-bold text-slate-800">
+                    No jobs found
+                  </h2>
 
-          </div>
-        )}
-<Footer />
+                  <p className="text-slate-500 mt-3">
+                    We couldn't find any GCC jobs matching your search.
+                  </p>
+
+                  <p className="text-slate-400 mt-2">
+                    Try changing your keywords or filters.
+                  </p>
+
+                  <button
+                    onClick={() => {
+                      setSearch("");
+                      setLocation("All Locations");
+                      setCompany("All Companies");
+                      setJobFunction("All Functions");
+                    }}
+                    className="mt-6 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl transition"
+                  >
+                    Clear Filters
+                  </button>
+
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-12 flex-wrap">
+
+              <button
+                onClick={() =>
+                  handlePageChange(
+                    Math.max(currentPage - 1, 1)
+                  )
+                }
+                disabled={currentPage === 1}
+                className="px-4 py-2 rounded-xl border bg-white disabled:opacity-40 hover:bg-slate-50"
+              >
+                ← Previous
+              </button>
+
+              {Array.from(
+                { length: totalPages },
+                (_, i) => i + 1
+              )
+                .filter((page) => {
+                  return (
+                    page === 1 ||
+                    page === totalPages ||
+                    Math.abs(page - currentPage) <= 1
+                  );
+                })
+                .map((page, index, pages) => {
+                  const previousPage = pages[index - 1];
+
+                  return (
+                    <div
+                      key={page}
+                      className="flex items-center"
+                    >
+
+                      {previousPage &&
+                        page - previousPage > 1 && (
+                          <span className="px-2 text-slate-500">
+                            ...
+                          </span>
+                        )}
+
+                      <button
+                        onClick={() => handlePageChange(page)}
+                        className={`w-10 h-10 rounded-xl border transition ${
+                          currentPage === page
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white hover:bg-slate-50"
+                        }`}
+                      >
+                        {page}
+                      </button>
+
+                    </div>
+                  );
+                })}
+
+              <button
+                onClick={() =>
+                  handlePageChange(
+                    Math.min(
+                      currentPage + 1,
+                      totalPages
+                    )
+                  )
+                }
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 rounded-xl border bg-white disabled:opacity-40 hover:bg-slate-50"
+              >
+                Next →
+              </button>
+
+            </div>
+          )}
+
+        </div>
+                <Footer />
+
       </div>
     </div>
   );
