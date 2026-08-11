@@ -7,83 +7,42 @@ const WEB_APP_URL =
 function EmailSignup() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [message, setMessage] = useState("");
-  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async () => {
-    setMessage("");
-
     if (!email.trim()) {
       setMessage("Please enter your email.");
-      setSuccess(false);
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailRegex.test(email)) {
-      setMessage("Please enter a valid email address.");
-      setSuccess(false);
-      return;
-    }
+    setLoading(true);
+    setMessage("");
 
     try {
-      setLoading(true);
-
-      const response = await fetch(WEB_APP_URL, {
+      await fetch(WEB_APP_URL, {
         method: "POST",
+        mode: "no-cors",
         body: JSON.stringify({
-          email,
+          email: email.trim(),
         }),
       });
 
-      const data = await response.json();
+      trackEvent("email_signup", {
+        method: "website",
+      });
 
-      if (data.success) {
-        // Google Analytics Event
-        trackEvent("email_signup", {
-          method: "website",
-        });
+      setMessage(
+        "You're in! We'll notify you whenever new GCC jobs go live."
+      );
 
-        setSubmitted(true);
-        setSuccess(true);
-        setMessage("You're in! We'll notify you whenever new GCC jobs go live.");
-      } else if (data.exists) {
-        setSubmitted(true);
-        setSuccess(true);
-        setMessage("You're already subscribed! We'll notify you whenever new GCC jobs go live.");
-      } else {
-        setSuccess(false);
-        setMessage("Something went wrong. Please try again.");
-      }
-    } catch (err) {
-      setSuccess(false);
+      setEmail("");
+    } catch (error) {
+      console.error(error);
       setMessage("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <div
-        className={`rounded-2xl border px-6 py-8 text-center ${
-          success
-            ? "border-green-200 bg-green-50"
-            : "border-red-200 bg-red-50"
-        }`}
-      >
-        <h3 className="text-xl font-bold">
-          ✅ {message.includes("already") ? "Already Subscribed!" : "You're In!"}
-        </h3>
-
-        <p className="mt-2 text-slate-700">
-          {message}
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 px-6 py-6 text-center">
@@ -114,8 +73,8 @@ function EmailSignup() {
         </button>
       </div>
 
-      {message && !submitted && (
-        <p className="mt-3 text-red-600 text-sm">
+      {message && (
+        <p className="mt-3 text-sm text-slate-700">
           {message}
         </p>
       )}
