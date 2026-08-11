@@ -2,7 +2,7 @@ import { useState } from "react";
 import { trackEvent } from "../analytics";
 
 const WEB_APP_URL =
-  "https://script.google.com/macros/s/AKfycbz4_onOCW_RAXOpJrrQpembB20dGUP808zVy-8CcqRg6Spocwd6BdpYLjfX24HRKRN9BA/exec";
+  "https://script.google.com/macros/s/AKfycby-obipTzugwyb71muW1ngBasAeiLbRspQSqsf5NCmg_zJRB-rPL7deNrKRFTSSP8dC/exec";
 
 function EmailSignup() {
   const [email, setEmail] = useState("");
