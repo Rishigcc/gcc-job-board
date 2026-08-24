@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "./lib/supabase";
 import Header from "./components/Header";
 import Filters from "./components/Filters";
 import JobCard from "./components/JobCard";
@@ -47,6 +48,8 @@ function normalizeLocation(location) {
 }
 
 function App() {
+
+
   const [jobs, setJobs] = useState([]);
   const [search, setSearch] = useState("");
   const [location, setLocation] = useState("All Locations");
@@ -178,7 +181,8 @@ function App() {
     startIndex,
     endIndex
   );
-    return (
+
+  return (
     <div className="min-h-screen bg-slate-100 py-10">
       <div className="max-w-6xl mx-auto px-6">
 
@@ -340,7 +344,8 @@ function App() {
           )}
 
         </div>
-                <Footer />
+
+        <Footer />
 
       </div>
     </div>

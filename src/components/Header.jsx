@@ -1,13 +1,16 @@
 import { trackEvent } from "../analytics";
+import { useNavigate } from "react-router-dom";
 
 function Header({ scrollToJobs }) {
+  const navigate = useNavigate();
   const handleExploreJobs = () => {
     trackEvent("explore_jobs_clicked");
     scrollToJobs();
   };
 
   const handleJoinCommunity = () => {
-    trackEvent("join_community_clicked");
+  trackEvent("join_community_clicked");
+  navigate("/signup");
   };
 
   return (
@@ -64,9 +67,7 @@ function Header({ scrollToJobs }) {
         {/* Join Community */}
 
         <a
-          href="https://www.linkedin.com/company/iworkatgcc/"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/signup"
           onClick={handleJoinCommunity}
           className="
             block

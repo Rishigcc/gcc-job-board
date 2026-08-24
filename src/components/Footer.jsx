@@ -14,7 +14,7 @@ function Footer() {
           rel="noopener noreferrer"
           className="mt-4 inline-block text-slate-600 hover:text-blue-600 transition"
         >
-          Join our community on LinkedIn
+          Follow our community on LinkedIn
         </a>
 
       </div>
