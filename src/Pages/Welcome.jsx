@@ -1,19 +1,103 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import Footer from "../components/Footer";
+import SiteHeader from "../components/SiteHeader";
+import TrendingQuestionCard from "../components/TrendingQuestionCard";
+import CyclingBrandHeading from "../components/CyclingBrandHeading";
+import FeatureCard from "../components/FeatureCard";
+import SignInPopup from "../components/SignInPopup";
+
+const iconProps = {
+  width: 20,
+  height: 20,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+};
+
+function ChatIcon(props) {
+  return (
+    <svg {...iconProps} {...props}>
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
+    </svg>
+  );
+}
+
+function BriefcaseIcon(props) {
+  return (
+    <svg {...iconProps} {...props}>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M3 12h18" />
+    </svg>
+  );
+}
+
+function DocumentIcon(props) {
+  return (
+    <svg {...iconProps} {...props}>
+      <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M9 13h6M9 17h6" />
+    </svg>
+  );
+}
+
+function PeopleIcon(props) {
+  return (
+    <svg {...iconProps} {...props}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+      <circle cx="10" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function CheckIcon(props) {
+  return (
+    <svg {...iconProps} width={14} height={14} strokeWidth={3} {...props}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
 
 function Welcome() {
   const navigate = useNavigate();
 
   const [userName, setUserName] = useState("");
   const [userId, setUserId] = useState(null);
+  const [userEmail, setUserEmail] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
 
-  const [hasUpvoted, setHasUpvoted] = useState(false);
-  const [upvoteCount, setUpvoteCount] = useState(0);
-  const [upvoteLoading, setUpvoteLoading] = useState(false);
+  const [hasAskedQuestion, setHasAskedQuestion] = useState(false);
+  const [hasRepliedAnswer, setHasRepliedAnswer] = useState(false);
 
-  const FEATURE_NAME = "ask_answer_connect";
+  const [hasShownResumeInterest, setHasShownResumeInterest] = useState(false);
+  const [showResumeInterestPopup, setShowResumeInterestPopup] =
+    useState(false);
+  const [submittingResumeInterest, setSubmittingResumeInterest] =
+    useState(false);
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText("iworkatgcc.com");
+      setLinkCopied(true);
+    } catch (err) {
+      console.error("Error copying link:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (!linkCopied) return;
+
+    const timeout = setTimeout(() => setLinkCopied(false), 2000);
+    return () => clearTimeout(timeout);
+  }, [linkCopied]);
 
   useEffect(() => {
     const syncGoogleProfile = async () => {
@@ -32,6 +116,7 @@ function Welcome() {
       }
 
       setUserId(user.id);
+      setUserEmail(user.email || "");
 
       const fullName =
         user.user_metadata?.full_name ||
@@ -96,78 +181,88 @@ function Welcome() {
           console.error("Error updating Google profile:", updateError);
         }
       }
-
-      // --------------------------------------------------
-      // Load user's upvote status
-      // --------------------------------------------------
-
-      const { data: existingInterest, error: interestError } =
-        await supabase
-          .from("feature_interest")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("feature_name", FEATURE_NAME)
-          .maybeSingle();
-
-      if (interestError) {
-        console.error("Error checking upvote:", interestError);
-      } else {
-        setHasUpvoted(!!existingInterest);
-      }
-
-      // --------------------------------------------------
-      // Load total upvote count
-      // --------------------------------------------------
-
-      const { count, error: countError } = await supabase
-        .from("feature_interest")
-        .select("id", { count: "exact", head: true })
-        .eq("feature_name", FEATURE_NAME);
-
-      if (countError) {
-        console.error("Error getting upvote count:", countError);
-      } else {
-        setUpvoteCount(count || 0);
-      }
     };
 
     syncGoogleProfile();
   }, []);
 
   // --------------------------------------------------
-  // Handle Upvote
+  // Community journey — real checks against existing data.
   // --------------------------------------------------
 
-  const handleUpvote = async () => {
-    if (!userId || hasUpvoted || upvoteLoading) {
-      return;
-    }
+  useEffect(() => {
+    if (!userId) return;
 
-    setUpvoteLoading(true);
+    const loadJourney = async () => {
+      const [askedResult, repliedResult] = await Promise.all([
+        supabase
+          .from("questions")
+          .select("id")
+          .eq("user_id", userId)
+          .limit(1),
+        supabase
+          .from("answers")
+          .select("id")
+          .eq("user_id", userId)
+          .limit(1),
+      ]);
 
-    const { error } = await supabase
-      .from("feature_interest")
-      .insert({
-        user_id: userId,
-        feature_name: FEATURE_NAME,
-      });
+      setHasAskedQuestion(Boolean(askedResult.data?.length));
+      setHasRepliedAnswer(Boolean(repliedResult.data?.length));
+    };
 
-    if (error) {
-      // If the user has already upvoted, keep the UI in the
-      // correct state rather than showing an error.
-      if (error.code === "23505") {
-        setHasUpvoted(true);
-      } else {
-        console.error("Error adding upvote:", error);
+    loadJourney();
+  }, [userId]);
+
+  // --------------------------------------------------
+  // GCC Resume Preparer — "show interest" upvote.
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const loadResumeInterest = async () => {
+      const { data, error } = await supabase
+        .from("resume_preparer_interest")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking resume interest:", error);
+        return;
       }
 
-      setUpvoteLoading(false);
+      setHasShownResumeInterest(Boolean(data));
+    };
+
+    loadResumeInterest();
+  }, [userId]);
+
+  const handleResumeInterestClick = async () => {
+    if (!userId) {
+      setShowResumeInterestPopup(true);
       return;
     }
 
-    setHasUpvoted(true);
-    setUpvoteCount((currentCount) => currentCount + 1);
-    setUpvoteLoading(false);
+    if (hasShownResumeInterest || submittingResumeInterest) return;
+
+    setSubmittingResumeInterest(true);
+
+    const { error } = await supabase
+      .from("resume_preparer_interest")
+      .insert({ user_id: userId, email: userEmail });
+
+    // A duplicate-insert race (e.g. a double click) is fine — it just
+    // means the interest was already recorded.
+    if (error && error.code !== "23505") {
+      console.error("Error recording resume interest:", error);
+      setSubmittingResumeInterest(false);
+      return;
+    }
+
+    setHasShownResumeInterest(true);
+    setSubmittingResumeInterest(false);
   };
 
   // --------------------------------------------------
@@ -182,213 +277,285 @@ function Welcome() {
       return;
     }
 
-    navigate("/signup");
+    navigate("/signup", { state: { mode: "signin" } });
   };
+
+  const dotGridStyle = {
+    backgroundImage:
+      "radial-gradient(circle, #94a3b8 1.5px, transparent 1.5px)",
+    backgroundSize: "20px 20px",
+  };
+
+  const journeySteps = [
+    {
+      key: "join",
+      done: true,
+      title: "Join the community",
+      subtitle: "You're in! 🎉",
+    },
+    {
+      key: "ask",
+      done: hasAskedQuestion,
+      title: "Ask your first question",
+      subtitle: "Get advice from the community",
+      to: "/ask",
+    },
+    {
+      key: "reply",
+      done: hasRepliedAnswer,
+      title: "Reply your first answer",
+      subtitle: "Help others with your knowledge",
+      to: "/questions",
+    },
+  ];
+
+  const journeyComplete = journeySteps.every((step) => step.done);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
 
-      {/* Header */}
-      <header className="mx-3 mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:mx-5 sm:mt-5 sm:px-8 sm:py-5">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-
-          <div className="text-xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-            iWorkAtGCC
-          </div>
-
-          <button
-            onClick={() => navigate("/")}
-            className="shrink-0 rounded-full bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-100 sm:px-7 sm:py-3 sm:text-lg"
-          >
-            🎓 &nbsp; Explore GCC Jobs
-          </button>
-
-        </div>
-      </header>
-
+      <SiteHeader />
 
       {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-4 pb-16 pt-9 sm:px-6 sm:pb-20 sm:pt-16">
+      <main className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pb-20 sm:pt-8">
 
-        {/* Thank You */}
-        <section className="text-center">
+        {/* Welcome banner */}
+        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-50 via-blue-50 to-white px-6 py-9 shadow-sm sm:px-10 sm:py-12">
 
-          <p className="text-base font-semibold text-slate-600 sm:text-xl">
-            Hi {userName || "there"}! 👋
-          </p>
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-blue-200/30 blur-3xl" />
+            <div className="absolute -left-20 bottom-0 h-56 w-56 rounded-full bg-purple-200/25 blur-3xl" />
+            <div
+              className="absolute right-10 top-8 hidden h-24 w-32 opacity-30 sm:block"
+              style={dotGridStyle}
+            />
+          </div>
 
-          <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:mt-3 sm:text-3xl md:text-4xl">
-            Thank You for Joining the
-            <br className="hidden sm:block" />
-            iWorkAtGCC Community! ❤️
-          </h1>
+          <div className="relative max-w-2xl">
+            <CyclingBrandHeading
+              headingTag="p"
+              phraseClassName="text-xs font-medium tracking-wide text-slate-500 sm:text-sm"
+              headingClassName="text-2xl font-extrabold leading-tight tracking-tight text-blue-600 sm:text-3xl"
+            />
+
+            <h1 className="mt-2 text-3xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-4xl">
+              Welcome, {userName || "there"}!
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
+              You're now part of a community of professionals who work in
+              Global Capability Centers. Ask questions, share experiences,
+              discover opportunities and grow your career — all in one
+              place.
+            </p>
+          </div>
 
         </section>
 
-
-        {/* Benefits */}
+        {/* Get started */}
         <section className="mt-9 sm:mt-12">
 
-          <h2 className="text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Benefits Unlocked
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+            iWorkAtGCC Community
           </h2>
+          <p className="mt-1 text-sm text-slate-500 sm:text-base">
+            Explore what you can do in the community
+          </p>
 
-          <div className="mx-auto mt-6 max-w-2xl space-y-4 sm:mt-7">
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
 
-            {/* Benefit 1 */}
-            <div className="flex min-h-[96px] items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:gap-4 sm:px-5">
+            {/* Ask, Answer & Connect — same card as the main page */}
+            <FeatureCard
+              icon={ChatIcon}
+              accent="purple"
+              title="Ask, Answer & Connect"
+              description="Have a GCC-related question? Ask the community or join an existing conversation."
+              linkLabel="Ask a question"
+              onClick={() => navigate("/questions")}
+            />
 
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-lg">
-                🔔
-              </div>
+            {/* Explore GCC Jobs — same card as the main page */}
+            <FeatureCard
+              icon={BriefcaseIcon}
+              accent="blue"
+              title="Explore GCC Jobs"
+              description="Discover the latest job openings across Global Capability Centers in India"
+              linkLabel="Browse latest jobs"
+              onClick={() => navigate("/jobs")}
+            />
 
-              <div>
-                <p className="text-sm font-semibold text-slate-900 sm:text-base">
-                  Instant GCC Job Alerts
-                </p>
+            {/* GCC Resume Preparer — coming soon */}
+            <div className="relative flex h-full flex-col rounded-2xl border border-green-200 bg-green-50/40 p-5 shadow-sm ring-1 ring-green-200">
 
-                <p className="mt-1 text-sm leading-6 text-slate-600">
-                  We will instantly notify you when new jobs go live.
-                </p>
-              </div>
-
-            </div>
-
-
-            {/* Benefit 2 */}
-            <div className="flex min-h-[96px] items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:gap-4 sm:px-5">
-
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-50 text-lg">
-                📰
-              </div>
-
-              <div>
-                <p className="text-sm font-semibold text-slate-900 sm:text-base">
-                  Weekly GCC News Digest
-                </p>
-
-                <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Receive the weekly GCC news digest with the latest updates,
-                  trends, and developments.
-                </p>
-              </div>
-
-            </div>
-
-
-            {/* Benefit 3 */}
-            <div className="relative rounded-2xl border-2 border-purple-200 bg-purple-50/40 px-4 py-6 shadow-md sm:min-h-[180px] sm:px-8 sm:py-8">
-
-              {/* Coming Soon Badge */}
-              <span className="absolute right-4 top-4 rounded-full bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm sm:right-5 sm:top-5 sm:px-3 sm:text-xs">
-                Coming Soon
+              <span className="absolute right-3 top-3 rounded-full bg-amber-400 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-950 shadow-sm">
+                Coming soon
               </span>
 
-
-              {/* Heading & Description */}
-              <div>
-
-                <h2 className="text-lg font-bold leading-snug text-slate-900 sm:text-2xl">
-                  Ask, Answer & Connect
-                </h2>
-
-                <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base sm:leading-7">
-                  Have a question about salaries, hike %, or your GCC career?
-                  Post a question to the community or join an existing
-                  conversation.
-                </p>
-
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-green-100 text-green-600">
+                <DocumentIcon />
               </div>
 
+              <p className="mt-4 text-base font-bold text-slate-900">
+                GCC Resume Preparer
+              </p>
 
-              {/* Upvote */}
-              <div className="mt-5 flex items-center gap-2">
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                Create a professional resume tailored for GCC roles
+              </p>
 
+              <div className="relative mt-auto pt-4">
                 <button
                   type="button"
-                  onClick={handleUpvote}
-                  disabled={hasUpvoted || upvoteLoading}
-                  className={`rounded-lg border px-3 py-2 text-xs font-semibold shadow-sm transition sm:px-4 sm:text-sm ${
-                    hasUpvoted
-                      ? "border-purple-300 bg-purple-100 text-purple-700"
-                      : "border-purple-300 bg-white text-purple-700 hover:bg-purple-50"
-                  } ${
-                    upvoteLoading
-                      ? "cursor-wait opacity-70"
-                      : hasUpvoted
-                      ? "cursor-default"
-                      : ""
+                  onClick={handleResumeInterestClick}
+                  disabled={hasShownResumeInterest || submittingResumeInterest}
+                  className={`flex items-center gap-1.5 text-sm font-semibold transition ${
+                    hasShownResumeInterest
+                      ? "text-green-700"
+                      : "text-blue-700 hover:text-blue-800"
                   }`}
                 >
-                  👍 &nbsp;
-                  {upvoteLoading
-                    ? "Saving..."
-                    : hasUpvoted
+                  {hasShownResumeInterest && (
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-green-600 text-white">
+                      <CheckIcon width={10} height={10} />
+                    </span>
+                  )}
+                  {hasShownResumeInterest
                     ? "Interest shown"
                     : "Upvote to show interest"}
                 </button>
 
-
-                {/* Question Mark */}
-                <div className="group relative">
-
-                  <button
-                    type="button"
-                    aria-label="More information about upvoting"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-bold text-slate-500 transition hover:border-purple-300 hover:text-purple-600"
-                  >
-                    ?
-                  </button>
-
-
-                  {/* Tooltip */}
-                  <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-3 hidden w-64 rounded-xl bg-slate-900 px-4 py-3 text-left text-xs leading-5 text-white shadow-lg group-hover:block sm:left-1/2 sm:w-72 sm:-translate-x-1/2">
-                    Upvote to show your interest!{" "}
-                    {upvoteCount > 0
-                      ? `${upvoteCount}+ community ${
-                          upvoteCount === 1 ? "member has" : "members have"
-                        } already upvoted.`
-                      : "Be one of the first community members to upvote."}{" "}
-                    The more upvotes we get, the faster we can bring this
-                    feature to you.
-                  </div>
-
-                </div>
-
+                {showResumeInterestPopup && (
+                  <SignInPopup
+                    onClose={() => setShowResumeInterestPopup(false)}
+                  />
+                )}
               </div>
-
             </div>
 
           </div>
 
         </section>
 
+        {/* Popular discussions + Community journey */}
+        <section
+          className={
+            journeyComplete
+              ? "mt-9 sm:mt-12"
+              : "mt-9 grid gap-6 sm:mt-12 lg:grid-cols-3"
+          }
+        >
+
+          {/* Popular discussions */}
+          <div
+            className={
+              journeyComplete ? "flex" : "flex lg:col-span-2 lg:items-center"
+            }
+          >
+            <TrendingQuestionCard desktopIntervalMultiplier={1} />
+          </div>
+
+          {/* Your community journey */}
+          {!journeyComplete && (
+            <div className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm">
+
+              <h2 className="text-lg font-bold tracking-tight text-slate-900">
+                Your community journey
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                A few ways to make the most of iWorkAtGCC
+              </p>
+
+              <div className="mt-4 space-y-4">
+                {journeySteps.map((step) => {
+                  const content = (
+                    <>
+                      <div
+                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                          step.done
+                            ? "bg-blue-600 text-white"
+                            : "border-2 border-slate-200 text-transparent"
+                        }`}
+                      >
+                        <CheckIcon />
+                      </div>
+
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          {step.title}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {step.subtitle}
+                        </p>
+                      </div>
+                    </>
+                  );
+
+                  if (step.to && !step.done) {
+                    return (
+                      <Link
+                        key={step.key}
+                        to={step.to}
+                        className="flex items-start gap-3 transition hover:opacity-75"
+                      >
+                        {content}
+                      </Link>
+                    );
+                  }
+
+                  return (
+                    <div key={step.key} className="flex items-start gap-3">
+                      {content}
+                    </div>
+                  );
+                })}
+              </div>
+
+            </div>
+          )}
+
+        </section>
 
         {/* Grow Your Community */}
-        <section className="mt-9 text-center sm:mt-10">
+        <section className="mt-9 flex flex-col items-center gap-4 rounded-2xl bg-indigo-50/70 px-5 py-5 text-center sm:mt-12 sm:flex-row sm:justify-between sm:text-left sm:px-7">
 
-          <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
-            Grow Your Community
-          </h2>
+          <div className="flex flex-col items-center gap-3 sm:flex-row">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-blue-600 shadow-sm">
+              <PeopleIcon />
+            </div>
 
-          <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
-            Know someone who would benefit from our iWorkAtGCC community?
-            Share it with them.
-          </p>
+            <div>
+              <p className="text-sm font-bold text-slate-900 sm:text-base">
+                Share our community with those who may need it
+              </p>
+              <p className="text-sm text-slate-500">
+                Ask. Share. Learn. Grow. Together.
+              </p>
+            </div>
+          </div>
 
-          <div className="mt-4 inline-flex rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-blue-600 shadow-sm">
-            iworkatgcc.com
+          <div className="relative">
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-blue-500/20 transition hover:bg-blue-700"
+            >
+              Share the community →
+            </button>
+
+            {linkCopied && (
+              <span className="absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900 px-2.5 py-1 text-xs font-medium text-white shadow sm:left-auto sm:right-0 sm:translate-x-0">
+                Link Copied
+              </span>
+            )}
           </div>
 
         </section>
 
-
         {/* Feedback */}
-        <section className="mt-9 rounded-2xl border border-slate-200 bg-white px-5 py-6 text-center shadow-sm sm:mt-10 sm:px-6 sm:py-7">
+        <section className="mt-9 rounded-2xl border border-slate-200 bg-white px-5 py-6 text-center shadow-sm sm:mt-12 sm:px-6 sm:py-7">
 
-          {/* Feedback Icon */}
-          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-xl sm:h-12 sm:w-12 sm:text-2xl">
-            💬
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-600 sm:h-12 sm:w-12">
+            <ChatIcon />
           </div>
 
           <h2 className="mt-4 text-lg font-bold text-slate-900 sm:text-2xl">
@@ -411,7 +578,6 @@ function Welcome() {
           </p>
 
         </section>
-
 
         {/* Sign Out */}
         <div className="mt-8 text-center sm:mt-10">

@@ -1,353 +1,54 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "./lib/supabase";
 import Header from "./components/Header";
-import Filters from "./components/Filters";
-import JobCard from "./components/JobCard";
-import ResultsBar from "./components/ResultsBar";
-import LoadingCard from "./components/LoadingCard";
 import Footer from "./components/Footer";
-import EmailSignup from "./components/EmailSignup";
-
-const JOBS_PER_PAGE = 20;
-
-function normalizeLocation(location) {
-  if (!location) return "Unknown";
-
-  const loc = location.toLowerCase();
-
-  if (
-    loc.includes("delhi") ||
-    loc.includes("new delhi") ||
-    loc.includes("noida") ||
-    loc.includes("gurgaon") ||
-    loc.includes("gurugram") ||
-    loc.includes("faridabad") ||
-    loc.includes("ghaziabad")
-  ) {
-    return "Delhi NCR";
-  }
-
-  if (loc.includes("hyderabad") || loc.includes("secunderabad"))
-    return "Hyderabad";
-
-  if (loc.includes("bengaluru") || loc.includes("bangalore"))
-    return "Bengaluru";
-
-  if (loc.includes("mumbai")) return "Mumbai";
-  if (loc.includes("pune")) return "Pune";
-  if (loc.includes("chennai")) return "Chennai";
-  if (loc.includes("kolkata") || loc.includes("calcutta"))
-    return "Kolkata";
-  if (loc.includes("ahmedabad")) return "Ahmedabad";
-  if (loc.includes("kochi") || loc.includes("cochin"))
-    return "Kochi";
-
-  if (loc.trim() === "india") return "Remote / India";
-
-  return location.split(",")[0].trim();
-}
+import SiteHeader from "./components/SiteHeader";
 
 function App() {
-
-
-  const [jobs, setJobs] = useState([]);
-  const [search, setSearch] = useState("");
-  const [location, setLocation] = useState("All Locations");
-  const [company, setCompany] = useState("All Companies");
-  const [jobFunction, setJobFunction] = useState("All Functions");
-  const [sortBy, setSortBy] = useState("newest");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-
-  const jobsSectionRef = useRef(null);
-
-  const scrollToJobs = () => {
-    if (!jobsSectionRef.current) return;
-
-    const y =
-      jobsSectionRef.current.getBoundingClientRect().top +
-      window.pageYOffset -
-      30;
-
-    window.scrollTo({
-      top: y,
-      behavior: "smooth",
-    });
+  const dotGridStyle = {
+    backgroundImage:
+      "radial-gradient(circle, #94a3b8 1.5px, transparent 1.5px)",
+    backgroundSize: "20px 20px",
   };
-
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-
-    setTimeout(() => {
-      scrollToJobs();
-    }, 50);
-  };
-
-  useEffect(() => {
-    setLoading(true);
-
-    fetch("/data/jobs.json")
-      .then((res) => res.json())
-      .then((data) => {
-        const jobList = Array.isArray(data)
-          ? data[0].jobs
-          : data.jobs;
-
-        setJobs(jobList);
-      })
-      .catch(console.error)
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, location, company, jobFunction, sortBy]);
-
-  const locations = [
-    "All Locations",
-    ...new Set(
-      jobs.map((job) => normalizeLocation(job.location))
-    ),
-  ].sort();
-
-  const companies = [
-    "All Companies",
-    ...new Set(
-      jobs.map((job) => job.company).filter(Boolean)
-    ),
-  ].sort();
-
-  const functions = [
-    "All Functions",
-    ...new Set(
-      jobs.map((job) => job.function).filter(Boolean)
-    ),
-  ].sort();
-
-  const filteredJobs = useMemo(() => {
-    return jobs
-      .filter((job) => {
-        const text = (
-          job.title +
-          " " +
-          job.company +
-          " " +
-          job.location +
-          " " +
-          job.summary
-        ).toLowerCase();
-
-        return (
-          text.includes(search.toLowerCase()) &&
-          (location === "All Locations" ||
-            normalizeLocation(job.location) === location) &&
-          (company === "All Companies" ||
-            job.company === company) &&
-          (jobFunction === "All Functions" ||
-            job.function === jobFunction)
-        );
-      })
-      .sort((a, b) => {
-        const daysA = a.days_old ?? 999;
-        const daysB = b.days_old ?? 999;
-
-        return sortBy === "newest"
-          ? daysA - daysB
-          : daysB - daysA;
-      });
-  }, [
-    jobs,
-    search,
-    location,
-    company,
-    jobFunction,
-    sortBy,
-  ]);
-
-  const totalPages = Math.ceil(
-    filteredJobs.length / JOBS_PER_PAGE
-  );
-
-  const startIndex = (currentPage - 1) * JOBS_PER_PAGE;
-
-  const endIndex = Math.min(
-    startIndex + JOBS_PER_PAGE,
-    filteredJobs.length
-  );
-
-  const paginatedJobs = filteredJobs.slice(
-    startIndex,
-    endIndex
-  );
 
   return (
-    <div className="min-h-screen bg-slate-100 py-10">
-      <div className="max-w-6xl mx-auto px-6">
+    <div className="relative min-h-screen overflow-hidden bg-[#f7f8fc] pb-6 text-slate-900">
 
-        <Header scrollToJobs={scrollToJobs} />
+      {/* Decorative background */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-40 top-40 h-96 w-96 rounded-full bg-blue-200/30 blur-3xl" />
+        <div className="absolute -right-32 top-1/3 h-[28rem] w-[28rem] rounded-full bg-purple-200/25 blur-3xl" />
+        <div
+          className="absolute right-10 top-20 hidden h-32 w-44 opacity-40 sm:block"
+          style={dotGridStyle}
+        />
+        <div
+          className="absolute bottom-24 left-8 hidden h-28 w-36 opacity-30 sm:block"
+          style={dotGridStyle}
+        />
+      </div>
 
-        <EmailSignup />
+      <div className="relative">
 
-        <div ref={jobsSectionRef}>
+        <SiteHeader />
 
-          <Filters
-            search={search}
-            setSearch={setSearch}
-            location={location}
-            setLocation={setLocation}
-            locations={locations}
-            company={company}
-            setCompany={setCompany}
-            companies={companies}
-            jobFunction={jobFunction}
-            setJobFunction={setJobFunction}
-            functions={functions}
-          />
+        {/* Community appreciation banner */}
+        <div className="mx-3 mt-4 rounded-2xl bg-indigo-50/80 px-4 py-3 text-center sm:mx-5 sm:px-6">
+          <p className="text-xs font-medium text-slate-600 sm:text-sm">
+            <span className="mr-1.5">💜</span>
+            Thank you to every community member building iWorkAtGCC. This
+            community and platform belongs to you. ❤️
+          </p>
+        </div>
 
-          <ResultsBar
-            jobCount={filteredJobs.length}
-            sortBy={sortBy}
-            setSortBy={setSortBy}
-            start={
-              filteredJobs.length === 0
-                ? 0
-                : startIndex + 1
-            }
-            end={endIndex}
-          />
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
 
-          {loading ? (
-            <LoadingCard />
-          ) : (
-            <div className="space-y-6">
+          <Header />
 
-              {paginatedJobs.length > 0 ? (
-                paginatedJobs.map((job) => (
-                  <JobCard
-                    key={job.id}
-                    job={job}
-                    normalizeLocation={normalizeLocation}
-                  />
-                ))
-              ) : (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
-
-                  <div className="text-5xl mb-4">
-                    🔍
-                  </div>
-
-                  <h2 className="text-2xl font-bold text-slate-800">
-                    No jobs found
-                  </h2>
-
-                  <p className="text-slate-500 mt-3">
-                    We couldn't find any GCC jobs matching your search.
-                  </p>
-
-                  <p className="text-slate-400 mt-2">
-                    Try changing your keywords or filters.
-                  </p>
-
-                  <button
-                    onClick={() => {
-                      setSearch("");
-                      setLocation("All Locations");
-                      setCompany("All Companies");
-                      setJobFunction("All Functions");
-                    }}
-                    className="mt-6 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl transition"
-                  >
-                    Clear Filters
-                  </button>
-
-                </div>
-              )}
-
-            </div>
-          )}
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-12 flex-wrap">
-
-              <button
-                onClick={() =>
-                  handlePageChange(
-                    Math.max(currentPage - 1, 1)
-                  )
-                }
-                disabled={currentPage === 1}
-                className="px-4 py-2 rounded-xl border bg-white disabled:opacity-40 hover:bg-slate-50"
-              >
-                ← Previous
-              </button>
-
-              {Array.from(
-                { length: totalPages },
-                (_, i) => i + 1
-              )
-                .filter((page) => {
-                  return (
-                    page === 1 ||
-                    page === totalPages ||
-                    Math.abs(page - currentPage) <= 1
-                  );
-                })
-                .map((page, index, pages) => {
-                  const previousPage = pages[index - 1];
-
-                  return (
-                    <div
-                      key={page}
-                      className="flex items-center"
-                    >
-
-                      {previousPage &&
-                        page - previousPage > 1 && (
-                          <span className="px-2 text-slate-500">
-                            ...
-                          </span>
-                        )}
-
-                      <button
-                        onClick={() => handlePageChange(page)}
-                        className={`w-10 h-10 rounded-xl border transition ${
-                          currentPage === page
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "bg-white hover:bg-slate-50"
-                        }`}
-                      >
-                        {page}
-                      </button>
-
-                    </div>
-                  );
-                })}
-
-              <button
-                onClick={() =>
-                  handlePageChange(
-                    Math.min(
-                      currentPage + 1,
-                      totalPages
-                    )
-                  )
-                }
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 rounded-xl border bg-white disabled:opacity-40 hover:bg-slate-50"
-              >
-                Next →
-              </button>
-
-            </div>
-          )}
+          <Footer />
 
         </div>
 
-        <Footer />
-
       </div>
+
     </div>
   );
 }

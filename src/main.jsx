@@ -1,15 +1,41 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 
 import "./index.css";
 import App from "./App.jsx";
+import Jobs from "./Pages/Jobs.jsx";
 import Signup from "./Pages/Signup.jsx";
 import Welcome from "./Pages/Welcome.jsx";
+import AskQuestion from "./Pages/AskQuestion.jsx";
+import Questions from "./Pages/Questions.jsx";
+import QuestionDetail from "./Pages/QuestionDetail.jsx";
+import Profile from "./Pages/Profile.jsx";
+import AskedQuestions from "./Pages/AskedQuestions.jsx";
+import SavedQuestions from "./Pages/SavedQuestions.jsx";
 import { supabase } from "./lib/supabase";
+import { setPostLoginRedirect } from "./lib/postLoginRedirect";
+
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
 
 
 function ProtectedRoute({ children }) {
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
 
@@ -49,6 +75,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (!session) {
+    setPostLoginRedirect(location.pathname);
     return <Navigate to="/signup" replace />;
   }
 
@@ -63,8 +90,17 @@ function AppRoutes() {
       {/* Main website */}
       <Route path="/" element={<App />} />
 
+      {/* Public job listings */}
+      <Route path="/jobs" element={<Jobs />} />
+
       {/* Signup */}
       <Route path="/signup" element={<Signup />} />
+
+      {/* Public questions listing */}
+      <Route path="/questions" element={<Questions />} />
+
+      {/* Public question detail */}
+      <Route path="/questions/:slug" element={<QuestionDetail />} />
 
       {/* Protected Welcome page */}
       <Route
@@ -72,6 +108,46 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Welcome />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Protected Ask a Question page */}
+      <Route
+        path="/ask"
+        element={
+          <ProtectedRoute>
+            <AskQuestion />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Protected Profile page */}
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Protected Asked Questions page */}
+      <Route
+        path="/profile/asked"
+        element={
+          <ProtectedRoute>
+            <AskedQuestions />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Protected Saved Questions page */}
+      <Route
+        path="/profile/saved"
+        element={
+          <ProtectedRoute>
+            <SavedQuestions />
           </ProtectedRoute>
         }
       />
@@ -84,6 +160,7 @@ function AppRoutes() {
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
+      <ScrollToTop />
       <AppRoutes />
     </BrowserRouter>
   </StrictMode>
