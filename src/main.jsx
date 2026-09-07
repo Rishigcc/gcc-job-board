@@ -83,12 +83,61 @@ function ProtectedRoute({ children }) {
 }
 
 
+function HomeRoute() {
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted) {
+        setSession(session);
+        setLoading(false);
+      }
+    });
+
+    // Listen for login/logout/session changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) {
+        setSession(session);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <p className="text-slate-600">Loading...</p>
+      </div>
+    );
+  }
+
+  // Signed-in users are sent to their dashboard; signed-out users see
+  // the public homepage.
+  if (session) {
+    return <Navigate to="/welcome" replace />;
+  }
+
+  return <App />;
+}
+
+
 function AppRoutes() {
   return (
     <Routes>
 
       {/* Main website */}
-      <Route path="/" element={<App />} />
+      <Route path="/" element={<HomeRoute />} />
 
       {/* Public job listings */}
       <Route path="/jobs" element={<Jobs />} />
