@@ -39,7 +39,7 @@ function SignInPopup({ onClose, redirectState }) {
         e.preventDefault();
         e.stopPropagation();
       }}
-      className="absolute right-0 top-full z-10 mt-2 w-60 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-lg"
+      className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-xs -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:z-10 sm:mt-2 sm:w-60 sm:max-w-none sm:translate-x-0 sm:translate-y-0"
     >
       <p className="text-sm text-slate-700">
         Sign in or join the community to continue.
