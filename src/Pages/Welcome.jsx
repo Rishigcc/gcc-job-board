@@ -592,10 +592,10 @@ function Welcome() {
           <p className="mt-3 text-sm text-slate-600 sm:text-base">
             Write to{" "}
             <a
-              href="mailto:rishi_nigam@outlook.com"
+              href="mailto:feedback@iworkatgcc.com"
               className="font-semibold text-blue-600 transition hover:text-blue-700"
             >
-              rishi_nigam@outlook.com
+              feedback@iworkatgcc.com
             </a>
           </p>
 
