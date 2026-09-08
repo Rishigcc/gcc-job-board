@@ -24,7 +24,7 @@ function Questions() {
     searchParams.get("q") || ""
   );
   const [activeTab, setActiveTab] = useState(
-    searchParams.get("tab") === "trending" ? "trending" : "latest"
+    searchParams.get("tab") === "latest" ? "latest" : "trending"
   );
 
   const [questions, setQuestions] = useState([]);
@@ -257,8 +257,8 @@ function Questions() {
 
     const params = new URLSearchParams(searchParams);
 
-    if (tab === "trending") {
-      params.set("tab", "trending");
+    if (tab === "latest") {
+      params.set("tab", "latest");
     } else {
       params.delete("tab");
     }
@@ -357,18 +357,6 @@ function Questions() {
           <div className="mt-4 flex justify-center gap-2">
             <button
               type="button"
-              onClick={() => handleTabChange("latest")}
-              className={`rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
-                activeTab === "latest"
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              Latest
-            </button>
-
-            <button
-              type="button"
               onClick={() => handleTabChange("trending")}
               className={`rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
                 activeTab === "trending"
@@ -377,6 +365,18 @@ function Questions() {
               }`}
             >
               Trending
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange("latest")}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                activeTab === "latest"
+                  ? "border-blue-600 bg-blue-600 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              Latest
             </button>
           </div>
 
