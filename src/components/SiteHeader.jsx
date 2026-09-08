@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { setPostLoginRedirect } from "../lib/postLoginRedirect";
+import NotificationsBell from "./NotificationsBell";
 
 function SiteHeader() {
   const navigate = useNavigate();
@@ -122,6 +123,12 @@ function SiteHeader() {
 
         {/* Desktop nav */}
         <div className="hidden shrink-0 items-center gap-1 sm:flex">
+          {session && (
+            <div className="mr-1">
+              <NotificationsBell userId={session.user.id} />
+            </div>
+          )}
+
           {navItems.map((item) => (
             <button
               key={item.key}
@@ -146,24 +153,28 @@ function SiteHeader() {
           ))}
         </div>
 
-        {/* Mobile menu trigger */}
-        <button
-          type="button"
-          onClick={() => setMenuOpen(true)}
-          aria-label="Open menu"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 sm:hidden"
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="currentColor"
+        {/* Mobile controls */}
+        <div className="flex shrink-0 items-center gap-2 sm:hidden">
+          {session && <NotificationsBell userId={session.user.id} />}
+
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Open menu"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50"
           >
-            <circle cx="12" cy="5" r="1.8" />
-            <circle cx="12" cy="12" r="1.8" />
-            <circle cx="12" cy="19" r="1.8" />
-          </svg>
-        </button>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <circle cx="12" cy="5" r="1.8" />
+              <circle cx="12" cy="12" r="1.8" />
+              <circle cx="12" cy="19" r="1.8" />
+            </svg>
+          </button>
+        </div>
 
       </div>
 
