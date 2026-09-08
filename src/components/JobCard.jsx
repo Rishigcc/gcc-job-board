@@ -3,7 +3,7 @@ import { trackEvent } from "../analytics";
 
 function Badge({ children }) {
   return (
-    <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm">
+    <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm break-words">
       {children}
     </span>
   );
@@ -31,11 +31,11 @@ function JobCard({ job, normalizeLocation }) {
 
       <div className="hidden md:flex justify-between gap-6">
 
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
 
           <div className="flex items-center gap-3 flex-wrap">
 
-            <h2 className="text-2xl font-semibold text-slate-900">
+            <h2 className="min-w-0 break-words text-2xl font-semibold text-slate-900">
               {job.title}
             </h2>
 
@@ -47,7 +47,7 @@ function JobCard({ job, normalizeLocation }) {
 
           </div>
 
-          <p className="mt-2 text-lg font-medium text-blue-600">
+          <p className="mt-2 break-words text-lg font-medium text-blue-600">
             {job.company}
           </p>
 
@@ -86,7 +86,7 @@ function JobCard({ job, normalizeLocation }) {
       <div className="hidden md:block mt-6 border-t border-gray-100 pt-6">
 
         <p
-          className="text-gray-700 leading-7"
+          className="text-gray-700 leading-7 break-words"
           style={{
             display: "-webkit-box",
             WebkitLineClamp: 2,
@@ -107,7 +107,7 @@ function JobCard({ job, normalizeLocation }) {
 
         <div className="flex items-center gap-3 flex-wrap">
 
-          <h2 className="text-2xl font-semibold text-slate-900">
+          <h2 className="min-w-0 break-words text-2xl font-semibold text-slate-900">
             {job.title}
           </h2>
 
@@ -119,7 +119,7 @@ function JobCard({ job, normalizeLocation }) {
 
         </div>
 
-        <p className="mt-2 text-lg font-medium text-blue-600">
+        <p className="mt-2 break-words text-lg font-medium text-blue-600">
           {job.company}
         </p>
 
@@ -144,7 +144,7 @@ function JobCard({ job, normalizeLocation }) {
         <div className="mt-6 border-t border-gray-100 pt-6">
 
           <p
-            className="text-gray-700 leading-7"
+            className="text-gray-700 leading-7 break-words"
             style={
               expanded
                 ? {}
