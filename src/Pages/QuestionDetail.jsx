@@ -874,8 +874,13 @@ function QuestionDetail() {
                         }`}
                       >
                         <p className="text-xs text-slate-500 sm:text-sm">
-                          {answer.author_name || "Community Member"} ·{" "}
-                          {formatRelativeTime(answer.created_at)}
+                          {answer.author_name || "Community Member"}
+                          {answer.user_id === question.user_id && (
+                            <span className="ml-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                              Author
+                            </span>
+                          )}{" "}
+                          · {formatRelativeTime(answer.created_at)}
                           {answer.edited_at && (
                             <span className="italic"> · edited</span>
                           )}
