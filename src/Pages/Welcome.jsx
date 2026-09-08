@@ -164,6 +164,28 @@ function Welcome() {
 
         if (insertError) {
           console.error("Error creating profile:", insertError);
+        } else {
+          // Brand-new signup: fire the one-time welcome email. The
+          // server enforces exactly-once via a race-safe DB claim, so
+          // this is safe even if it somehow runs more than once.
+          try {
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+
+            if (session?.access_token) {
+              fetch("/api/send-welcome-email", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${session.access_token}`,
+                },
+              }).catch((err) =>
+                console.error("Error requesting welcome email:", err)
+              );
+            }
+          } catch (err) {
+            console.error("Error requesting welcome email:", err);
+          }
         }
       } else {
         // Returning user — update ONLY Google fields
