@@ -19,6 +19,7 @@ import QuestionDetail from "./Pages/QuestionDetail.jsx";
 import Profile from "./Pages/Profile.jsx";
 import AskedQuestions from "./Pages/AskedQuestions.jsx";
 import SavedQuestions from "./Pages/SavedQuestions.jsx";
+import ActivityTracker from "./components/ActivityTracker.jsx";
 import { supabase } from "./lib/supabase";
 import { setPostLoginRedirect } from "./lib/postLoginRedirect";
 
@@ -210,6 +211,7 @@ createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
       <ScrollToTop />
+      <ActivityTracker />
       <AppRoutes />
     </BrowserRouter>
   </StrictMode>
