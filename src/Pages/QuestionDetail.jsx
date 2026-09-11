@@ -14,6 +14,12 @@ import LoadingCard from "../components/LoadingCard";
 import SignInPopup from "../components/SignInPopup";
 import SiteHeader from "../components/SiteHeader";
 import Pagination from "../components/Pagination";
+import Seo from "../components/Seo";
+import {
+  buildBreadcrumbJsonLd,
+  buildQuestionJsonLd,
+  truncateDescription,
+} from "../lib/seo";
 
 const ANSWERS_PER_PAGE = 15;
 
@@ -318,7 +324,7 @@ function QuestionDetail() {
     const loadQuestion = async () => {
       const { data, error } = await supabase
         .from("questions")
-        .select("id, title, description, created_at, user_id, tags")
+        .select("id, title, description, created_at, user_id, tags, slug")
         .eq("slug", slug)
         .maybeSingle();
 
@@ -472,8 +478,55 @@ function QuestionDetail() {
     setScrollTargetAnswerId(inserted.id);
   };
 
+  const answersForJsonLd = useMemo(
+    () =>
+      sortedAnswers.map((a) => ({
+        body: a.body,
+        created_at: a.created_at,
+        author_name: a.author_name,
+        heartCount: answerHeartCounts[a.id] || 0,
+      })),
+    [sortedAnswers, answerHeartCounts]
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+
+      {question && !notFound ? (
+        <Seo
+          title={`${question.title} | iWorkAtGCC`}
+          description={truncateDescription(question.description)}
+          path={`/questions/${question.slug}`}
+          type="article"
+          jsonLd={[
+            buildQuestionJsonLd({
+              question: {
+                ...question,
+                heartCount: heartCounts[question.id] || 0,
+              },
+              answers: answersForJsonLd,
+            }),
+            buildBreadcrumbJsonLd([
+              { name: "Home", path: "/" },
+              { name: "Questions", path: "/questions" },
+              { name: question.title, path: `/questions/${question.slug}` },
+            ]),
+          ]}
+        />
+      ) : notFound ? (
+        <Seo
+          title="Question Not Found | iWorkAtGCC"
+          description="This question may have been removed."
+          path={`/questions/${slug}`}
+          noindex
+        />
+      ) : (
+        <Seo
+          title="Loading Question... | iWorkAtGCC"
+          description="Loading this question from the iWorkAtGCC community."
+          path={`/questions/${slug}`}
+        />
+      )}
 
       <SiteHeader />
 

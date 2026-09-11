@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { consumePostLoginRedirect } from "../lib/postLoginRedirect";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
+import Seo from "../components/Seo";
 
 function Signup() {
   const navigate = useNavigate();
@@ -84,6 +85,13 @@ useEffect(() => {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#f7f8fc] text-slate-900">
+
+      <Seo
+        title="Sign In or Join | iWorkAtGCC"
+        description="Sign in or create your iWorkAtGCC account."
+        path="/signup"
+        noindex
+      />
 
       {/* Decorative background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">

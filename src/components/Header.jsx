@@ -1,5 +1,5 @@
 import { trackEvent } from "../analytics";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import TrendingQuestionCard from "./TrendingQuestionCard";
 import CyclingBrandHeading from "./CyclingBrandHeading";
 import FeatureCard from "./FeatureCard";
@@ -62,6 +62,7 @@ const ACTION_ITEMS = [
     linkLabel: "Browse latest jobs",
     Icon: BriefcaseIcon,
     accent: "blue",
+    to: "/jobs",
   },
   {
     key: "join",
@@ -71,6 +72,7 @@ const ACTION_ITEMS = [
     linkLabel: "Join the community",
     Icon: PeopleIcon,
     accent: "green",
+    to: "/signup",
   },
   {
     key: "questions",
@@ -80,6 +82,7 @@ const ACTION_ITEMS = [
     linkLabel: "Ask a question",
     Icon: ChatIcon,
     accent: "purple",
+    to: "/questions",
   },
 ];
 
@@ -124,21 +127,16 @@ const BENEFIT_ACCENT_CLASSES = {
 };
 
 function Header() {
-  const navigate = useNavigate();
-
   const handleExploreJobs = () => {
     trackEvent("explore_jobs_clicked");
-    navigate("/jobs");
   };
 
   const handleJoinCommunity = () => {
     trackEvent("join_community_clicked");
-    navigate("/signup");
   };
 
   const handleAskAnswerConnect = () => {
     trackEvent("ask_answer_connect_clicked");
-    navigate("/questions");
   };
 
   const handlers = {
@@ -159,6 +157,7 @@ function Header() {
           <CyclingBrandHeading
             phraseClassName="text-sm font-medium tracking-wide text-slate-500 sm:text-base"
             headingClassName="mt-2 text-4xl font-extrabold leading-tight tracking-tight text-blue-600 sm:text-5xl md:text-6xl"
+            srOnlySuffix="GCC Jobs, Community Q&A & Career Insights for India's Global Capability Centers"
           />
 
           <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg md:mx-0">
@@ -167,23 +166,23 @@ function Header() {
           </p>
 
           <div className="mt-7 flex flex-col items-center gap-3 sm:flex-row sm:justify-center md:justify-start">
-            <a
-              href="/signup"
+            <Link
+              to="/signup"
               onClick={handleJoinCommunity}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-md shadow-blue-500/20 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg sm:w-auto sm:text-base"
             >
               <PeopleIcon width={18} height={18} />
               Join the Community
-            </a>
+            </Link>
 
-            <button
-              type="button"
+            <Link
+              to="/questions"
               onClick={handleAskAnswerConnect}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-6 py-3 text-sm font-semibold text-blue-700 transition hover:-translate-y-0.5 hover:bg-blue-50 sm:w-auto sm:text-base"
             >
               <ChatIcon width={18} height={18} />
               Ask, Answer &amp; Connect
-            </button>
+            </Link>
           </div>
 
           <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-500 md:justify-start">
@@ -217,7 +216,7 @@ function Header() {
               description={item.description}
               linkLabel={item.linkLabel}
               onClick={handlers[item.key]}
-              href={item.key === "join" ? "/signup" : undefined}
+              to={item.to}
             />
           ))}
         </div>
@@ -255,14 +254,14 @@ function Header() {
         </div>
 
         <div className="mt-8 flex justify-center">
-          <a
-            href="/signup"
+          <Link
+            to="/signup"
             onClick={handleJoinCommunity}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-md shadow-blue-500/20 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg sm:w-auto sm:text-base"
           >
             <PeopleIcon width={18} height={18} />
             Join the Community
-          </a>
+          </Link>
         </div>
 
       </section>

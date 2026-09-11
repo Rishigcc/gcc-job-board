@@ -7,6 +7,7 @@ import TrendingQuestionCard from "../components/TrendingQuestionCard";
 import CyclingBrandHeading from "../components/CyclingBrandHeading";
 import FeatureCard from "../components/FeatureCard";
 import SignInPopup from "../components/SignInPopup";
+import Seo from "../components/Seo";
 
 const iconProps = {
   width: 20,
@@ -335,6 +336,13 @@ function Welcome() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+
+      <Seo
+        title="My Dashboard | iWorkAtGCC"
+        description="Your iWorkAtGCC dashboard."
+        path="/welcome"
+        noindex
+      />
 
       <SiteHeader />
 

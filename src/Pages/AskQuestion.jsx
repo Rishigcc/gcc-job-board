@@ -6,6 +6,7 @@ import { slugify, generateUniqueSlug } from "../lib/slug";
 import { TAG_OPTIONS, suggestTags } from "../lib/tags";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
+import Seo from "../components/Seo";
 
 function AskQuestion() {
   const navigate = useNavigate();
@@ -99,6 +100,13 @@ function AskQuestion() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+
+      <Seo
+        title="Ask a Question | iWorkAtGCC"
+        description="Ask the GCC community a question."
+        path="/ask"
+        noindex
+      />
 
       <SiteHeader />
 
