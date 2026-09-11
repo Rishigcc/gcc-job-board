@@ -35,16 +35,53 @@ function NotificationsBell({ userId }) {
     return data || [];
   }, [userId]);
 
-  // Badge: count hearts + answers on my questions since I last opened
-  // the panel (excluding my own actions).
+  // Fetch my answer ids/question ids — shared by both the badge count
+  // and the list build.
+  const loadMyAnswers = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("answers")
+      .select("id, question_id")
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Error loading your answers:", error);
+      return [];
+    }
+
+    return data || [];
+  }, [userId]);
+
+  // A head-only count query, short-circuited to 0 when there are no ids
+  // to filter on (an empty .in() is otherwise a wasted round trip).
+  const countSince = (table, column, ids, userId, lastSeen) => {
+    if (ids.length === 0) return Promise.resolve(0);
+
+    const query = supabase
+      .from(table)
+      .select("*", { count: "exact", head: true })
+      .in(column, ids)
+      .neq("user_id", userId);
+
+    if (lastSeen) query.gt("created_at", lastSeen);
+
+    return query.then((res) => res.count || 0);
+  };
+
+  // Badge: count hearts + answers on my questions, and hearts on my
+  // answers, since I last opened the panel (excluding my own actions).
   const refreshUnreadCount = useCallback(async () => {
-    const myQuestions = await loadMyQuestions();
-    if (myQuestions.length === 0) {
+    const [myQuestions, myAnswers] = await Promise.all([
+      loadMyQuestions(),
+      loadMyAnswers(),
+    ]);
+
+    const qIds = myQuestions.map((q) => q.id);
+    const aIds = myAnswers.map((a) => a.id);
+
+    if (qIds.length === 0 && aIds.length === 0) {
       setUnreadCount(0);
       return;
     }
-
-    const ids = myQuestions.map((q) => q.id);
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -54,30 +91,14 @@ function NotificationsBell({ userId }) {
 
     const lastSeen = profile?.notifications_last_seen_at;
 
-    const heartsQuery = supabase
-      .from("question_hearts")
-      .select("*", { count: "exact", head: true })
-      .in("question_id", ids)
-      .neq("user_id", userId);
-
-    const answersQuery = supabase
-      .from("answers")
-      .select("*", { count: "exact", head: true })
-      .in("question_id", ids)
-      .neq("user_id", userId);
-
-    if (lastSeen) {
-      heartsQuery.gt("created_at", lastSeen);
-      answersQuery.gt("created_at", lastSeen);
-    }
-
-    const [heartsResult, answersResult] = await Promise.all([
-      heartsQuery,
-      answersQuery,
+    const [questionHearts, answers, answerHearts] = await Promise.all([
+      countSince("question_hearts", "question_id", qIds, userId, lastSeen),
+      countSince("answers", "question_id", qIds, userId, lastSeen),
+      countSince("answer_hearts", "answer_id", aIds, userId, lastSeen),
     ]);
 
-    setUnreadCount((heartsResult.count || 0) + (answersResult.count || 0));
-  }, [userId, loadMyQuestions]);
+    setUnreadCount(questionHearts + answers + answerHearts);
+  }, [userId, loadMyQuestions, loadMyAnswers]);
 
   useEffect(() => {
     if (!userId) return;
@@ -91,35 +112,82 @@ function NotificationsBell({ userId }) {
   const loadNotifications = useCallback(async () => {
     setListLoading(true);
 
-    const myQuestions = await loadMyQuestions();
+    const [myQuestions, myAnswers] = await Promise.all([
+      loadMyQuestions(),
+      loadMyAnswers(),
+    ]);
 
-    if (myQuestions.length === 0) {
+    if (myQuestions.length === 0 && myAnswers.length === 0) {
       setNotifications([]);
       setListLoading(false);
       return;
     }
 
-    const ids = myQuestions.map((q) => q.id);
+    const qIds = myQuestions.map((q) => q.id);
+    const aIds = myAnswers.map((a) => a.id);
+
     const questionById = {};
     for (const q of myQuestions) {
       questionById[q.id] = q;
     }
 
-    const [heartsResult, answersResult] = await Promise.all([
-      supabase
-        .from("question_hearts")
-        .select("question_id, user_id, created_at")
-        .in("question_id", ids)
-        .neq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(EVENTS_PER_TYPE),
-      supabase
-        .from("answers")
-        .select("id, question_id, user_id, created_at")
-        .in("question_id", ids)
-        .neq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(EVENTS_PER_TYPE),
+    // My answers' parent questions aren't necessarily mine to have loaded
+    // above — fetch title/slug for whichever of those aren't already known.
+    const answerQuestionIds = [...new Set(myAnswers.map((a) => a.question_id))];
+    const missingQuestionIds = answerQuestionIds.filter(
+      (id) => !questionById[id]
+    );
+
+    if (missingQuestionIds.length > 0) {
+      const { data, error } = await supabase
+        .from("questions")
+        .select("id, title, slug")
+        .in("id", missingQuestionIds);
+
+      if (error) {
+        console.error("Error loading answered questions:", error);
+      } else {
+        for (const q of data || []) {
+          questionById[q.id] = q;
+        }
+      }
+    }
+
+    const answerById = {};
+    for (const a of myAnswers) {
+      answerById[a.id] = a;
+    }
+
+    const emptyResult = Promise.resolve({ data: [], error: null });
+
+    const [heartsResult, answersResult, answerHeartsResult] = await Promise.all([
+      qIds.length > 0
+        ? supabase
+            .from("question_hearts")
+            .select("question_id, user_id, created_at")
+            .in("question_id", qIds)
+            .neq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(EVENTS_PER_TYPE)
+        : emptyResult,
+      qIds.length > 0
+        ? supabase
+            .from("answers")
+            .select("id, question_id, user_id, created_at")
+            .in("question_id", qIds)
+            .neq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(EVENTS_PER_TYPE)
+        : emptyResult,
+      aIds.length > 0
+        ? supabase
+            .from("answer_hearts")
+            .select("answer_id, user_id, created_at")
+            .in("answer_id", aIds)
+            .neq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(EVENTS_PER_TYPE)
+        : emptyResult,
     ]);
 
     if (heartsResult.error) {
@@ -131,13 +199,21 @@ function NotificationsBell({ userId }) {
         answersResult.error
       );
     }
+    if (answerHeartsResult.error) {
+      console.error(
+        "Error loading answer heart notifications:",
+        answerHeartsResult.error
+      );
+    }
 
     const hearts = heartsResult.data || [];
     const answers = answersResult.data || [];
+    const answerHearts = answerHeartsResult.data || [];
 
     const actorIds = [
       ...hearts.map((h) => h.user_id),
       ...answers.map((a) => a.user_id),
+      ...answerHearts.map((h) => h.user_id),
     ];
     const actorNames = await fetchAuthorNames(actorIds);
 
@@ -157,6 +233,14 @@ function NotificationsBell({ userId }) {
         answerId: a.id,
         createdAt: a.created_at,
       })),
+      ...answerHearts.map((h) => ({
+        key: `answer-heart-${h.answer_id}-${h.user_id}-${h.created_at}`,
+        type: "answer_heart",
+        actorName: actorNames[h.user_id] || "Someone",
+        question: questionById[answerById[h.answer_id]?.question_id],
+        answerId: h.answer_id,
+        createdAt: h.created_at,
+      })),
     ]
       .filter((e) => e.question)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -164,7 +248,7 @@ function NotificationsBell({ userId }) {
 
     setNotifications(events);
     setListLoading(false);
-  }, [userId, loadMyQuestions]);
+  }, [userId, loadMyQuestions, loadMyAnswers]);
 
   // Opening the panel: load the list, then mark everything as seen so
   // the badge resets to what's new from here on.
@@ -230,9 +314,9 @@ function NotificationsBell({ userId }) {
   const handleNotificationClick = (n) => {
     setOpen(false);
 
-    // For answer notifications, deep-link to the specific answer so the
-    // detail page scrolls to it and briefly highlights it.
-    if (n.type === "answer" && n.answerId) {
+    // For answer and answer-heart notifications, deep-link to the specific
+    // answer so the detail page scrolls to it and briefly highlights it.
+    if ((n.type === "answer" || n.type === "answer_heart") && n.answerId) {
       navigate(`/questions/${n.question.slug}`, {
         state: { scrollToAnswerId: n.answerId },
       });
@@ -299,12 +383,14 @@ function NotificationsBell({ userId }) {
                   >
                     <span
                       className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm ${
-                        n.type === "heart"
+                        n.type === "heart" || n.type === "answer_heart"
                           ? "bg-red-50"
                           : "bg-blue-50"
                       }`}
                     >
-                      {n.type === "heart" ? "❤️" : "💬"}
+                      {n.type === "heart" || n.type === "answer_heart"
+                        ? "❤️"
+                        : "💬"}
                     </span>
 
                     <span className="min-w-0 flex-1">
@@ -314,7 +400,9 @@ function NotificationsBell({ userId }) {
                         </span>{" "}
                         {n.type === "heart"
                           ? "hearted your question"
-                          : "answered your question"}{" "}
+                          : n.type === "answer_heart"
+                            ? "hearted your answer on"
+                            : "answered your question"}{" "}
                         <span className="font-medium text-slate-900">
                           &lsquo;{n.question.title}&rsquo;
                         </span>

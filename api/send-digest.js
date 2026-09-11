@@ -164,18 +164,29 @@ export default async function handler(req, res) {
   const cutoffDate = new Date(Date.now() - INACTIVE_DAYS * 86400000)
     .toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
-  // Candidate users = anyone who has authored a question (only they can
-  // have "unread notifications" under the current scope).
-  const { data: qAuthorRows, error: qAuthorErr } = await supabase
-    .from("questions")
-    .select("user_id");
+  // Candidate users = anyone who has authored a question or an answer
+  // (only they can have "unread notifications" under the current scope).
+  const [{ data: qAuthorRows, error: qAuthorErr }, { data: aAuthorRows, error: aAuthorErr }] =
+    await Promise.all([
+      supabase.from("questions").select("user_id"),
+      supabase.from("answers").select("user_id"),
+    ]);
 
   if (qAuthorErr) {
     console.error("Error loading question authors:", qAuthorErr);
     return res.status(500).json({ error: "Query failed" });
   }
+  if (aAuthorErr) {
+    console.error("Error loading answer authors:", aAuthorErr);
+    return res.status(500).json({ error: "Query failed" });
+  }
 
-  const candidateIds = [...new Set((qAuthorRows || []).map((r) => r.user_id))];
+  const candidateIds = [
+    ...new Set([
+      ...(qAuthorRows || []).map((r) => r.user_id),
+      ...(aAuthorRows || []).map((r) => r.user_id),
+    ]),
+  ];
 
   if (candidateIds.length === 0) {
     return res.status(200).json({ mode: dry ? "dry" : "send", eligible: [], skipped: [] });
@@ -242,32 +253,51 @@ export default async function handler(req, res) {
 
     const threshold = p.notifications_last_seen_at || "1970-01-01T00:00:00Z";
 
-    // This user's question ids.
-    const { data: qRows } = await supabase
-      .from("questions")
-      .select("id")
-      .eq("user_id", p.id);
+    // This user's question ids and answer ids.
+    const [{ data: qRows }, { data: aRows }] = await Promise.all([
+      supabase.from("questions").select("id").eq("user_id", p.id),
+      supabase.from("answers").select("id").eq("user_id", p.id),
+    ]);
     const qIds = (qRows || []).map((r) => r.id);
+    const aIds = (aRows || []).map((r) => r.id);
 
     let hearts = 0;
     let answers = 0;
+    const countQueries = [];
     if (qIds.length > 0) {
-      const [heartsRes, answersRes] = await Promise.all([
+      countQueries.push(
         supabase
           .from("question_hearts")
           .select("*", { count: "exact", head: true })
           .in("question_id", qIds)
           .neq("user_id", p.id)
-          .gt("created_at", threshold),
+          .gt("created_at", threshold)
+          .then((r) => ({ key: "hearts", count: r.count || 0 })),
         supabase
           .from("answers")
           .select("*", { count: "exact", head: true })
           .in("question_id", qIds)
           .neq("user_id", p.id)
-          .gt("created_at", threshold),
-      ]);
-      hearts = heartsRes.count || 0;
-      answers = answersRes.count || 0;
+          .gt("created_at", threshold)
+          .then((r) => ({ key: "answers", count: r.count || 0 }))
+      );
+    }
+    if (aIds.length > 0) {
+      countQueries.push(
+        supabase
+          .from("answer_hearts")
+          .select("*", { count: "exact", head: true })
+          .in("answer_id", aIds)
+          .neq("user_id", p.id)
+          .gt("created_at", threshold)
+          .then((r) => ({ key: "hearts", count: r.count || 0 }))
+      );
+    }
+
+    const countResults = await Promise.all(countQueries);
+    for (const { key, count } of countResults) {
+      if (key === "hearts") hearts += count;
+      else answers += count;
     }
 
     if (hearts + answers === 0) {
