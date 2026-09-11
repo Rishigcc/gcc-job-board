@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 const ACCENT_CLASSES = {
   green: "bg-green-100 text-green-600",
   purple: "bg-purple-100 text-purple-600",
@@ -35,7 +37,7 @@ function FeatureCard({
   description,
   linkLabel,
   onClick,
-  href,
+  to,
 }) {
   const content = (
     <>
@@ -65,12 +67,12 @@ function FeatureCard({
     />
   );
 
-  if (href) {
+  if (to) {
     return (
-      <a href={href} onClick={onClick} className={className}>
+      <Link to={to} onClick={onClick} className={className}>
         {content}
         {wave}
-      </a>
+      </Link>
     );
   }
 

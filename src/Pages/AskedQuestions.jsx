@@ -8,6 +8,7 @@ import LoadingCard from "../components/LoadingCard";
 import SiteHeader from "../components/SiteHeader";
 import QuestionCard from "../components/QuestionCard";
 import Pagination from "../components/Pagination";
+import Seo from "../components/Seo";
 
 const QUESTIONS_PER_PAGE = 10;
 
@@ -96,6 +97,13 @@ function AskedQuestions() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+
+      <Seo
+        title="Your Questions | iWorkAtGCC"
+        description="Questions you've asked on iWorkAtGCC."
+        path="/profile/asked"
+        noindex
+      />
 
       <SiteHeader />
 

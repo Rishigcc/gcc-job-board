@@ -8,6 +8,7 @@ import LoadingCard from "../components/LoadingCard";
 import SiteHeader from "../components/SiteHeader";
 import QuestionCard from "../components/QuestionCard";
 import Pagination from "../components/Pagination";
+import Seo from "../components/Seo";
 
 const QUESTIONS_PER_PAGE = 10;
 const TRENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -292,6 +293,12 @@ function Questions() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#f7f8fc] text-slate-900">
+
+      <Seo
+        title="GCC Community Q&A — Salaries, Hikes & Careers | iWorkAtGCC"
+        description="Ask and answer questions with the GCC community about salaries, hikes, offers, promotions, and career moves at Global Capability Centers in India."
+        path="/questions"
+      />
 
       {/* Decorative background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">

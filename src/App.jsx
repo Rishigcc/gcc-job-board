@@ -1,6 +1,11 @@
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import SiteHeader from "./components/SiteHeader";
+import Seo from "./components/Seo";
+import {
+  buildOrganizationJsonLd,
+  buildWebsiteJsonLd,
+} from "./lib/seo";
 
 function App() {
   const dotGridStyle = {
@@ -11,6 +16,13 @@ function App() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#f7f8fc] pb-6 text-slate-900">
+
+      <Seo
+        title="iWorkAtGCC — GCC Jobs & Community for India's Global Capability Centers"
+        description="Discover verified Global Capability Center jobs in India. Join the iWorkAtGCC community to ask questions, get career insights, and explore new GCC opportunities."
+        path="/"
+        jsonLd={[buildOrganizationJsonLd(), buildWebsiteJsonLd()]}
+      />
 
       {/* Decorative background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">

@@ -11,6 +11,7 @@ function CyclingBrandHeading({
   headingTag = "h1",
   headingClassName,
   phraseClassName = "text-sm font-medium tracking-wide text-slate-500 sm:text-base",
+  srOnlySuffix,
 }) {
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [phraseVisible, setPhraseVisible] = useState(true);
@@ -46,7 +47,10 @@ function CyclingBrandHeading({
         {CYCLING_PHRASES[phraseIndex]}
       </p>
 
-      <HeadingTag className={headingClassName}>iWorkAtGCC</HeadingTag>
+      <HeadingTag className={headingClassName}>
+        iWorkAtGCC
+        {srOnlySuffix && <span className="sr-only"> — {srOnlySuffix}</span>}
+      </HeadingTag>
     </>
   );
 }

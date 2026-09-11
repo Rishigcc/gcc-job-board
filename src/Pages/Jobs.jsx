@@ -7,6 +7,7 @@ import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
 import Pagination from "../components/Pagination";
 import EmailSignup from "../components/EmailSignup";
+import Seo from "../components/Seo";
 
 const JOBS_PER_PAGE = 20;
 
@@ -182,9 +183,17 @@ function Jobs() {
 
   return (
     <div className="min-h-screen bg-slate-100 py-10">
+      <Seo
+        title="GCC Jobs in India — Verified Openings | iWorkAtGCC"
+        description="Browse verified Global Capability Center job openings across India. Filter by location, company, and function to find your next GCC role."
+        path="/jobs"
+      />
+
       <SiteHeader />
 
       <div className="max-w-6xl mx-auto px-6">
+
+        <h1 className="sr-only">GCC Jobs in India</h1>
 
         <div className="mt-8">
           <EmailSignup />

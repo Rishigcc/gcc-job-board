@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { saveDisplayName } from "../lib/useDisplayName";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
+import Seo from "../components/Seo";
 
 function Profile() {
   const navigate = useNavigate();
@@ -104,6 +105,13 @@ function Profile() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+
+      <Seo
+        title="Your Profile | iWorkAtGCC"
+        description="Manage your iWorkAtGCC profile."
+        path="/profile"
+        noindex
+      />
 
       <SiteHeader />
 
