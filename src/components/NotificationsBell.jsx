@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { fetchAuthorNames } from "../lib/authors";
 import { formatRelativeTime } from "../lib/relativeTime";
@@ -9,6 +9,7 @@ const MAX_LIST = 30;
 
 function NotificationsBell({ userId }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -165,27 +166,46 @@ function NotificationsBell({ userId }) {
     setListLoading(false);
   }, [userId, loadMyQuestions]);
 
-  const handleToggle = async () => {
-    const next = !open;
-    setOpen(next);
+  // Opening the panel: load the list, then mark everything as seen so
+  // the badge resets to what's new from here on.
+  const openPanel = useCallback(async () => {
+    setOpen(true);
+    loadNotifications();
 
-    if (next) {
-      // Opening: load the list, then mark everything as seen so the
-      // badge resets to what's new from here on.
-      loadNotifications();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ notifications_last_seen_at: new Date().toISOString() })
+      .eq("id", userId);
 
-      const { error } = await supabase
-        .from("profiles")
-        .update({ notifications_last_seen_at: new Date().toISOString() })
-        .eq("id", userId);
-
-      if (error) {
-        console.error("Error updating notifications last seen:", error);
-      } else {
-        setUnreadCount(0);
-      }
+    if (error) {
+      console.error("Error updating notifications last seen:", error);
+    } else {
+      setUnreadCount(0);
     }
+  }, [userId, loadNotifications]);
+
+  const handleToggle = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    openPanel();
   };
+
+  // Auto-open when arriving via the digest email's CTA
+  // (/profile/asked?notifications=open), then strip the param so a
+  // refresh or back-navigation doesn't re-open it.
+  useEffect(() => {
+    if (!userId) return;
+    if (searchParams.get("notifications") !== "open") return;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    openPanel();
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("notifications");
+    setSearchParams(next, { replace: true });
+  }, [userId, searchParams, openPanel, setSearchParams]);
 
   // Close on outside click.
   useEffect(() => {

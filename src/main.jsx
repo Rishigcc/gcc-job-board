@@ -76,7 +76,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (!session) {
-    setPostLoginRedirect(location.pathname);
+    setPostLoginRedirect(location.pathname + location.search);
     return <Navigate to="/signup" replace />;
   }
 
