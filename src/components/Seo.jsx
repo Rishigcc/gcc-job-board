@@ -36,7 +36,7 @@ function Seo({
 
       {jsonLdList.map((entry, index) => (
         <script key={index} type="application/ld+json">
-          {JSON.stringify(entry)}
+          {JSON.stringify(entry).replace(/</g, "\\u003c")}
         </script>
       ))}
     </>
