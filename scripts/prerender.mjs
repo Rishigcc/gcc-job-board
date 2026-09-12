@@ -9,6 +9,11 @@ const SITE_URL = "https://www.iworkatgcc.com";
 const CONCURRENCY = 3;
 const NAV_TIMEOUT = 45000;
 
+// Mirrors the questions_slug_format CHECK constraint. Re-checked here so a slug
+// predating the constraint — or written if it is ever dropped — can never escape
+// DIST via path.join() or inject markup into the sitemap.
+const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
 // Analytics would otherwise record a phantom pageview per route on every
 // scheduled rebuild.
 const BLOCKED_HOSTS = [
@@ -65,7 +70,11 @@ async function fetchQuestions() {
   }
 
   return questions
-    .filter((q) => q.slug)
+    .filter((q) => {
+      if (SLUG_RE.test(q.slug || "")) return true;
+      console.warn(`[prerender] skipping unsafe slug: ${JSON.stringify(q.slug)}`);
+      return false;
+    })
     .map((q) => ({
       slug: q.slug,
       title: q.title,
@@ -169,6 +178,16 @@ async function renderRoute(context, baseUrl, route) {
   }
 }
 
+// `&` must be replaced first, or it would double-escape the entities below it.
+function escapeXml(value) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 function buildSitemap(questions) {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -185,7 +204,7 @@ function buildSitemap(questions) {
   const urls = entries
     .map(
       ({ loc, lastmod }) =>
-        `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`
+        `  <url>\n    <loc>${escapeXml(loc)}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`
     )
     .join("\n\n");
 
