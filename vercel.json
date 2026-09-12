@@ -1,14 +1,23 @@
 {
+  "build": {
+    "env": {
+      "PLAYWRIGHT_BROWSERS_PATH": "0"
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "destination": "/app.html"
     }
   ],
   "crons": [
     {
       "path": "/api/send-digest",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/rebuild",
+      "schedule": "0 2 * * *"
     }
   ]
 }

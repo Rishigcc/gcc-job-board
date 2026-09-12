@@ -207,6 +207,13 @@ function AppRoutes() {
 }
 
 
+// Prerendered pages ship with the Seo component's output baked into <head>.
+// React re-adds its own on mount, and the stale copies would otherwise win on
+// client-side navigation by sitting earlier in document order.
+document.head
+  .querySelectorAll("[data-prerendered]")
+  .forEach((el) => el.remove());
+
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
