@@ -192,6 +192,33 @@ function buildSitemap(questions) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n\n${urls}\n\n</urlset>\n`;
 }
 
+// Vercel's build image is Amazon Linux and ships without Chromium's shared
+// libraries, so Playwright's own download can't start there. @sparticuz's
+// build bundles them. Locally we use whatever Playwright installed.
+async function launchBrowser() {
+  if (!process.env.VERCEL) {
+    try {
+      return await chromium.launch();
+    } catch (err) {
+      if (err.message.includes("Executable doesn't exist")) {
+        throw new Error(
+          "No local Chromium found. Run: npx playwright install chromium"
+        );
+      }
+      throw err;
+    }
+  }
+
+  const { default: bundled } = await import("@sparticuz/chromium");
+  bundled.setGraphicsMode = false;
+
+  return chromium.launch({
+    args: bundled.args,
+    executablePath: await bundled.executablePath(),
+    headless: true,
+  });
+}
+
 async function main() {
   const startedAt = Date.now();
 
@@ -211,7 +238,7 @@ async function main() {
   });
   const baseUrl = server.resolvedUrls.local[0].replace(/\/$/, "");
 
-  const browser = await chromium.launch();
+  const browser = await launchBrowser();
   const context = await browser.newContext();
 
   await context.route("**/*", (route) => {
