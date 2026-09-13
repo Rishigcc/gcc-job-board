@@ -13,15 +13,8 @@
 
     <title>iWorkAtGCC Community</title>
 
-    <!-- Google Analytics -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-T63XZRDPBE"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-
-      gtag('config', 'G-T63XZRDPBE');
-    </script>
+    <!-- Google Analytics is injected at build time by gaPlugin in
+         vite.config.js, so `npm run dev` loads no gtag.js at all. -->
 
     <!-- Microsoft Clarity -->
     <script type="text/javascript">

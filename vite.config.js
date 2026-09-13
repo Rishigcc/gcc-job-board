@@ -51,10 +51,58 @@ function devApiPlugin(env) {
   };
 }
 
+// Google Analytics is injected only for production builds, so `npm run dev`
+// never loads gtag.js. With window.gtag left undefined, the guard in
+// src/analytics.js turns trackEvent -- and the PageViewTracker that calls
+// it -- into no-ops, so no events fire in dev either.
+function gaPlugin(env) {
+  const measurementId = process.env.VITE_GA_ID ?? env.VITE_GA_ID;
+
+  return {
+    name: "google-analytics",
+    apply: "build",
+    transformIndexHtml() {
+      // Failing the build beats shipping one whose analytics is silently
+      // dead. On Vercel a failed build leaves the previous deployment
+      // serving every page intact, so this costs a deploy, not an outage.
+      if (!measurementId) {
+        throw new Error(
+          "VITE_GA_ID is not set, so this build would ship with analytics " +
+            "silently disabled. Set VITE_GA_ID=G-XXXXXXXXXX in .env for " +
+            "local builds, and in the Vercel project's environment " +
+            "variables for deploys."
+        );
+      }
+
+      return [
+        {
+          tag: "script",
+          attrs: {
+            async: true,
+            src: `https://www.googletagmanager.com/gtag/js?id=${measurementId}`,
+          },
+          injectTo: "head",
+        },
+        {
+          tag: "script",
+          children: [
+            "window.dataLayer = window.dataLayer || [];",
+            "function gtag(){dataLayer.push(arguments);}",
+            "gtag('js', new Date());",
+            `gtag('config', '${measurementId}');`,
+          ].join("\n"),
+          injectTo: "head",
+        },
+      ];
+    },
+  };
+}
+
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
-    plugins: [react(), tailwindcss(), devApiPlugin(env)],
+    plugins: [react(), tailwindcss(), devApiPlugin(env), gaPlugin(env)],
   };
 });
