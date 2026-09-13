@@ -9,6 +9,32 @@ const SITE_URL = "https://www.iworkatgcc.com";
 const CONCURRENCY = 3;
 const NAV_TIMEOUT = 45000;
 
+// Delay before each retry, so RETRY_DELAYS.length is also the retry count.
+// A failed route is usually a transient upstream blip rather than a broken
+// page — a single 504 on /rest/v1/questions failed an entire production
+// deploy on 2026-09-13 — so the gap widens to outlast a blip lasting several
+// seconds. Jitter keeps the CONCURRENCY workers from retrying in lockstep and
+// compounding the load on a backend that is already struggling.
+const RETRY_DELAYS = [2000, 5000];
+
+// A page this script wrote stamps its managed head tags with this marker; the
+// SPA shell served by the vercel.json rewrite never carries it, and always has
+// an empty root div. Together they separate "production already serves a real
+// page for this route" from "this route has never been prerendered".
+const PRERENDERED_MARKER = 'data-prerendered="true"';
+const EMPTY_ROOT = '<div id="root"></div>';
+const CARRY_FORWARD_TIMEOUT = 15000;
+
+// Past this share of routes a wave of failures is an outage rather than a
+// blip, and publishing a mostly-stale site is worse than publishing nothing:
+// a failed build leaves the previous deployment serving every page intact.
+const MAX_STALE_SHARE = 0.25;
+
+// QuestionDetail marks its fetch-error state with this attribute. Spotting it
+// turns a route whose data failed from a full NAV_TIMEOUT stall into an
+// immediate throw, which renderRouteWithRetry then retries seconds later.
+const FETCH_ERROR_SELECTOR = "[data-fetch-error]";
+
 // Mirrors the questions_slug_format CHECK constraint. Re-checked here so a slug
 // predating the constraint — or written if it is ever dropped — can never escape
 // DIST via path.join() or inject markup into the sitemap.
@@ -93,6 +119,7 @@ function buildRoutes(questions) {
       path: `/questions/${q.slug}`,
       kind: "question",
       out: `questions/${q.slug}/index.html`,
+      slug: q.slug,
       title: q.title,
       answerCount: q.answerCount,
     })),
@@ -104,24 +131,45 @@ const noLoadingCards = () =>
     h.textContent.trim().startsWith("Loading")
   );
 
+// waitForFunction resolves on any truthy value, so predicates return a
+// sentinel string instead of a boolean — "error" is truthy too and must not be
+// read as success. Only the resolved value separates the two.
+async function waitForOutcome(page, predicate, arg, options) {
+  const handle = await page.waitForFunction(predicate, arg, options);
+
+  if ((await handle.jsonValue()) === "error") {
+    throw new Error("page rendered its fetch-error state — data did not load");
+  }
+}
+
 async function waitForContent(page, route) {
   const options = { timeout: NAV_TIMEOUT };
 
   if (route.kind === "question") {
     // The question title and the answers heading together prove both Supabase
     // round-trips resolved, not just the first one.
-    await page.waitForFunction(
-      ({ title, answerCount }) => {
+    await waitForOutcome(
+      page,
+      ({ title, answerCount, errorSelector }) => {
+        // Checked first: it is the one state that will never resolve on its
+        // own, and it covers either round-trip failing.
+        if (document.querySelector(errorSelector)) return "error";
+
         const h1 = document.querySelector("h1");
         if (!h1 || h1.textContent.trim() !== title) return false;
 
         const expected =
           answerCount === 1 ? "1 Answer" : `${answerCount} Answers`;
-        return Array.from(document.querySelectorAll("h2")).some(
+        const heading = Array.from(document.querySelectorAll("h2")).some(
           (h) => h.textContent.trim() === expected
         );
+        return heading ? "ok" : false;
       },
-      { title: route.title, answerCount: route.answerCount },
+      {
+        title: route.title,
+        answerCount: route.answerCount,
+        errorSelector: FETCH_ERROR_SELECTOR,
+      },
       options
     );
     return;
@@ -176,6 +224,61 @@ async function renderRoute(context, baseUrl, route) {
   } finally {
     await page.close();
   }
+}
+
+const jitter = (ms) => ms * (0.75 + Math.random() * 0.5);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Every attempt goes through renderRoute(), which opens a fresh page and
+// re-runs page.goto(), so the page's data fetches are re-issued. Retrying any
+// deeper — re-waiting on the page that just failed — would only re-observe
+// whatever state the failed fetch left behind: a not-found render never
+// resolves into the title waitForContent() is looking for, so each attempt
+// would stall for the full NAV_TIMEOUT and still fail.
+async function renderRouteWithRetry(context, baseUrl, route) {
+  let lastErr;
+
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    if (attempt > 0) {
+      const delay = jitter(RETRY_DELAYS[attempt - 1]);
+      console.warn(
+        `[prerender] retry ${attempt}/${RETRY_DELAYS.length} ${route.path} ` +
+          `in ${(delay / 1000).toFixed(1)}s — ${lastErr.message}`
+      );
+      await sleep(delay);
+    }
+
+    try {
+      return await renderRoute(context, baseUrl, route);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  throw lastErr;
+}
+
+// Returns the live HTML when production already serves a prerendered page for
+// this route, or null when it serves the SPA shell (the route has never been
+// prerendered, so omitting it regresses nothing). Throws when the answer
+// cannot be established: an unreachable site must never read as "never
+// prerendered", or a build container with no network would quietly drop every
+// failed route at once instead of aborting.
+async function fetchLivePage(route) {
+  const url = `${SITE_URL}${route.path}`;
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(CARRY_FORWARD_TIMEOUT),
+  });
+
+  if (!response.ok) throw new Error(`${url} returned ${response.status}`);
+
+  const html = await response.text();
+
+  if (html.includes(EMPTY_ROOT) || !html.includes(PRERENDERED_MARKER)) {
+    return null;
+  }
+
+  return html;
 }
 
 // `&` must be replaced first, or it would double-escape the entities below it.
@@ -274,7 +377,7 @@ async function main() {
     while (cursor < routes.length) {
       const route = routes[cursor++];
       try {
-        results.push(await renderRoute(context, baseUrl, route));
+        results.push(await renderRouteWithRetry(context, baseUrl, route));
         console.log(`[prerender] ok   ${route.path}`);
       } catch (err) {
         failures.push({ route, err });
@@ -290,28 +393,94 @@ async function main() {
   await browser.close();
   await server.close();
 
-  if (failures.length > 0) {
+  // Triage every route that exhausted its retries against what production is
+  // serving right now. Skipping a route does not leave its old page in place:
+  // vite build empties DIST before this script runs, so an unwritten route
+  // falls through the vercel.json rewrite to the SPA shell.
+  const stale = [];
+  const skipped = [];
+
+  for (const { route, err } of failures) {
+    let live;
+
+    try {
+      live = await fetchLivePage(route);
+    } catch (fetchErr) {
+      console.error(
+        `\n[prerender] ${route.path} failed and production could not be ` +
+          `checked (${fetchErr.message}) — aborting without writing.`
+      );
+      console.error(
+        "[prerender] the previous deployment keeps serving every page."
+      );
+      process.exit(1);
+    }
+
+    if (live) stale.push({ route, html: live, err });
+    else skipped.push({ route, err });
+  }
+
+  const maxStale = Math.floor(routes.length * MAX_STALE_SHARE);
+
+  if (stale.length > maxStale) {
     console.error(
-      `\n[prerender] ${failures.length} route(s) failed — aborting without writing.`
+      `\n[prerender] ${stale.length} of ${routes.length} route(s) would be ` +
+        `stale (limit ${maxStale}) — treating as an outage, aborting without writing.`
+    );
+    console.error(
+      "[prerender] the previous deployment keeps serving every page."
     );
     process.exit(1);
   }
 
-  for (const { route, html } of results) {
+  for (const { route, html } of [...results, ...stale]) {
     const outPath = path.join(DIST, route.out);
     await mkdir(path.dirname(outPath), { recursive: true });
     await writeFile(outPath, html, "utf8");
   }
 
+  // A skipped route serves the shell, so advertising it would point crawlers
+  // at a contentless 200. Carried-forward routes keep their entry: they have
+  // a real page, just an older one.
+  const skippedSlugs = new Set(skipped.map(({ route }) => route.slug));
+  const publishedQuestions = questions.filter((q) => !skippedSlugs.has(q.slug));
+
   await writeFile(
     path.join(DIST, "sitemap.xml"),
-    buildSitemap(questions),
+    buildSitemap(publishedQuestions),
     "utf8"
   );
 
+  // Name every degraded route on every run, so a route that carries forward
+  // night after night reads as chronic rather than disappearing into a count.
+  if (stale.length > 0) {
+    console.warn(
+      `\n[prerender] ${stale.length} route(s) STALE — carried forward from production:`
+    );
+    for (const { route, err } of stale) {
+      console.warn(`[prerender]   STALE ${route.path} — ${err.message}`);
+    }
+  }
+
+  if (skipped.length > 0) {
+    console.warn(
+      `\n[prerender] ${skipped.length} route(s) skipped — never prerendered, ` +
+        `omitted from sitemap:`
+    );
+    for (const { route, err } of skipped) {
+      console.warn(`[prerender]   SKIP  ${route.path} — ${err.message}`);
+    }
+  }
+
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+  const breakdown =
+    stale.length || skipped.length
+      ? ` (${results.length} fresh, ${stale.length} stale, ${skipped.length} skipped)`
+      : "";
+
   console.log(
-    `\n[prerender] wrote ${results.length} pages + sitemap.xml in ${seconds}s`
+    `\n[prerender] wrote ${results.length + stale.length} pages + ` +
+      `sitemap.xml in ${seconds}s${breakdown}`
   );
 }
 

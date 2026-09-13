@@ -23,6 +23,37 @@ import {
 
 const ANSWERS_PER_PAGE = 15;
 
+const FETCH_RETRY_DELAYS = [500, 1500];
+
+// PostgREST's "0 rows where exactly 1 was required". maybeSingle() reports an
+// absent row as a plain success today, but .single() reports it this way, so
+// treating the code as absence keeps the split correct if that ever changes.
+const MISSING_ROW_CODE = "PGRST116";
+
+// Absence and failure are different outcomes and must render differently.
+// With maybeSingle() a missing row IS a success — { data: null, error: null,
+// status: 200 } — while every transport or server failure sets `error`
+// (a gateway 504, a 500, a 401, and an unreachable host, which reports
+// status 0 and an empty code — so neither status nor code can carry this
+// decision). Collapsing the two is what rendered a live question as "not
+// found" during a Supabase 504 and stalled the prerender on 2026-09-13.
+const isMissingRow = (error, data) =>
+  (!error && !data) || error?.code === MISSING_ROW_CODE;
+
+// Retries transport and server failures only. An absent row is a success, so
+// a genuinely dead link resolves on the first attempt and never loops.
+async function fetchWithRetry(run) {
+  let result = await run();
+
+  for (const delay of FETCH_RETRY_DELAYS) {
+    if (!result.error || result.error.code === MISSING_ROW_CODE) return result;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    result = await run();
+  }
+
+  return result;
+}
+
 function QuestionDetail() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,11 +69,13 @@ function QuestionDetail() {
   } = useDisplayName();
 
   const [question, setQuestion] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  // "loading" | "ok" | "missing" | "error" — two booleans cannot express the
+  // three outcomes, which is how a failed fetch came to render as not-found.
+  const [questionStatus, setQuestionStatus] = useState("loading");
+  const [questionRefreshKey, setQuestionRefreshKey] = useState(0);
 
   const [answers, setAnswers] = useState([]);
-  const [answersLoading, setAnswersLoading] = useState(true);
+  const [answersStatus, setAnswersStatus] = useState("loading");
   const [answersRefreshKey, setAnswersRefreshKey] = useState(0);
   const [answerBody, setAnswerBody] = useState("");
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
@@ -322,16 +355,24 @@ function QuestionDetail() {
 
   useEffect(() => {
     const loadQuestion = async () => {
-      const { data, error } = await supabase
-        .from("questions")
-        .select("id, title, description, created_at, user_id, tags, slug")
-        .eq("slug", slug)
-        .maybeSingle();
+      const { data, error } = await fetchWithRetry(() =>
+        supabase
+          .from("questions")
+          .select("id, title, description, created_at, user_id, tags, slug")
+          .eq("slug", slug)
+          .maybeSingle()
+      );
 
-      if (error || !data) {
-        if (error) console.error("Error loading question:", error);
-        setNotFound(true);
-        setLoading(false);
+      // Absence first: it is the one case that also matches `error` when the
+      // row is reported as PGRST116.
+      if (isMissingRow(error, data)) {
+        setQuestionStatus("missing");
+        return;
+      }
+
+      if (error) {
+        console.error("Error loading question:", error);
+        setQuestionStatus("error");
         return;
       }
 
@@ -342,11 +383,11 @@ function QuestionDetail() {
         author_name: authorNames[data.user_id] || null,
       });
 
-      setLoading(false);
+      setQuestionStatus("ok");
     };
 
     loadQuestion();
-  }, [slug]);
+  }, [slug, questionRefreshKey]);
 
   // If we arrived here via the Edit icon on a question card, jump
   // straight into edit mode once the question has loaded.
@@ -363,15 +404,20 @@ function QuestionDetail() {
     if (!question?.id) return;
 
     const loadAnswers = async () => {
-      const { data, error } = await supabase
-        .from("answers")
-        .select("id, body, created_at, user_id, edited_at")
-        .eq("question_id", question.id)
-        .order("created_at", { ascending: false });
+      const { data, error } = await fetchWithRetry(() =>
+        supabase
+          .from("answers")
+          .select("id, body, created_at, user_id, edited_at")
+          .eq("question_id", question.id)
+          .order("created_at", { ascending: false })
+      );
 
+      // An empty list is a real answer to the question; a failed request is
+      // not. Falling through here left answers at [] and rendered a question
+      // with answers as "0 Answers".
       if (error) {
         console.error("Error loading answers:", error);
-        setAnswersLoading(false);
+        setAnswersStatus("error");
         return;
       }
 
@@ -386,7 +432,7 @@ function QuestionDetail() {
         }))
       );
 
-      setAnswersLoading(false);
+      setAnswersStatus("ok");
     };
 
     loadAnswers();
@@ -492,7 +538,7 @@ function QuestionDetail() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
 
-      {question && !notFound ? (
+      {questionStatus === "ok" && question ? (
         <Seo
           title={`${question.title} | iWorkAtGCC`}
           description={truncateDescription(question.description)}
@@ -513,10 +559,17 @@ function QuestionDetail() {
             ]),
           ]}
         />
-      ) : notFound ? (
+      ) : questionStatus === "missing" ? (
         <Seo
           title="Question Not Found | iWorkAtGCC"
           description="This question may have been removed."
+          path={`/questions/${slug}`}
+          noindex
+        />
+      ) : questionStatus === "error" ? (
+        <Seo
+          title="Question Unavailable | iWorkAtGCC"
+          description="This question could not be loaded right now."
           path={`/questions/${slug}`}
           noindex
         />
@@ -544,12 +597,39 @@ function QuestionDetail() {
 
         <div className="mt-4">
 
-          {loading ? (
+          {questionStatus === "loading" ? (
             <LoadingCard
               title="Loading question..."
               subtitle="Fetching this question from the community."
             />
-          ) : notFound ? (
+          ) : questionStatus === "error" ? (
+            <div
+              data-fetch-error="question"
+              className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm"
+            >
+
+              <div className="text-5xl mb-4">⚠️</div>
+
+              <h2 className="text-2xl font-bold text-slate-800">
+                Could not load this question
+              </h2>
+
+              <p className="mt-3 text-slate-500">
+                The connection failed. This question has not been removed.
+              </p>
+
+              <button
+                onClick={() => {
+                  setQuestionStatus("loading");
+                  setQuestionRefreshKey((key) => key + 1);
+                }}
+                className="mt-6 rounded-xl bg-blue-600 px-6 py-3 text-white transition hover:bg-blue-700"
+              >
+                Try Again
+              </button>
+
+            </div>
+          ) : questionStatus === "missing" ? (
             <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
 
               <div className="text-5xl mb-4">🔍</div>
@@ -901,18 +981,43 @@ function QuestionDetail() {
               <div ref={answersSectionRef} className="mt-8">
 
                 <h2 className="text-lg font-bold text-slate-900 sm:text-xl">
-                  {answers.length === 1
-                    ? "1 Answer"
-                    : `${answers.length} Answers`}
+                  {answersStatus === "error"
+                    ? "Answers"
+                    : answers.length === 1
+                      ? "1 Answer"
+                      : `${answers.length} Answers`}
                 </h2>
 
                 <div className="mt-4 space-y-4">
 
-                  {answersLoading ? (
+                  {answersStatus === "loading" ? (
                     <LoadingCard
                       title="Loading answers..."
                       subtitle="Fetching answers from the community."
                     />
+                  ) : answersStatus === "error" ? (
+                    <div
+                      data-fetch-error="answers"
+                      className="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm"
+                    >
+
+                      <div className="text-4xl mb-3">⚠️</div>
+
+                      <p className="text-slate-600">
+                        Could not load answers. They have not been deleted.
+                      </p>
+
+                      <button
+                        onClick={() => {
+                          setAnswersStatus("loading");
+                          setAnswersRefreshKey((key) => key + 1);
+                        }}
+                        className="mt-4 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                      >
+                        Try Again
+                      </button>
+
+                    </div>
                   ) : answers.length > 0 ? (
                     paginatedAnswers.map((answer) => (
                       <div
