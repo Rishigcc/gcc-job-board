@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -22,6 +22,7 @@ import SavedQuestions from "./Pages/SavedQuestions.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
 import { supabase } from "./lib/supabase";
 import { setPostLoginRedirect } from "./lib/postLoginRedirect";
+import { trackEvent } from "./analytics";
 
 
 function ScrollToTop() {
@@ -30,6 +31,38 @@ function ScrollToTop() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
+
+  return null;
+}
+
+
+// The gtag('config') call in index.html sends a page_view on document load,
+// and that is the only one it ever sends. Router navigations swap the view
+// without a document load, so without this every internal route change --
+// including the / -> /welcome redirect for signed-in users -- is invisible
+// to GA4.
+function PageViewTracker() {
+  const { pathname, search } = useLocation();
+
+  // Seeded with the landing path so the first run is a no-op: that pageview
+  // was already sent from index.html. Holding the path rather than a "have I
+  // fired yet" flag also keeps StrictMode's double-invoked mount effect from
+  // sending a duplicate in dev, since both passes see an unchanged path.
+  const lastPath = useRef(pathname + search);
+
+  useEffect(() => {
+    const current = pathname + search;
+
+    if (lastPath.current === current) return;
+
+    lastPath.current = current;
+
+    trackEvent("page_view", {
+      page_path: current,
+      page_location: window.location.href,
+      page_title: document.title,
+    });
+  }, [pathname, search]);
 
   return null;
 }
@@ -218,6 +251,7 @@ createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
       <ScrollToTop />
+      <PageViewTracker />
       <ActivityTracker />
       <AppRoutes />
     </BrowserRouter>
