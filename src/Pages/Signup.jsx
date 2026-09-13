@@ -2,9 +2,43 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { consumePostLoginRedirect } from "../lib/postLoginRedirect";
+import { trackEvent } from "../analytics";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
 import Seo from "../components/Seo";
+
+const SIGN_IN_PENDING_KEY = "ga_sign_in_pending";
+
+// Supabase stamps created_at and last_sign_in_at from the same server clock
+// inside the same transaction, so a first-ever sign-in lands them
+// milliseconds apart while a returning user's differ by however long since
+// they joined. No client clock is involved, so a generous window is enough.
+const NEW_USER_WINDOW_MS = 10_000;
+
+// true = first-ever sign-in, false = returning, null = undeterminable.
+function isFirstSignIn(user) {
+  if (!user?.created_at || !user?.last_sign_in_at) return null;
+
+  const created = new Date(user.created_at).getTime();
+  const lastSignIn = new Date(user.last_sign_in_at).getTime();
+
+  if (Number.isNaN(created) || Number.isNaN(lastSignIn)) return null;
+
+  return Math.abs(lastSignIn - created) < NEW_USER_WINDOW_MS;
+}
+
+// Reading clears the flag, so the completion event fires once per sign-in
+// even if Supabase emits more than one session-bearing event.
+function consumeSignInPending() {
+  try {
+    if (sessionStorage.getItem(SIGN_IN_PENDING_KEY) === null) return false;
+    sessionStorage.removeItem(SIGN_IN_PENDING_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 
 function Signup() {
   const navigate = useNavigate();
@@ -51,11 +85,27 @@ useEffect(() => {
 
   const {
     data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
+  } = supabase.auth.onAuthStateChange((event, session) => {
     setUser(session?.user ?? null);
 
     if (session?.user) {
       console.log("Authenticated user:", session.user);
+    }
+
+    // Only a sign-in this tab started counts as a completion. The post-OAuth
+    // session arrives as SIGNED_IN or INITIAL_SESSION depending on whether
+    // the URL tokens are processed before this listener registers, so both
+    // are accepted and the pending flag is what decides.
+    if (
+      (event === "SIGNED_IN" || event === "INITIAL_SESSION") &&
+      session?.user &&
+      consumeSignInPending()
+    ) {
+      const firstTime = isFirstSignIn(session.user);
+
+      trackEvent(firstTime === true ? "sign_up" : "login", {
+        method: "google",
+      });
     }
   });
 
@@ -65,6 +115,21 @@ useEffect(() => {
 }, []);
 
   const handleGoogleSignIn = async () => {
+    // Fired before the OAuth call because that call navigates away to
+    // Google; gtag transports via sendBeacon, which survives the unload.
+    trackEvent("login_start", { method: "google" });
+
+    // Marks this tab as having deliberately started a sign-in. sessionStorage
+    // survives the round trip through Google, and the completion handler
+    // reads it destructively, so a SIGNED_IN re-emitted on tab focus or a
+    // remount while already signed in cannot look like a fresh sign-in.
+    try {
+      sessionStorage.setItem(SIGN_IN_PENDING_KEY, "1");
+    } catch {
+      // Storage unavailable (private browsing). The completion event is
+      // skipped rather than risking a false one; login_start still counts.
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
