@@ -19,6 +19,8 @@ import QuestionDetail from "./Pages/QuestionDetail.jsx";
 import Profile from "./Pages/Profile.jsx";
 import AskedQuestions from "./Pages/AskedQuestions.jsx";
 import SavedQuestions from "./Pages/SavedQuestions.jsx";
+import Privacy from "./Pages/Privacy.jsx";
+import RecruiterTerms from "./Pages/RecruiterTerms.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
 import { supabase } from "./lib/supabase";
 import { setPostLoginRedirect } from "./lib/postLoginRedirect";
@@ -185,6 +187,10 @@ function AppRoutes() {
 
       {/* Public question detail */}
       <Route path="/questions/:slug" element={<QuestionDetail />} />
+
+      {/* Policy pages — public, no auth */}
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/recruiter-terms" element={<RecruiterTerms />} />
 
       {/* Protected Welcome page */}
       <Route

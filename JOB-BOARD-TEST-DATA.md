@@ -22,7 +22,11 @@ which triggers the **existing** community welcome email to that address. That
 is the welcome email that already ships today, not a new one, and it lands in
 your own inbox.
 
-## Stage 2 onwards
+## Stage 2 — policy pages
+
+No database or test data created. Nothing to clean up.
+
+## Stage 3 onwards
 
 (Appended at the end of each stage.)
 
@@ -30,9 +34,11 @@ your own inbox.
 
 | # | Item | Raised in | Due |
 |---|---|---|---|
-| 1 | Fix `private.handle_new_recruiter()`: `on conflict do nothing` leaves an existing `candidate` row in place, so a candidate who becomes a recruiter would never get the recruiter role. Should upgrade candidate to recruiter, never demote an admin. | Stage 1 review | Stage 3 migration |
-| 2 | Decide the test recruiter email address. The test Gmail account **cannot** be used — gmail.com is blocked by design. Needs a mailbox on a non-free domain. | Stage 1 review | Before stage 3 |
-| 3 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 1 | Change `LAST_UPDATED` in `src/Pages/Privacy.jsx` and `src/Pages/RecruiterTerms.jsx` to the real launch date | Stage 2 | Before merge |
+| 2 | Verify in the Microsoft Clarity dashboard that form-input masking is ON. The privacy policy states that text typed into forms is masked. | Stage 2 | Stage 6 |
+| 3 | Fix `private.handle_new_recruiter()`: `on conflict do nothing` leaves an existing `candidate` row in place, so a candidate who becomes a recruiter would never get the recruiter role. Should upgrade candidate to recruiter, never demote an admin. | Stage 1 review | Stage 3 migration |
+| 4 | Decide the test recruiter email address. The test Gmail account **cannot** be used — gmail.com is blocked by design. Needs a mailbox on a non-free domain. | Stage 1 review | Before stage 3 |
+| 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
 
 ## Project-wide settings changed (NOT undone by the rollback scripts)
 

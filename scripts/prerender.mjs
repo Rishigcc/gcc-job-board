@@ -115,6 +115,12 @@ function buildRoutes(questions) {
     { path: "/", kind: "home", out: "index.html" },
     { path: "/jobs", kind: "jobs", out: "jobs/index.html" },
     { path: "/questions", kind: "questions", out: "questions/index.html" },
+    { path: "/privacy", kind: "static", out: "privacy/index.html" },
+    {
+      path: "/recruiter-terms",
+      kind: "static",
+      out: "recruiter-terms/index.html",
+    },
     ...questions.map((q) => ({
       path: `/questions/${q.slug}`,
       kind: "question",
@@ -178,6 +184,21 @@ async function waitForContent(page, route) {
   if (route.kind === "questions") {
     await page.waitForFunction(
       () => document.querySelectorAll('a[href^="/questions/"]').length > 0,
+      undefined,
+      options
+    );
+    return;
+  }
+
+  if (route.kind === "static") {
+    // These pages fetch nothing, so the only failure mode worth waiting for
+    // is a render that never produced its heading. The default predicate
+    // below would pass on a blank page.
+    await page.waitForFunction(
+      () => {
+        const h1 = document.querySelector("h1");
+        return !!h1 && h1.textContent.trim().length > 0;
+      },
       undefined,
       options
     );
@@ -291,13 +312,22 @@ function escapeXml(value) {
     .replace(/'/g, "&apos;");
 }
 
-function buildSitemap(questions) {
+const STATIC_SITEMAP_PATHS = [
+  "/",
+  "/jobs",
+  "/questions",
+  "/privacy",
+  "/recruiter-terms",
+];
+
+function buildSitemap(questions, skippedPaths = new Set()) {
   const today = new Date().toISOString().slice(0, 10);
 
   const entries = [
-    { loc: `${SITE_URL}/`, lastmod: today },
-    { loc: `${SITE_URL}/jobs`, lastmod: today },
-    { loc: `${SITE_URL}/questions`, lastmod: today },
+    ...STATIC_SITEMAP_PATHS.filter((p) => !skippedPaths.has(p)).map((p) => ({
+      loc: `${SITE_URL}${p}`,
+      lastmod: today,
+    })),
     ...questions.map((q) => ({
       loc: `${SITE_URL}/questions/${q.slug}`,
       lastmod: new Date(q.createdAt).toISOString().slice(0, 10),
@@ -442,12 +472,14 @@ async function main() {
   // A skipped route serves the shell, so advertising it would point crawlers
   // at a contentless 200. Carried-forward routes keep their entry: they have
   // a real page, just an older one.
-  const skippedSlugs = new Set(skipped.map(({ route }) => route.slug));
-  const publishedQuestions = questions.filter((q) => !skippedSlugs.has(q.slug));
+  const skippedPaths = new Set(skipped.map(({ route }) => route.path));
+  const publishedQuestions = questions.filter(
+    (q) => !skippedPaths.has(`/questions/${q.slug}`)
+  );
 
   await writeFile(
     path.join(DIST, "sitemap.xml"),
-    buildSitemap(publishedQuestions),
+    buildSitemap(publishedQuestions, skippedPaths),
     "utf8"
   );
 

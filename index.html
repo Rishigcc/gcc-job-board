@@ -16,13 +16,17 @@
     <!-- Google Analytics is injected at build time by gaPlugin in
          vite.config.js, so `npm run dev` loads no gtag.js at all. -->
 
-    <!-- Microsoft Clarity -->
+    <!-- Microsoft Clarity. Loaded only on the live host, so preview
+         deployments and local development do not record test sessions
+         into the production project. -->
     <script type="text/javascript">
-      (function(c,l,a,r,i,t,y){
-          c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-          t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-          y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-      })(window, document, "clarity", "script", "xyoluxn6l8");
+      if (location.hostname === "www.iworkatgcc.com") {
+        (function(c,l,a,r,i,t,y){
+            c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+            t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+            y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+        })(window, document, "clarity", "script", "xyoluxn6l8");
+      }
     </script>
 
   </head>

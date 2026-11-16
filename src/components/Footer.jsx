@@ -42,7 +42,7 @@ function Footer() {
 
       <div className="max-w-6xl mx-auto px-6 py-5">
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-5">
 
           <div>
             <h3 className="text-xl font-bold text-slate-900">
@@ -100,6 +100,31 @@ function Footer() {
                   className="text-slate-600 transition hover:text-blue-600"
                 >
                   Ask, Answer &amp; Connect
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
+              Legal
+            </h4>
+
+            <ul className="mt-2 space-y-1.5 text-sm">
+              <li>
+                <Link
+                  to="/privacy"
+                  className="text-slate-600 transition hover:text-blue-600"
+                >
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/recruiter-terms"
+                  className="text-slate-600 transition hover:text-blue-600"
+                >
+                  Recruiter Terms
                 </Link>
               </li>
             </ul>
