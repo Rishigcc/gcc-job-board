@@ -26,6 +26,7 @@ import RecruiterHome from "./Pages/RecruiterHome.jsx";
 import RecruiterComingSoon from "./Pages/RecruiterComingSoon.jsx";
 import RecruiterRoute from "./components/RecruiterRoute.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
+import { isRecruiterUser } from "./lib/accountType";
 import { supabase } from "./lib/supabase";
 import { setPostLoginRedirect } from "./lib/postLoginRedirect";
 import { trackEvent } from "./analytics";
@@ -171,8 +172,7 @@ function HomeRoute() {
   // that row is what fires the community welcome email -- so a recruiter
   // who simply visited the site root would receive it.
   if (session) {
-    const isRecruiter =
-      session.user?.user_metadata?.account_type === "recruiter";
+    const isRecruiter = isRecruiterUser(session.user);
 
     return <Navigate to={isRecruiter ? "/recruiter" : "/welcome"} replace />;
   }

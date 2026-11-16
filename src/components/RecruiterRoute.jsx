@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { isRecruiterUser } from "../lib/accountType";
 import { RecruiterContext } from "../lib/useRecruiter";
 import SiteHeader from "./SiteHeader";
 import Footer from "./Footer";
@@ -67,7 +68,7 @@ function RecruiterRoute({ children }) {
       // No row yet. Build it from what the signup form stashed in metadata.
       const meta = user.user_metadata || {};
 
-      if (meta.account_type !== "recruiter") {
+      if (!isRecruiterUser(user)) {
         // A community member who wandered in. Not an error — one person is
         // allowed to be both a candidate and a recruiter.
         setState({ status: "not-a-recruiter" });

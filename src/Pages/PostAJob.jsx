@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { isRecruiterUser } from "../lib/accountType";
 import {
   isBlockedEmailDomain,
   BLOCKED_DOMAIN_MESSAGE,
@@ -201,8 +202,7 @@ function PostAJob() {
     setResendState(error ? "failed" : "sent");
   };
 
-  const alreadyRecruiter =
-    session && session.user?.user_metadata?.account_type === "recruiter";
+  const alreadyRecruiter = Boolean(session) && isRecruiterUser(session.user);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">

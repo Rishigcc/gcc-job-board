@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { setPostLoginRedirect } from "../lib/postLoginRedirect";
+import { isRecruiterUser } from "../lib/accountType";
 import NotificationsBell from "./NotificationsBell";
 
 function SiteHeader() {
@@ -39,12 +40,18 @@ function SiteHeader() {
     navigate("/", { replace: true });
   };
 
+  // Recruiter accounts get a deliberately narrow header: the community
+  // areas are hidden, because a recruiter asking or answering is prompted
+  // for a display name, and saving one creates a community `profiles` row.
+  // My Dashboard and Profile stay (My Dashboard redirects to /recruiter).
+  const isRecruiter = session ? isRecruiterUser(session.user) : false;
+
   const navItems = [
     {
       key: "jobs",
       label: "Explore GCC Jobs",
       to: "/jobs",
-      show: true,
+      show: !isRecruiter,
       icon: (
         <>
           <rect x="3" y="7" width="18" height="13" rx="2" />
@@ -57,7 +64,7 @@ function SiteHeader() {
       key: "questions",
       label: "Ask, Answer & Connect",
       to: "/questions",
-      show: true,
+      show: !isRecruiter,
       icon: (
         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
       ),

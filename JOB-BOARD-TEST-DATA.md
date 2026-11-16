@@ -11,9 +11,22 @@ Status key: `LIVE` = still present, `CLEANED` = removed.
 | What | Where | How to remove | Status |
 |---|---|---|---|
 | Your admin row | `public.user_roles` | Delete the row whose `user_id` is yours | LIVE |
-| Decoy `candidate` role row, pointed at a random real member | `public.user_roles` | `delete from public.user_roles where role = 'candidate';` | **DELETE NOW** — replaced by the row below |
-| `candidate` role row for your 2nd Google account | `public.user_roles` | `delete from public.user_roles where user_id = '<2nd account uid>';` | LIVE — remove at the end of stage 1 |
+| Decoy `candidate` role row, pointed at a random real member | `public.user_roles` | n/a | CLEANED — deleted during stage 1 |
+| `candidate` role row for your 2nd Google account | `public.user_roles` | `delete from public.user_roles where user_id = '<2nd account uid>';` | **LIVE — kept deliberately.** Rishi decided in stage 3 testing to keep it: it is the candidate persona for stages 6-8. Delete before merge. |
 | Your 2nd Google test account | `auth.users` + `public.profiles` | Keep it — needed again for candidate testing in stages 6-8. Delete from Authentication → Users before launch. | LIVE — keep until stage 8 |
+
+**Correction (stage 3 testing).** An earlier version of this file said the
+`candidate` role row would be removed "at the end of stage 1", and the stage 3
+checklist wrongly told Rishi to expect **two** rows in `user_roles`. The row was
+never deleted and is useful, so the correct expectation from here on is:
+
+| `user_roles` rows | Who | Status |
+|---|---|---|
+| `admin` | Rishi | LIVE |
+| `candidate` | 2nd Google test account | LIVE — kept on purpose |
+| `recruiter` × 2 | `community@` and `feedback@iworkatgcc.com` | LIVE |
+
+So **four** rows after stage 3, not two.
 
 The four job board tables are otherwise empty.
 
@@ -34,8 +47,8 @@ applicants.
 
 | What | Where | How to remove | Status |
 |---|---|---|---|
-| Test recruiter A — `community@iworkatgcc.com` | `auth.users`, `public.recruiter_profiles`, `public.user_roles` | Authentication → Users → delete. Cascades to both tables. | PLANNED |
-| Test recruiter B — `feedback@iworkatgcc.com` | same | same | PLANNED |
+| Test recruiter A — `community@iworkatgcc.com` | `auth.users`, `public.recruiter_profiles`, `public.user_roles` | Authentication → Users → delete. Cascades to both tables. | LIVE — created and confirmed 16 Nov 2026 |
+| Test recruiter B — `feedback@iworkatgcc.com` | same | same | LIVE — created and confirmed 16 Nov 2026 |
 | Any companies, jobs and applications these two create | `public.companies`, `public.jobs`, `public.applications` | Delete the jobs first (applications cascade), then any company rows they created | PLANNED |
 
 **Both accounts, and everything they create, get deleted before the merge
@@ -76,6 +89,9 @@ Known wrinkles with these two addresses, both flagged to Rishi:
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
 | 6 | **10-live-roles cap: the error message.** The rule itself is already enforced by the `jobs` insert policy from migration 001, and recruiter terms section 5 states it. Two of the three requirements are already met: only `status = 'live'` jobs count (expired/closed/hidden do not), and the cap lifts the instant `is_verified` is flipped, because the policy is evaluated per insert. **Still to build:** an RLS rejection returns the opaque `new row violates row-level security policy for table "jobs"`. Needs a `BEFORE INSERT` trigger on `jobs` raising a readable message — "You can post up to 10 live roles until your company is verified. Reply to our signup email with your website and GSTIN and we will verify you within two working days." The policy stays as the unbypassable backstop; the trigger exists only to produce the message. | Rishi, stage 2 sign-off | Stage 4 migration |
+| 9 | **`auth.signUp` is not domain-restricted.** The free-provider blocklist lives in the client form *and* in the `handle_new_recruiter` trigger — but the trigger only fires when the `recruiter_profiles` row is inserted, i.e. after email confirmation. So a scripted call to `/auth/v1/signup` can still create an **unconfirmed** `auth.users` row on any domain, including gmail.com, and burn one Brevo send. Such an account can never become a recruiter (the trigger refuses, and they see the blocked-domain error at `/recruiter`), so it is junk-row pollution and send-quota abuse, not an access hole. Closing it properly needs a **Before User Created** auth hook. Decide whether that is worth it. | Stage 3 review | Before merge — decision |
+| 10 | **A recruiter can create a community `profiles` row.** `saveDisplayName()` in `src/lib/useDisplayName.js` does an **upsert**, and it is reachable from three places a recruiter could still type a URL into: `/profile` (Save display name), `/ask`, and answering on a question page. Hiding the nav items (done in stage 3) removes the signposts but not the capability. **Proven contained for now:** the welcome email has exactly one call site (`Welcome.jsx`), which returns early for recruiters; and the digest skips any profile whose `google_email` is null, which it always is on a row created this way. The structural fix conflicts with the "one person may be both candidate and recruiter" decision, so it needs Rishi's call. | Stage 3 review | Before merge — decision |
+| 11 | **Stale unconfirmed `auth.users` rows.** Supabase automatically links a new OAuth identity to an existing user with the same email address. If an unconfirmed password signup can keep its password through that link, it is a pre-account-takeover path against *future* community members. Test T2 in the stage 3 retest settles it. If it is a hole, the mitigation is a periodic delete of unconfirmed users older than a few hours, folded into the existing `/api/rebuild` cron (no cron slot is free on the Hobby plan). | Stage 3 review | Pending test T2 |
 
 ## Project-wide settings changed (NOT undone by the rollback scripts)
 

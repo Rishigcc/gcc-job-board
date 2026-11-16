@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { isRecruiterUser } from "../lib/accountType";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
 import TrendingQuestionCard from "../components/TrendingQuestionCard";
@@ -118,7 +119,7 @@ function Welcome() {
 
       // Recruiters have no community profile, and creating one is what fires
       // the community welcome email. Leave before either happens.
-      if (user.user_metadata?.account_type === "recruiter") {
+      if (isRecruiterUser(user)) {
         navigate("/recruiter", { replace: true });
         return;
       }
