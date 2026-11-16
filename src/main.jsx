@@ -21,6 +21,10 @@ import AskedQuestions from "./Pages/AskedQuestions.jsx";
 import SavedQuestions from "./Pages/SavedQuestions.jsx";
 import Privacy from "./Pages/Privacy.jsx";
 import RecruiterTerms from "./Pages/RecruiterTerms.jsx";
+import PostAJob from "./Pages/PostAJob.jsx";
+import RecruiterHome from "./Pages/RecruiterHome.jsx";
+import RecruiterComingSoon from "./Pages/RecruiterComingSoon.jsx";
+import RecruiterRoute from "./components/RecruiterRoute.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
 import { supabase } from "./lib/supabase";
 import { setPostLoginRedirect } from "./lib/postLoginRedirect";
@@ -161,8 +165,16 @@ function HomeRoute() {
 
   // Signed-in users are sent to their dashboard; signed-out users see
   // the public homepage.
+  //
+  // Recruiters go to the recruiter dashboard instead. Sending them to
+  // /welcome would create a community profiles row for them, and creating
+  // that row is what fires the community welcome email -- so a recruiter
+  // who simply visited the site root would receive it.
   if (session) {
-    return <Navigate to="/welcome" replace />;
+    const isRecruiter =
+      session.user?.user_metadata?.account_type === "recruiter";
+
+    return <Navigate to={isRecruiter ? "/recruiter" : "/welcome"} replace />;
   }
 
   return <App />;
@@ -191,6 +203,36 @@ function AppRoutes() {
       {/* Policy pages — public, no auth */}
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/recruiter-terms" element={<RecruiterTerms />} />
+
+      {/* Recruiter sign-up and sign-in — public */}
+      <Route path="/post-a-job" element={<PostAJob />} />
+
+      {/* Recruiter area. RecruiterRoute proves there is a confirmed session
+          and a recruiter_profiles row before any of these render. */}
+      <Route
+        path="/recruiter"
+        element={
+          <RecruiterRoute>
+            <RecruiterHome />
+          </RecruiterRoute>
+        }
+      />
+      <Route
+        path="/recruiter/jobs"
+        element={
+          <RecruiterRoute>
+            <RecruiterComingSoon title="My jobs" />
+          </RecruiterRoute>
+        }
+      />
+      <Route
+        path="/recruiter/jobs/new"
+        element={
+          <RecruiterRoute>
+            <RecruiterComingSoon title="Post a new job" />
+          </RecruiterRoute>
+        }
+      />
 
       {/* Protected Welcome page */}
       <Route

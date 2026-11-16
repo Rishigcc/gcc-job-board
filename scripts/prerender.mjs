@@ -115,6 +115,7 @@ function buildRoutes(questions) {
     { path: "/", kind: "home", out: "index.html" },
     { path: "/jobs", kind: "jobs", out: "jobs/index.html" },
     { path: "/questions", kind: "questions", out: "questions/index.html" },
+    { path: "/post-a-job", kind: "static", out: "post-a-job/index.html" },
     { path: "/privacy", kind: "static", out: "privacy/index.html" },
     {
       path: "/recruiter-terms",
@@ -316,6 +317,7 @@ const STATIC_SITEMAP_PATHS = [
   "/",
   "/jobs",
   "/questions",
+  "/post-a-job",
   "/privacy",
   "/recruiter-terms",
 ];

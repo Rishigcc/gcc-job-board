@@ -34,7 +34,7 @@ applicants.
 
 | What | Where | How to remove | Status |
 |---|---|---|---|
-| Test recruiter A — `jobs@iworkatgcc.com` | `auth.users`, `public.recruiter_profiles`, `public.user_roles` | Authentication → Users → delete. Cascades to both tables. | PLANNED |
+| Test recruiter A — `community@iworkatgcc.com` | `auth.users`, `public.recruiter_profiles`, `public.user_roles` | Authentication → Users → delete. Cascades to both tables. | PLANNED |
 | Test recruiter B — `feedback@iworkatgcc.com` | same | same | PLANNED |
 | Any companies, jobs and applications these two create | `public.companies`, `public.jobs`, `public.applications` | Delete the jobs first (applications cascade), then any company rows they created | PLANNED |
 
@@ -46,13 +46,16 @@ Known wrinkles with these two addresses, both flagged to Rishi:
 - Both are on `iworkatgcc.com`, so `recruiter_profiles.email_domain` is
   identical for both. That does not weaken the isolation test — a job is
   owned by `posted_by` (a user id), never by domain.
-- `jobs@` is also the reply-to on the recruiter signup email, so that
-  inbox will hold both real recruiter replies and this account's own test
-  confirmation. Filter by the subject line.
-- Brevo will be sending to `iworkatgcc.com` **from** `iworkatgcc.com` via
-  an external relay. Self-domain mail through a third-party relay is the
-  classic case for spam quarantine. Treat the **Brevo transactional log**
-  as ground truth for "did we send it", not the inbox.
+- `jobs@` is deliberately NOT a test account: it is the sender and
+  reply-to on the recruiter signup email, and self-addressed mail through
+  Brevo is a delivery problem not worth debugging.
+- Mail still goes from `iworkatgcc.com` to `iworkatgcc.com` via an
+  external relay, which is the classic shape for spam quarantine. Treat
+  the **Brevo transactional log** as ground truth for "did we send it",
+  not the inbox.
+- `community@` is the sender on the existing welcome and digest emails.
+  Using it as a recruiter test account is fine — recruiters get no
+  `profiles` row, so neither of those emails can reach it.
 - Do **not** sign in to the community side with either address via Google.
   If `iworkatgcc.com` runs on Google Workspace that would create a second
   identity on the same email and muddy every test.
@@ -67,13 +70,19 @@ Known wrinkles with these two addresses, both flagged to Rishi:
 |---|---|---|---|
 | 1 | Change `LAST_UPDATED` in `src/Pages/Privacy.jsx` and `src/Pages/RecruiterTerms.jsx` to the real launch date | Stage 2 | Before merge |
 | 2 | Verify in the Microsoft Clarity dashboard that form-input masking is ON. The privacy policy states that text typed into forms is masked. | Stage 2 | Stage 6 |
-| 3 | Fix `private.handle_new_recruiter()`: `on conflict do nothing` leaves an existing `candidate` row in place, so a candidate who becomes a recruiter would never get the recruiter role. Should upgrade candidate to recruiter, never demote an admin. | Stage 1 review | Stage 3 migration |
-| 4 | Decide the test recruiter email address. The test Gmail account **cannot** be used — gmail.com is blocked by design. Needs a mailbox on a non-free domain. | Stage 1 review | Before stage 3 |
+| 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
+| 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
+| 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
 | 6 | **10-live-roles cap: the error message.** The rule itself is already enforced by the `jobs` insert policy from migration 001, and recruiter terms section 5 states it. Two of the three requirements are already met: only `status = 'live'` jobs count (expired/closed/hidden do not), and the cap lifts the instant `is_verified` is flipped, because the policy is evaluated per insert. **Still to build:** an RLS rejection returns the opaque `new row violates row-level security policy for table "jobs"`. Needs a `BEFORE INSERT` trigger on `jobs` raising a readable message — "You can post up to 10 live roles until your company is verified. Reply to our signup email with your website and GSTIN and we will verify you within two working days." The policy stays as the unbypassable backstop; the trigger exists only to produce the message. | Rishi, stage 2 sign-off | Stage 4 migration |
 
 ## Project-wide settings changed (NOT undone by the rollback scripts)
 
 | Setting | Changed in stage | Previous value | Reverted? |
 |---|---|---|---|
-| _(none yet)_ | | | |
+| **Site URL** → `https://www.iworkatgcc.com` | Stage 3 setup | `http://localhost:5173` | No — and should stay changed. The old value was unused by any code path (the one `signInWithOAuth` call passes `redirectTo` explicitly), but it was the fallback for every auth email. |
+| **Redirect URLs** — added 2 preview wildcards | Stage 3 setup | `http://localhost:5173/**` only | No — keep. Harmless after launch; remove the preview wildcards then if you want to tidy up. |
+| **Auth SMTP** → Brevo, sender `jobs@iworkatgcc.com`, port 587 | Stage 3 setup | Supabase default sender | No — keep. Nothing used it before: all existing identities are Google OAuth and never trigger a Supabase auth email. |
+| **Email provider + Confirm email** | — | Already enabled before this project | n/a |
+| **Confirm signup email template** | Stage 3 | Supabase default copy | No — keep. Draft is in `supabase/email-templates/confirm-recruiter-signup.html`. Note this template is project-wide and would also reach any candidate who ever signs up with a password. |

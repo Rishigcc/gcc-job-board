@@ -116,6 +116,13 @@ function Welcome() {
         return;
       }
 
+      // Recruiters have no community profile, and creating one is what fires
+      // the community welcome email. Leave before either happens.
+      if (user.user_metadata?.account_type === "recruiter") {
+        navigate("/recruiter", { replace: true });
+        return;
+      }
+
       setUserId(user.id);
       setUserEmail(user.email || "");
 
@@ -207,7 +214,8 @@ function Welcome() {
     };
 
     syncGoogleProfile();
-  }, []);
+    // navigate is stable for the life of the router, so this still runs once.
+  }, [navigate]);
 
   // --------------------------------------------------
   // Community journey — real checks against existing data.
