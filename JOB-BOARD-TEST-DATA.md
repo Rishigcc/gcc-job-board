@@ -26,7 +26,38 @@ your own inbox.
 
 No database or test data created. Nothing to clean up.
 
-## Stage 3 onwards
+## Stage 3 — recruiter accounts
+
+Two test recruiter accounts, both mailboxes Rishi owns and can read. Two
+rather than one so we can prove recruiter A cannot read recruiter B's
+applicants.
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Test recruiter A — `jobs@iworkatgcc.com` | `auth.users`, `public.recruiter_profiles`, `public.user_roles` | Authentication → Users → delete. Cascades to both tables. | PLANNED |
+| Test recruiter B — `feedback@iworkatgcc.com` | same | same | PLANNED |
+| Any companies, jobs and applications these two create | `public.companies`, `public.jobs`, `public.applications` | Delete the jobs first (applications cascade), then any company rows they created | PLANNED |
+
+**Both accounts, and everything they create, get deleted before the merge
+to `main`.** Nothing these accounts produce is real data.
+
+Known wrinkles with these two addresses, both flagged to Rishi:
+
+- Both are on `iworkatgcc.com`, so `recruiter_profiles.email_domain` is
+  identical for both. That does not weaken the isolation test — a job is
+  owned by `posted_by` (a user id), never by domain.
+- `jobs@` is also the reply-to on the recruiter signup email, so that
+  inbox will hold both real recruiter replies and this account's own test
+  confirmation. Filter by the subject line.
+- Brevo will be sending to `iworkatgcc.com` **from** `iworkatgcc.com` via
+  an external relay. Self-domain mail through a third-party relay is the
+  classic case for spam quarantine. Treat the **Brevo transactional log**
+  as ground truth for "did we send it", not the inbox.
+- Do **not** sign in to the community side with either address via Google.
+  If `iworkatgcc.com` runs on Google Workspace that would create a second
+  identity on the same email and muddy every test.
+
+## Stage 4 onwards
 
 (Appended at the end of each stage.)
 
