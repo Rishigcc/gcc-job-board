@@ -76,7 +76,16 @@ function PageViewTracker() {
 }
 
 
-function ProtectedRoute({ children }) {
+// `blockRecruiters` sends a recruiter to /recruiter BEFORE `children` ever
+// mounts. Welcome.jsx used to do this itself, from inside an async effect,
+// which meant the community home page rendered for a moment first. Nothing
+// in that page reached the database for a recruiter (its one profiles query
+// sits after the guard, and its other two effects bail on a null userId),
+// but rendering it at all was wrong. Deciding here removes the flash.
+//
+// Deliberately opt-in, not applied to every protected route: /profile must
+// stay reachable for recruiters.
+function ProtectedRoute({ children, blockRecruiters = false }) {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
@@ -119,6 +128,10 @@ function ProtectedRoute({ children }) {
   if (!session) {
     setPostLoginRedirect(location.pathname + location.search);
     return <Navigate to="/signup" replace />;
+  }
+
+  if (blockRecruiters && isRecruiterUser(session.user)) {
+    return <Navigate to="/recruiter" replace />;
   }
 
   return children;
@@ -238,7 +251,7 @@ function AppRoutes() {
       <Route
         path="/welcome"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute blockRecruiters>
             <Welcome />
           </ProtectedRoute>
         }

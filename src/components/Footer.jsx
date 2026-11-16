@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { setPostLoginRedirect } from "../lib/postLoginRedirect";
+import { isRecruiterUser } from "../lib/accountType";
 
 function Footer() {
   const navigate = useNavigate();
@@ -37,12 +38,21 @@ function Footer() {
     navigate("/", { replace: true });
   };
 
+  // Same rule as the header: a recruiter account does not get the
+  // community signposts. Dropping two of the five columns would leave an
+  // odd grid, so the column count changes with them.
+  const isRecruiter = session ? isRecruiterUser(session.user) : false;
+
+  const gridClass = isRecruiter
+    ? "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3"
+    : "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-5";
+
   return (
     <footer className="mt-6 border-t border-slate-200 bg-white">
 
       <div className="max-w-6xl mx-auto px-6 py-5">
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-5">
+        <div className={gridClass}>
 
           <div>
             <h3 className="text-xl font-bold text-slate-900">
@@ -62,6 +72,7 @@ function Footer() {
             </a>
           </div>
 
+          {!isRecruiter && (
           <div className="hidden md:block">
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
               Explore
@@ -78,7 +89,9 @@ function Footer() {
               </li>
             </ul>
           </div>
+          )}
 
+          {!isRecruiter && (
           <div className="hidden md:block">
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
               Community
@@ -104,6 +117,7 @@ function Footer() {
               </li>
             </ul>
           </div>
+          )}
 
           <div>
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
