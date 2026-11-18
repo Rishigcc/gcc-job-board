@@ -240,7 +240,7 @@ function JobForm({
         >
           <p className="text-sm text-slate-800">
             <strong>
-              {slotsUsed} of 10 role{slotsUsed === 1 ? "" : "s"} live.
+              {slotsUsed} of 10 roles live.
             </strong>{" "}
             Until your company is verified you can keep 10 live at a time.
             Closing a role, or letting one expire, frees a slot.
@@ -536,33 +536,30 @@ function JobForm({
         </fieldset>
 
         {/* ---------------------------------------------------------------- */}
-        {/* Applications are in-platform only. The "send candidates to your
-            own site" option was removed on Rishi's decision: an external
-            link produced no application, no candidate and no funnel data,
-            which is the entire reason the board exists. An agency that has
-            to route into a client ATS is handled by email, at one to five
-            recruiters.
-
-            jobs.apply_mode and jobs.external_url are deliberately LEFT IN
-            THE SCHEMA, so bringing the option back is a form change and
-            never a migration. insertPayload() pins them to 'in_platform'
-            and null. */}
-        <fieldset className="space-y-3 border-t border-slate-200 pt-6">
-          <legend className="text-base font-bold text-slate-900">
-            How candidates apply
-          </legend>
-
-          <p className="text-sm text-slate-700">
-            Candidates apply here, with a resume, and you see every
-            application against this role in your dashboard. There is no
-            other route — iWorkAtGCC does not send candidates to an external
-            site, so nothing is lost on the way.
-          </p>
-        </fieldset>
-
-        {/* ---------------------------------------------------------------- */}
         <div className="border-t border-slate-200 pt-6">
-          <p className="text-sm text-slate-600">
+          {/* Applications are in-platform only. The "send candidates to your
+              own site" option was removed on Rishi's decision: an external
+              link produced no application, no candidate and no funnel data,
+              which is the entire reason the board exists. An agency that has
+              to route into a client ATS is handled by email.
+
+              This is a statement, not a question, so it is no longer a
+              fieldset with a heading -- but it is not deleted either. A
+              recruiter who came expecting to link to their own ATS needs to
+              be told why there is no such option, and here is where they
+              would look for it.
+
+              jobs.apply_mode and jobs.external_url are deliberately LEFT IN
+              THE SCHEMA, so bringing the choice back is a form change and
+              never a migration. insertPayload() pins them. */}
+          <p className="text-sm text-slate-700">
+            Candidates apply here with a resume, and you see every application
+            in your dashboard. There is no option to send them to your own
+            site — it would mean no application, no candidate and no numbers
+            for you.
+          </p>
+
+          <p className="mt-3 text-sm text-slate-600">
             {mode === "create"
               ? `Nothing is published yet. The next screen shows what you are about to post; the role goes live only when you confirm there, and stays live for ${DAYS_LIVE} days.`
               : "Changes are live as soon as you save. The expiry date does not move when you edit."}
