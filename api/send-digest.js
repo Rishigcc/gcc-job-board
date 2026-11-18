@@ -245,6 +245,30 @@ export default async function handler(req, res) {
       continue;
     }
 
+    // LOAD-BEARING: this is what keeps recruiters out of the digest.
+    //
+    // `google_email` is written only by the Google sign-in flow in
+    // Welcome.jsx. A recruiter signs up with email and password and never
+    // goes through it, so the column stays null for them.
+    //
+    // A recruiter CAN still end up with a profiles row: saveDisplayName() in
+    // src/lib/useDisplayName.js upserts one, and it is reachable from
+    // /profile, /ask and any question page. That is deliberate -- a recruiter
+    // who goes and sets a display name is choosing to join the community.
+    // What is NOT intended is them silently joining the mailing list.
+    //
+    // So: if a future change ever backfills `google_email` from
+    // auth.users.email, or writes it on any path other than Google sign-in,
+    // every recruiter with a profiles row starts receiving this digest. That
+    // would break the project's rule that the job board sends exactly one
+    // email, the recruiter signup confirmation.
+    //
+    // Note a role-based filter would be WRONG here: one person is allowed to
+    // be both a candidate and a recruiter, and that person should get the
+    // digest. The real signal is "did they join through Google", which is
+    // exactly what a non-null google_email means.
+    //
+    // Tracked as item 10 in JOB-BOARD-TEST-DATA.md.
     const email = p.google_email;
     if (!email) {
       skipped.push({ id: p.id, reason: "no_email" });

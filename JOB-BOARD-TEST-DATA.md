@@ -74,6 +74,51 @@ Known wrinkles with these two addresses, both flagged to Rishi:
   If `iworkatgcc.com` runs on Google Workspace that would create a second
   identity on the same email and muddy every test.
 
+### Stage 3 — account-takeover testing (settled 18 Nov 2026)
+
+Enabling the email/password provider meant anyone could POST to
+`/auth/v1/signup` with any address. 2,486 of the accounts on this project are
+Google-only with no password, and several sit on real company domains that
+pass the free-provider blocklist. Two tests, run with
+`scripts/stage3-takeover-check.js` and `.sql`:
+
+**T1 — password signup against an address that already exists as Google-only.
+PASS.** HTTP 200, no session, `identities` length 0, and a *fabricated* user
+id that matches no real row. The real row was untouched: `has_password` false,
+one identity, provider google. No Brevo send. This is Supabase's documented
+enumeration protection, and it means **all existing members are immune**.
+
+**T2 — pre-register an unconfirmed password account, then have the real owner
+sign in with Google. PASS, outcome B.** The merge kept the same user id
+(`2db00631-…`) but Supabase wiped **both** the attacker's password and the
+attacker's `user_metadata`:
+
+| | after T2A (pre-registered) | after the owner's Google sign-in |
+|---|---|---|
+| `confirmed` | false | true |
+| `has_password` | **true** | **false** |
+| `providers` | email | google |
+| `identity_count` | 1 | 1 |
+| `account_type` metadata | recruiter | **null** |
+| `recruiter_name` metadata | "Takeover probe" | **null** |
+
+`signInWithPassword` with the attacker's password then returned 400
+"Invalid login credentials".
+
+This is better than the Supabase docs promise — they only commit to removing
+the unconfirmed *identity*, and say nothing about the password or the
+metadata. Both were cleared. The metadata-poisoning sub-case does not occur,
+so no mitigation is needed and no cleanup cron is required. Item 11 closed.
+
+While unconfirmed, the pre-registered account owned nothing: zero rows in
+`profiles`, `recruiter_profiles` and `user_roles`.
+
+**Note on baselines.** An earlier version of the `.sql` file hardcoded
+`2446 / 2444 / 2 / 0` as the expected counts. That was wrong — this is a live
+site and people join during testing (2,447 at the start of the stage 3
+retest, 2,488 two days later). Always run section 0 on the day and compare
+against that, never against a number written down earlier.
+
 ## Stage 4 onwards
 
 (Appended at the end of each stage.)
@@ -90,10 +135,55 @@ Known wrinkles with these two addresses, both flagged to Rishi:
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
 | 6 | **10-live-roles cap: the error message.** The rule itself is already enforced by the `jobs` insert policy from migration 001, and recruiter terms section 5 states it. Two of the three requirements are already met: only `status = 'live'` jobs count (expired/closed/hidden do not), and the cap lifts the instant `is_verified` is flipped, because the policy is evaluated per insert. **Still to build:** an RLS rejection returns the opaque `new row violates row-level security policy for table "jobs"`. Needs a `BEFORE INSERT` trigger on `jobs` raising a readable message — "You can post up to 10 live roles until your company is verified. Reply to our signup email with your website and GSTIN and we will verify you within two working days." The policy stays as the unbypassable backstop; the trigger exists only to produce the message. | Rishi, stage 2 sign-off | Stage 4 migration |
-| 9 | **`auth.signUp` is not domain-restricted.** The free-provider blocklist lives in the client form *and* in the `handle_new_recruiter` trigger — but the trigger only fires when the `recruiter_profiles` row is inserted, i.e. after email confirmation. So a scripted call to `/auth/v1/signup` can still create an **unconfirmed** `auth.users` row on any domain, including gmail.com, and burn one Brevo send. Such an account can never become a recruiter (the trigger refuses, and they see the blocked-domain error at `/recruiter`), so it is junk-row pollution and send-quota abuse, not an access hole. Closing it properly needs a **Before User Created** auth hook. Decide whether that is worth it. | Stage 3 review | Before merge — decision |
-| 10 | **A recruiter can create a community `profiles` row.** `saveDisplayName()` in `src/lib/useDisplayName.js` does an **upsert**, and it is reachable from three places a recruiter could still type a URL into: `/profile` (Save display name), `/ask`, and answering on a question page. Hiding the nav items (done in stage 3) removes the signposts but not the capability. **Proven contained for now:** the welcome email has exactly one call site (`Welcome.jsx`), which returns early for recruiters; and the digest skips any profile whose `google_email` is null, which it always is on a row created this way. The structural fix conflicts with the "one person may be both candidate and recruiter" decision, so it needs Rishi's call. | Stage 3 review | Before merge — decision |
-| 11 | **Stale unconfirmed `auth.users` rows.** Supabase automatically links a new OAuth identity to an existing user with the same email address. If an unconfirmed password signup can keep its password through that link, it is a pre-account-takeover path against *future* community members. Test T2 in the stage 3 retest settles it. If it is a hole, the mitigation is a periodic delete of unconfirmed users older than a few hours, folded into the existing `/api/rebuild` cron (no cron slot is free on the Hobby plan). | Stage 3 review | Pending test T2 |
+| 9 | ~~**`auth.signUp` is not domain-restricted.**~~ **DEFERRED by Rishi, 18 Nov 2026.** The free-provider blocklist lives in the client form and in the `handle_new_recruiter` trigger, but the trigger only fires when the `recruiter_profiles` row is inserted, so a scripted call to `/auth/v1/signup` can still create an **unconfirmed** `auth.users` row on any domain and burn one Brevo send. Rishi's call: the trigger still stops them becoming a recruiter, so it is a junk account that can do nothing. Not worth a Before User Created auth hook. Revisit only if junk signups or send quota ever become a real problem. | Stage 3 review | Deferred — no action |
+| 10 | **A recruiter can create a community `profiles` row — and that is now intended.** `saveDisplayName()` in `src/lib/useDisplayName.js` upserts one, reachable from `/profile`, `/ask` and any question page. **Rishi's decision, 18 Nov 2026: leave the behaviour as it is.** Someone who deliberately sets a display name is choosing to join the community, which matches the "one person can be both" decision. `/ask` and `/profile` stay reachable for recruiters. **The guard is the invariant below, not a code change.** | Stage 3 review | Decided — see the invariant |
+| 11 | ~~**Stale unconfirmed `auth.users` rows / pre-account-takeover.**~~ **CLOSED 18 Nov 2026 by test T2 — outcome B.** A pre-registered unconfirmed password account was merged into the same user id when the real owner signed in with Google, and Supabase wiped **both** the attacker's password (`has_password` false, `providers` google only) **and** the attacker's `user_metadata`. `signInWithPassword` with the attacker's password returned 400 "Invalid login credentials". No cleanup cron is needed. | Stage 3 review | Closed |
 | 12 | **`user_activity` now skips recruiters.** `ActivityTracker` is mounted at the app root and ran `record_activity()` for every signed-in user, recruiters included — proven by the one row `community@iworkatgcc.com` had accumulated. That table feeds the digest's active-user set and the community stats, so recruiters were inflating both. Guarded in stage 3. The guard keys off `account_type` metadata; if one account ever needs to be both candidate and recruiter, change it to key off the presence of a `profiles` row instead. | Rishi, stage 3 retest | Closed (guard shipped); stray row listed above for cleanup |
+
+## Invariants — things a later stage must not quietly break
+
+These are not to-do items. They are rules that currently hold, that nothing
+enforces mechanically, and that a reasonable-looking future change could
+break without any test failing.
+
+### I1 — `profiles.google_email` must stay null for recruiters
+
+**The rule.** `profiles.google_email` is written by exactly one thing: the
+Google sign-in sync in `src/Pages/Welcome.jsx`. Nothing else may write it.
+
+**What depends on it.** It is the only thing keeping recruiters out of the
+weekly digest. `api/send-digest.js` skips any profile whose `google_email` is
+null (`reason: "no_email"`). A recruiter is allowed to have a `profiles` row
+— see item 10 — so the row's existence cannot be the filter. The null column
+is the filter.
+
+**How it breaks.** Any of these would silently start emailing recruiters:
+
+- backfilling `google_email` from `auth.users.email`
+- setting `google_email` in `saveDisplayName()` or anywhere in the recruiter
+  signup path
+- a migration that adds a `not null` default or copies `email` into it
+- a new "complete your profile" screen that asks for and saves an email
+
+**Why not just filter on role.** One person is allowed to be both a candidate
+and a recruiter, and that person *should* get the digest. The real question is
+"did they join the community through Google", and a non-null `google_email` is
+exactly that. A role-based filter would exclude the dual-role case wrongly.
+
+**How to check it still holds.** Before any stage that touches `profiles`,
+the digest, or recruiter signup:
+
+```sql
+-- Must return 0. Any row here is a recruiter who will receive the digest.
+select count(*)
+  from public.profiles p
+  join public.user_roles r on r.user_id = p.id
+ where r.role = 'recruiter'
+   and p.google_email is not null;
+```
+
+The reasoning is also written at the check itself in `api/send-digest.js`,
+so whoever edits that line sees it.
 
 ## Project-wide settings changed (NOT undone by the rollback scripts)
 
