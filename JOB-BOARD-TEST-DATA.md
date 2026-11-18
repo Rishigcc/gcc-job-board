@@ -127,6 +127,27 @@ site and people join during testing (2,447 at the start of the stage 3
 retest, 2,488 two days later). Always run section 0 on the day and compare
 against that, never against a number written down earlier.
 
+## Stage 4 — posting a job
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Test job postings by the two recruiter accounts | `public.jobs` | `delete from public.jobs where posted_by in (select id from auth.users where email in ('community@iworkatgcc.com','feedback@iworkatgcc.com'));` | PLANNED |
+| Company rows created while testing | `public.companies` | Delete the jobs first, then the company rows. **Companies are shared**, so check nothing else references one before deleting it. | PLANNED |
+| `jobs_cap_guard` trigger + `private.jobs_cap_guard()` | database | `supabase/migrations/004_job_posting_messages_rollback.sql` — but keep it, it is product behaviour, not test scaffolding | LIVE after migration 004 |
+
+Notes for testing:
+
+- **Use obviously fake company names.** New tables are published to the
+  production API the moment they exist, so a test job is readable by anyone
+  holding the public key even though no production page links to it. "Test Co
+  A" is fine; a real GCC's name is not.
+- Reaching the 10-live-roles cap needs **10 live roles on one unverified
+  account**. They can be thin — the only long field is the description, at 50
+  characters minimum.
+- A job cannot be deleted through the UI by design: there is no DELETE grant
+  on `public.jobs` for `authenticated`. Closing is the recruiter's action;
+  deleting is yours, in the SQL editor.
+
 ## Stage 4 onwards
 
 (Appended at the end of each stage.)
@@ -142,7 +163,7 @@ against that, never against a number written down earlier.
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
-| 6 | **10-live-roles cap: the error message.** The rule itself is already enforced by the `jobs` insert policy from migration 001, and recruiter terms section 5 states it. Two of the three requirements are already met: only `status = 'live'` jobs count (expired/closed/hidden do not), and the cap lifts the instant `is_verified` is flipped, because the policy is evaluated per insert. **Still to build:** an RLS rejection returns the opaque `new row violates row-level security policy for table "jobs"`. Needs a `BEFORE INSERT` trigger on `jobs` raising a readable message — "You can post up to 10 live roles until your company is verified. Reply to our signup email with your website and GSTIN and we will verify you within two working days." The policy stays as the unbypassable backstop; the trigger exists only to produce the message. | Rishi, stage 2 sign-off | Stage 4 migration |
+| 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |
 | 9 | ~~**`auth.signUp` is not domain-restricted.**~~ **DEFERRED by Rishi, 18 Nov 2026.** The free-provider blocklist lives in the client form and in the `handle_new_recruiter` trigger, but the trigger only fires when the `recruiter_profiles` row is inserted, so a scripted call to `/auth/v1/signup` can still create an **unconfirmed** `auth.users` row on any domain and burn one Brevo send. Rishi's call: the trigger still stops them becoming a recruiter, so it is a junk account that can do nothing. Not worth a Before User Created auth hook. Revisit only if junk signups or send quota ever become a real problem. | Stage 3 review | Deferred — no action |
 | 10 | **A recruiter can create a community `profiles` row — and that is now intended.** `saveDisplayName()` in `src/lib/useDisplayName.js` upserts one, reachable from `/profile`, `/ask` and any question page. **Rishi's decision, 18 Nov 2026: leave the behaviour as it is.** Someone who deliberately sets a display name is choosing to join the community, which matches the "one person can be both" decision. `/ask` and `/profile` stay reachable for recruiters. **The guard is the invariant below, not a code change.** | Stage 3 review | Decided — see the invariant |
 | 11 | ~~**Stale unconfirmed `auth.users` rows / pre-account-takeover.**~~ **CLOSED 18 Nov 2026 by test T2 — outcome B.** A pre-registered unconfirmed password account was merged into the same user id when the real owner signed in with Google, and Supabase wiped **both** the attacker's password (`has_password` false, `providers` google only) **and** the attacker's `user_metadata`. `signInWithPassword` with the attacker's password returned 400 "Invalid login credentials". No cleanup cron is needed. | Stage 3 review | Closed |

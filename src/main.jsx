@@ -23,7 +23,9 @@ import Privacy from "./Pages/Privacy.jsx";
 import RecruiterTerms from "./Pages/RecruiterTerms.jsx";
 import PostAJob from "./Pages/PostAJob.jsx";
 import RecruiterHome from "./Pages/RecruiterHome.jsx";
-import RecruiterComingSoon from "./Pages/RecruiterComingSoon.jsx";
+import RecruiterJobs from "./Pages/RecruiterJobs.jsx";
+import RecruiterJobNew from "./Pages/RecruiterJobNew.jsx";
+import RecruiterJobEdit from "./Pages/RecruiterJobEdit.jsx";
 import RecruiterRoute from "./components/RecruiterRoute.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
 import { isRecruiterUser } from "./lib/accountType";
@@ -234,7 +236,7 @@ function AppRoutes() {
         path="/recruiter/jobs"
         element={
           <RecruiterRoute>
-            <RecruiterComingSoon title="My jobs" />
+            <RecruiterJobs />
           </RecruiterRoute>
         }
       />
@@ -242,7 +244,15 @@ function AppRoutes() {
         path="/recruiter/jobs/new"
         element={
           <RecruiterRoute>
-            <RecruiterComingSoon title="Post a new job" />
+            <RecruiterJobNew />
+          </RecruiterRoute>
+        }
+      />
+      <Route
+        path="/recruiter/jobs/:id/edit"
+        element={
+          <RecruiterRoute>
+            <RecruiterJobEdit />
           </RecruiterRoute>
         }
       />
