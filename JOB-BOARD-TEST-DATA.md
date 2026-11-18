@@ -41,6 +41,14 @@ No database or test data created. Nothing to clean up.
 
 ## Stage 3 — recruiter accounts
 
+**SIGNED OFF by Rishi, 18 November 2026.** Verified on the branch preview:
+recruiter signup with the free-provider block, the single Brevo confirmation
+email, the amber and green company-verification banners, the community nav
+hidden in both the header and the footer, `/welcome` redirecting with no
+flash, and both account-takeover tests. Commits `9382154`, `8da7cce`,
+`f2ee13e`, `8a8e9b6`.
+
+
 Two test recruiter accounts, both mailboxes Rishi owns and can read. Two
 rather than one so we can prove recruiter A cannot read recruiter B's
 applicants.
