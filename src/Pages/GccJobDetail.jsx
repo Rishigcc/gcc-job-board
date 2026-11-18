@@ -184,8 +184,12 @@ function GccJobDetail() {
             {formatPosted(job.published_at)} · {formatCloses(job.expires_at)}
           </p>
 
-          <div className="mt-6 grid gap-8 md:grid-cols-[1fr_260px]">
-            <div className="min-w-0 md:order-1 md:col-start-1">
+          {/* The grid stretches both columns to the taller of the two, but
+              the panel INSIDE the sidebar was only as tall as its own
+              content, leaving a block of empty card below it. h-full on the
+              dl is what closes that gap. */}
+          <div className="mt-6 grid items-stretch gap-8 md:grid-cols-[1fr_260px]">
+            <div className="min-w-0">
               <h2 className="text-base font-bold text-slate-900">About the role</h2>
 
               {/* Plain text from the recruiter, rendered as text. Line breaks
@@ -211,14 +215,20 @@ function GccJobDetail() {
               ) : null}
             </div>
 
-            <aside className="md:order-2">
-              <dl className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-1">
+            <aside>
+              <dl className="h-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-1">
                 <Fact label="Location">{job.city}</Fact>
                 <Fact label="Work mode">{workModeLabel(job.work_mode)}</Fact>
                 <Fact label="Experience">{experience || "Not stated"}</Fact>
                 <Fact label="Function">{job.job_function}</Fact>
                 <Fact label="Employment type">{employmentLabel(job.employment_type)}</Fact>
-                {salary ? <Fact label="Salary">{salary}</Fact> : null}
+                {/* Always present here, unlike on the cards. An absent row
+                    reads as an oversight on a page someone is studying; the
+                    same row repeated down twenty cards is noise to someone
+                    scanning. */}
+                <Fact label="Salary">
+                  {salary || <span className="text-slate-500">Not disclosed</span>}
+                </Fact>
                 {job.openings ? (
                   <Fact label="Openings">{job.openings}</Fact>
                 ) : null}

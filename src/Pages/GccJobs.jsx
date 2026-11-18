@@ -4,6 +4,7 @@ import SiteHeader from "../components/SiteHeader";
 import Footer from "../components/Footer";
 import Seo from "../components/Seo";
 import GccJobCard from "../components/GccJobCard";
+import Pagination from "../components/Pagination";
 import { WORK_MODES } from "../lib/jobOptions";
 import { fetchFacets, fetchJobs, JOBS_PER_PAGE } from "../lib/publicJobs";
 
@@ -244,32 +245,16 @@ function GccJobs() {
           ))}
         </div>
 
-        {/* ------------------------------------------------------------- */}
-        {totalPages > 1 ? (
-          <nav className="mt-7 flex items-center justify-between gap-3" aria-label="Pages">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => update({ page: String(page - 1) })}
-              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              ← Previous
-            </button>
+        {/* Numbered pages, reusing the component the collated /jobs page
+            already uses -- it collapses to 1 … 4 5 6 … 20 past a handful of
+            pages, and two job lists on one site should not paginate in two
+            different shapes. */}
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={(next) => update({ page: String(next) })}
+        />
 
-            <span className="text-sm text-slate-600">
-              Page {page} of {totalPages}
-            </span>
-
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => update({ page: String(page + 1) })}
-              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next →
-            </button>
-          </nav>
-        ) : null}
       </main>
 
       <Footer />

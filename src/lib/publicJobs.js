@@ -54,11 +54,19 @@ export async function fetchFacets() {
 // ---------------------------------------------------------------------------
 // One page of results.
 //
-// Keyword search covers the title, the description and the hiring company's
-// name. The company is a separate table, and an `or` filter cannot reach
-// across an embedded resource, so matching company ids are looked up first
-// and folded into the same `or` as an id list. Two small round trips rather
-// than one clever query.
+// Keyword search covers the title, the description, the SKILLS and the
+// hiring company's name.
+//
+// Skills needed migration 006 to be searchable at all. The column is text[],
+// and PostgREST can only test an array for containment -- an exact,
+// case-sensitive match on a whole element -- so "snowflake" matched nothing
+// while "Snowflake" sat in the skills list. jobs.skills_text is a flattened
+// copy maintained by a trigger, and that is what is searched here.
+//
+// The company is a separate table, and an `or` filter cannot reach across an
+// embedded resource, so matching company ids are looked up first and folded
+// into the same `or` as an id list. Two small round trips rather than one
+// clever query.
 // ---------------------------------------------------------------------------
 export async function fetchJobs({ search, city, jobFunction, workMode, page }) {
   const term = sanitise(search);
@@ -85,7 +93,11 @@ export async function fetchJobs({ search, city, jobFunction, workMode, page }) {
   if (workMode) query = query.eq("work_mode", workMode);
 
   if (term) {
-    const clauses = [`title.ilike.*${term}*`, `description.ilike.*${term}*`];
+    const clauses = [
+      `title.ilike.*${term}*`,
+      `description.ilike.*${term}*`,
+      `skills_text.ilike.*${term}*`,
+    ];
     if (companyIds.length) clauses.push(`company_id.in.(${companyIds.join(",")})`);
     query = query.or(clauses.join(","));
   }

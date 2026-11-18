@@ -303,6 +303,40 @@ all, and its select policy for `authenticated` is `auth.uid() = id`, so even
 a signed-in candidate can read only their own row. The uuid joins to
 nothing. No change made.
 
+### Stage 5 — SIGNED OFF 18 Nov 2026
+
+Everything passed on the first test round. Four changes were made after
+sign-off and are verified in Part 0 of the stage 6 checklist.
+
+| # | Change | Note |
+|---|---|---|
+| 1 | Numbered pagination | Reuses `src/components/Pagination.jsx`, the component the collated `/jobs` page already uses. Two job lists on one site should not paginate in two shapes. |
+| 2 | Skills searchable | Needed **migration 006**. `jobs.skills` is `text[]`, and PostgREST can only test an array for containment — an exact, case-sensitive match on a whole element — so "snowflake" matched nothing while "Snowflake" sat in the list. |
+| 3 | Detail sidebar fills the card | `h-full` on the panel inside the stretched grid column. |
+| 4 | Salary row always on the detail page | "Not disclosed" where there is none. **Cards unchanged** — the same row twenty times down a list is noise. |
+
+Rishi's decisions at sign-off:
+
+- **Filters are Location, Function and Experience band** — not work mode.
+  GCC roles are overwhelmingly on-site or hybrid so a work-mode filter
+  barely splits the set, and ~75% of the audience is early to mid career,
+  where experience is the first screen. Bands overlap by design: a 3–8 year
+  role appears in both 3–5 and 6–10. Work mode may become a fourth filter
+  later. **Not yet built — this is the first item of stage 6's Part 0.**
+- **`/gcc-jobs` is not linked in the nav yet.** Linking a near-empty page
+  from the header makes the board look dead while he is recruiting
+  recruiters. Revisit at five or more real direct postings, roughly when
+  stage 10 makes these pages indexable; the two nav labels get settled then.
+
+A correction to my own checklist: step 13 said "snowflake" appeared in a
+skills list **and a description**. It appears only in the skills list. The
+code was right and the expectation was wrong.
+
+**Design: do not invent a visual identity.** Rishi has one — muted plum,
+mauve and warm rose with amber accents, as used on the LinkedIn and YouTube
+banners — and will supply exact colours at a design stage after stage 10.
+Until then, plain and consistent.
+
 ## Stage 4 onwards
 
 (Appended at the end of each stage.)
