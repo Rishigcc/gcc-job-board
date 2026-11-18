@@ -36,6 +36,9 @@ const base = {
   ...EMPTY_JOB,
   title: "Senior Financial Analyst",
   company_name: "Target Corporation",
+  // A company that was PICKED from the list. An id here is what "confirmed"
+  // means; see the hiring-company section below.
+  company_id: "11111111-1111-1111-1111-111111111111",
   city: "Bengaluru",
   work_mode: "hybrid",
   job_function: "Finance & Accounting",
@@ -110,6 +113,30 @@ t("unknown city rejected", { ...base, city: "Bangalore" }, ["city"]);
 t("unknown function rejected", { ...base, job_function: "Engineering" }, ["job_function"]);
 t("empty required selects rejected", { ...base, city: "", work_mode: "", job_function: "" },
   ["city", "work_mode", "job_function"]);
+
+// ---------------------------------------------------------------------------
+// The hiring company is not a CHECK constraint. It is a rule this form
+// invents, because public.companies has no UPDATE grant for recruiters: a
+// company row created by a typo is permanent until an admin fixes it. So the
+// form refuses a name that was typed but never confirmed, either by picking
+// an existing company or by explicitly asking for a new one.
+// ---------------------------------------------------------------------------
+console.log("\nhiring company -- typed is not the same as chosen");
+t("picked from the list accepted", base, []);
+t("explicitly added as new accepted",
+  { ...base, company_id: "", company_is_new: true }, []);
+t("typed but never confirmed rejected",
+  { ...base, company_id: "", company_is_new: false }, ["company_name"]);
+t("blank rejected",
+  { ...base, company_id: "", company_name: "", company_is_new: false }, ["company_name"]);
+t("blank rejected even when flagged new",
+  { ...base, company_id: "", company_name: "", company_is_new: true }, ["company_name"]);
+t("whitespace-only rejected",
+  { ...base, company_id: "", company_name: "   ", company_is_new: true }, ["company_name"]);
+t("punctuation-only new name rejected (no slug)",
+  { ...base, company_id: "", company_name: "...", company_is_new: true }, ["company_name"]);
+t("punctuation-only accepted when an existing row was picked",
+  { ...base, company_name: "..." }, []);
 
 console.log("\nan empty form reports every required field at once");
 t("EMPTY_JOB", EMPTY_JOB,

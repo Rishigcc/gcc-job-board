@@ -221,3 +221,27 @@ export function splitSkills(raw) {
 }
 
 export const DAYS_LIVE = 30;
+
+// ---------------------------------------------------------------------------
+// Company slugs need a stricter rule than job slugs.
+//
+// `slugify` turns every run of non-alphanumeric characters into a hyphen, so
+// "H.S.B.C." becomes "h-s-b-c" and does NOT collide with "hsbc". For job
+// titles that is right. For company names it is the difference between one
+// company page and two.
+//
+// So for companies, characters that sit INSIDE a word -- full stops,
+// apostrophes, the typographic apostrophe -- are deleted rather than turned
+// into separators:
+//
+//   "H.S.B.C."   -> hsbc      (collides with "HSBC", which is what we want)
+//   "Macy's"     -> macys     (collides with "Macys")
+//   "AT&T"       -> at-and-t  (unchanged; & is still a word separator)
+//
+// This is a backstop, not the fix. It catches punctuation and casing only.
+// It cannot know that "Walmart Global Tech India" and "Walmart" are the same
+// employer -- that is what the company picker is for.
+// ---------------------------------------------------------------------------
+export function companySlug(input) {
+  return slugify((input || "").replace(/[.'\u2018\u2019\u02bc`]/g, ""));
+}

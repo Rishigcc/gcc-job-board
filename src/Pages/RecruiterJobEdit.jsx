@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRecruiter } from "../lib/useRecruiter";
 import JobForm from "../components/JobForm";
-import { resolveCompanyId, updateJob } from "../lib/jobMutations";
+import { resolveCompany, updateJob } from "../lib/jobMutations";
 import { jobDisplayStatus } from "../lib/jobOptions";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
@@ -34,6 +34,11 @@ function toFormValues(job) {
   return {
     title: job.title || "",
     company_name: job.companies?.name || "",
+    // Already resolved: the role is attached to a real company row, so the
+    // picker opens in its confirmed state and nothing is created unless the
+    // recruiter deliberately changes it.
+    company_id: job.company_id || "",
+    company_is_new: false,
     city: job.city || "",
     work_mode: job.work_mode || "",
     job_function: job.job_function || "",
@@ -59,7 +64,6 @@ function RecruiterJobEdit() {
 
   const [job, setJob] = useState(null);
   const [values, setValues] = useState(null);
-  const [companies, setCompanies] = useState([]);
   const [loadState, setLoadState] = useState("loading");
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState(null);
@@ -68,14 +72,14 @@ function RecruiterJobEdit() {
     let active = true;
 
     const run = async () => {
-      const [{ data: row, error }, { data: companyRows }] = await Promise.all([
-        supabase.from("jobs").select(SELECT).eq("id", id).eq("posted_by", user.id).maybeSingle(),
-        supabase.from("companies").select("id, name").order("name").limit(500),
-      ]);
+      const { data: row, error } = await supabase
+        .from("jobs")
+        .select(SELECT)
+        .eq("id", id)
+        .eq("posted_by", user.id)
+        .maybeSingle();
 
       if (!active) return;
-
-      setCompanies(companyRows || []);
 
       if (error) {
         setLoadState("error");
@@ -111,11 +115,14 @@ function RecruiterJobEdit() {
       // Only touch companies if the name actually changed, so a plain
       // description edit never creates a company row.
       let companyId = job.company_id;
-      const nameChanged =
-        submitted.company_name.trim() !== (job.companies?.name || "").trim();
+      const companyChanged = submitted.company_id !== job.company_id;
 
-      if (nameChanged) {
-        const company = await resolveCompanyId(submitted.company_name);
+      if (companyChanged) {
+        const company = await resolveCompany({
+          companyId: submitted.company_id,
+          name: submitted.company_name,
+          isNew: submitted.company_is_new,
+        });
         if (company.error) {
           setServerError(company.error);
           setSubmitting(false);
@@ -206,7 +213,6 @@ function RecruiterJobEdit() {
         <JobForm
           mode="edit"
           initialValues={values}
-          companies={companies}
           onSubmit={handleSubmit}
           submitting={submitting}
           serverError={serverError}

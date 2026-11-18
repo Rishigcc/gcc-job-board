@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { slugify, splitSkills } from "./jobOptions";
+import { companySlug, slugify, splitSkills } from "./jobOptions";
 
 // ===========================================================================
 // Every database write the recruiter job pages make. Kept out of the
@@ -76,34 +76,59 @@ export function describeWriteError(error, context = "save this role") {
 }
 
 // ---------------------------------------------------------------------------
-// Find or create the HIRING company.
+// Resolve the HIRING company to an id.
 //
 // This is not the recruiter's own company. A staffing agency posts roles for
 // its clients, so `jobs.company_id` is who the candidate would work for, and
-// the agency is named separately from `recruiter_profiles.company_name` on the
-// job detail page.
+// the agency is named separately from `recruiter_profiles.company_name` on
+// the job detail page.
 //
-// Companies are matched on slug, not on name, so "HSBC" and "H.S.B.C." resolve
-// to one row rather than two filter entries. Two genuinely different companies
-// that slugify identically would collide; that is a trade worth making to
-// avoid a long tail of near-duplicates, and an admin can rename a company in
-// stage 9. Recruiters have no UPDATE grant on companies, so a typo cannot be
-// fixed by the person who made it -- which is also why the form asks them to
-// confirm the name before it creates one.
+// There are only two ways in, and the form will not submit without one of
+// them (see CompanyPicker.jsx):
+//
+//   companyId  the recruiter clicked a company that already exists. Nothing
+//              is created. This is the path we want almost every time.
+//   isNew      the recruiter explicitly asked for a new company, having been
+//              shown that no existing one matched.
+//
+// Even on the isNew path, the slug is checked first. companySlug() folds
+// casing and in-word punctuation, so "H.S.B.C." lands on the existing "HSBC"
+// row rather than creating a near-duplicate. That is a backstop for spelling,
+// not for judgement -- it cannot know "Walmart Global Tech India" and
+// "Walmart" are one employer, which is exactly why the picker makes the
+// recruiter look at the list first.
+//
+// Recruiters have no UPDATE grant on companies, so anything created here is
+// permanent until an admin changes it.
 // ---------------------------------------------------------------------------
-export async function resolveCompanyId(rawName) {
-  const name = (rawName || "").trim();
+export async function resolveCompany({ companyId, name, isNew }) {
+  if (companyId) {
+    return { companyId, reused: true };
+  }
 
-  if (!name) {
+  const trimmed = (name || "").trim();
+
+  if (!trimmed) {
     return { error: { message: "Enter the hiring company's name." } };
   }
 
-  const slug = slugify(name);
-  if (!slug) {
+  if (!isNew) {
+    // Should be unreachable: validateJob refuses an unconfirmed name. Kept so
+    // that a future caller cannot create companies by accident.
     return {
       error: {
         message:
-          "That company name needs at least one letter or number in it.",
+          "Pick the hiring company from the list, or choose to add it as a " +
+          "new company.",
+      },
+    };
+  }
+
+  const slug = companySlug(trimmed);
+  if (!slug) {
+    return {
+      error: {
+        message: "That company name needs at least one letter or number in it.",
       },
     };
   }
@@ -123,7 +148,7 @@ export async function resolveCompanyId(rawName) {
 
   const { data: created, error: insertError } = await supabase
     .from("companies")
-    .insert({ name, slug })
+    .insert({ name: trimmed, slug })
     .select("id, name")
     .single();
 

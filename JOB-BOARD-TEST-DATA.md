@@ -148,6 +148,56 @@ Notes for testing:
   on `public.jobs` for `authenticated`. Closing is the recruiter's action;
   deleting is yours, in the SQL editor.
 
+### Stage 4 — first test round, 18 Nov 2026
+
+Rishi tested the whole of stage 4 and everything passed, including the cap
+test (HTTP 400, `P0001`, our own sentence, not the RLS message). Nine UI
+issues and one design change were raised. All were fixed in the same stage.
+
+| # | Issue | Resolution |
+|---|---|---|
+| 1 | Checklist said 8 fields need attention on an empty submit; the form says 7 | My count was wrong, not the form. Later checklists state the rule, not the number. |
+| 2 | Page did not scroll to the first error | **Real bug.** `data-invalid` was passed to `<Field>` as a prop and `Field` never put it on a DOM node, so `querySelector("[data-invalid='true']")` matched nothing. The attribute is now on the wrapper `<div>`. |
+| 3 | Experience from/to inputs vertically misaligned | Hints moved from above the control to below it. Labels are one line everywhere, so paired fields in a grid now line up by construction. Also fixed Location vs Work mode, which had the same fault unreported. |
+| 4 | Error messages did not clear when a field was fixed | Errors were held in `useState` and only recomputed on submit. They are now derived — `const errors = touched ? validateJob(values) : {}` — so they cannot go stale. |
+| 5 | Enter submitted the whole form | Form-level `onKeyDown` blocks Enter unless the target is a `<textarea>` or a `<button>`. |
+| 6 | No confirmation before posting | Two-step: **Review this role** → summary panel (title, hiring company with a new/existing badge, location, function) → **Confirm and publish**. On edit the panel appears only when the hiring company changed. |
+| 7 | Public link preview under the job title | Removed. |
+| 8 | Grey slot counter did not mention that verification lifts the limit | It does now. |
+| 9 | Dropdown type-ahead appeared not to work | **Cause: the `Choose…` placeholder.** Browsers' native type-ahead walks option *text*, so the letter C matched "Choose…" before Cybersecurity or Coimbatore. The placeholder is now `disabled`, which type-ahead and the arrow keys skip. |
+| 10 | Free-text hiring company fragments the company table | **Replaced with a picker.** See below. |
+
+### Stage 4 — the hiring company picker (issue 10)
+
+`src/components/CompanyPicker.jsx`. Typing searches `public.companies`
+server-side (debounced, `ilike`, 8 results). Typing resolves to **nothing**:
+the recruiter must either click an existing company or click
+"Add *name* as a new company", and `validateJob` refuses to submit until one
+of those has happened. The review panel then restates which it was.
+
+**Correction to something I told Rishi earlier.** I said slug matching meant
+"HSBC" and "H.S.B.C." resolved to one row. That was wrong: `slugify` turns
+every run of non-alphanumerics into a hyphen, so they became `hsbc` and
+`h-s-b-c`. There is now a separate `companySlug()` which deletes in-word
+punctuation first, so they do collide. But the wider point stands — no slug
+rule can know that "Walmart Global Tech India" and "Walmart" are one
+employer. The picker is the fix; the slug is only a spelling backstop.
+
+**Seeding.** `scripts/build-company-seed.mjs` turns a plain list of names
+into `supabase/migrations/005_seed_companies.sql`, deduplicating by
+`companySlug` and printing every collision for a human to settle. Input
+format: UTF-8 text, one company name per line, no header, no numbering,
+written exactly as it should display. The migration is data-only and
+`on conflict (slug) do nothing`, so it is safe to run twice and will never
+overwrite a name a recruiter created. **Note that `public.companies` is
+readable by `anon`, so seeded names are on the public API immediately.**
+
+### Stage 4 — still to clean up after the first test round
+
+- **10 test jobs** posted by `community@iworkatgcc.com`, plus the
+  **Test Co A** company row. Deletion SQL is in the table above. No DELETE
+  grant on `public.jobs` for `authenticated`, so this is Rishi's to run.
+
 ## Stage 4 onwards
 
 (Appended at the end of each stage.)

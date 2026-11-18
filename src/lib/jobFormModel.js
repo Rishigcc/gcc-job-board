@@ -10,11 +10,18 @@
 // file changes with it.
 // ===========================================================================
 
-import { CITIES, JOB_FUNCTIONS, splitSkills } from "./jobOptions";
+import { CITIES, JOB_FUNCTIONS, companySlug, splitSkills } from "./jobOptions";
 
 export const EMPTY_JOB = {
   title: "",
+  // The hiring company is three fields, not one. `company_name` is what was
+  // typed or chosen; `company_id` is set only by picking an existing row; and
+  // `company_is_new` is set only by explicitly asking for a new one. A name
+  // with neither of the other two is an unconfirmed name, and the form will
+  // not submit on it -- see CompanyPicker.jsx for why that matters.
   company_name: "",
+  company_id: "",
+  company_is_new: false,
   city: "",
   work_mode: "",
   job_function: "",
@@ -42,8 +49,16 @@ export function validateJob(v) {
   if (title.length < 3) e.title = "Give the role a title of at least 3 characters.";
   else if (title.length > 200) e.title = "Keep the title to 200 characters or fewer.";
 
-  if (!(v.company_name || "").trim()) {
+  const company = (v.company_name || "").trim();
+  if (!company) {
     e.company_name = "Name the company the candidate would be working for.";
+  } else if (!v.company_id && !v.company_is_new) {
+    e.company_name =
+      "Pick this company from the list, or choose \u201CAdd \u2026 as a new " +
+      "company\u201D. Nothing is created until you do.";
+  } else if (v.company_is_new && !companySlug(company)) {
+    e.company_name =
+      "A new company name needs at least one letter or number in it.";
   }
 
   if (!v.city) e.city = "Choose a location.";
