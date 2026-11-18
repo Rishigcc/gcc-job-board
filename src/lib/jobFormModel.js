@@ -29,6 +29,9 @@ export const EMPTY_JOB = {
   experience_min: "",
   experience_max: "",
   description: "",
+  // Fixed. The external-apply option was removed from the form; these two
+  // stay here, and in the schema, only so that bringing it back is a form
+  // change rather than a migration.
   apply_mode: "in_platform",
   external_url: "",
   salary_min: "",
@@ -94,12 +97,9 @@ export function validateJob(v) {
     e.description = `Keep the description under ${DESCRIPTION_MAX.toLocaleString()} characters.`;
   }
 
-  if (v.apply_mode === "external") {
-    const url = (v.external_url || "").trim();
-    if (!url) e.external_url = "Paste the link candidates should apply through.";
-    else if (!/^https:\/\//.test(url))
-      e.external_url = "The link must start with https:// — an http:// link is not accepted.";
-  }
+  // No external_url rule any more: the form cannot produce apply_mode
+  // 'external', so there is no link for a recruiter to get wrong. The column
+  // check in migration 001 still stands behind it.
 
   // Salary is optional, but a number without its units is not storable.
   const salMin = v.salary_min === "" ? null : Number(v.salary_min);

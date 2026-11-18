@@ -86,11 +86,18 @@ t("20000 accepted", { ...base, description: "x".repeat(20000) }, []);
 t("20001 rejected", { ...base, description: "x".repeat(20001) }, ["description"]);
 t("50 spaces rejected (btrim)", { ...base, description: " ".repeat(50) }, ["description"]);
 
-console.log("\napply -- constraint external_needs_https_url");
-t("external with https accepted", { ...base, apply_mode: "external", external_url: "https://x.com/a" }, []);
-t("external with http rejected", { ...base, apply_mode: "external", external_url: "http://x.com/a" }, ["external_url"]);
-t("external with no url rejected", { ...base, apply_mode: "external", external_url: "" }, ["external_url"]);
-t("in_platform ignores a junk url", { ...base, apply_mode: "in_platform", external_url: "nonsense" }, []);
+// ---------------------------------------------------------------------------
+// The external-apply option was removed from the form. jobs.apply_mode and
+// jobs.external_url remain in the schema so the decision is reversible
+// without a migration, but nothing the form produces reaches them:
+// insertPayload() pins them to 'in_platform' and null, so the constraint
+// external_needs_https_url can no longer be violated from here.
+// ---------------------------------------------------------------------------
+console.log("\napply mode -- in-platform only");
+t("the only mode the form can produce is accepted",
+  { ...base, apply_mode: "in_platform", external_url: "" }, []);
+t("a leftover external_url is ignored rather than validated",
+  { ...base, apply_mode: "in_platform", external_url: "http://insecure.example.com" }, []);
 
 console.log("\nsalary -- constraint salary_range + salary_needs_units");
 t("no salary at all accepted", base, []);

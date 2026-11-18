@@ -5,7 +5,7 @@ import { useRecruiter } from "../lib/useRecruiter";
 import JobForm from "../components/JobForm";
 import { EMPTY_JOB } from "../lib/jobFormModel";
 import { createJob, resolveCompany } from "../lib/jobMutations";
-import { companySlug, countsTowardCap } from "../lib/jobOptions";
+import { countsTowardCap } from "../lib/jobOptions";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
 import Seo from "../components/Seo";
@@ -27,50 +27,36 @@ function RecruiterJobNew() {
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState(null);
 
-  // The recruiter's own company is the usual answer for an in-house
-  // recruiter, so the NAME is prefilled. The id is not: it is filled in below
-  // only if that name already exists as a company. If it does not, the
-  // recruiter has to confirm "add as a new company" like anyone else -- the
-  // first role they post is exactly when a typo in their own employer's name
-  // would become permanent.
-  const [initialValues, setInitialValues] = useState(() => ({
-    ...EMPTY_JOB,
-    company_name: profile?.company_name || "",
-  }));
-  const [ready, setReady] = useState(false);
+  // NOT prefilled with the recruiter's own company, deliberately.
+  //
+  // It used to be, and that was wrong twice over. For an agency the hiring
+  // company is their client and never themselves, so the prefill was a wrong
+  // answer sitting in a required field. And a prefilled value that is never
+  // looked at is a value that gets posted: the first test round created a
+  // stray "iworkatgcctest1" company row exactly that way.
+  //
+  // An empty field makes the recruiter search, which is the one action that
+  // reuses an existing company instead of adding a near-duplicate.
+  const initialValues = EMPTY_JOB;
 
   useEffect(() => {
     let active = true;
 
-    const ownSlug = companySlug(profile?.company_name || "");
-
     const load = async () => {
-      const [{ data: ownCompany }, { data: jobRows }] = await Promise.all([
-        ownSlug
-          ? supabase.from("companies").select("id, name").eq("slug", ownSlug).maybeSingle()
-          : Promise.resolve({ data: null }),
-        supabase.from("jobs").select("id, status, expires_at").eq("posted_by", user.id),
-      ]);
+      const { data: jobRows } = await supabase
+        .from("jobs")
+        .select("id, status, expires_at")
+        .eq("posted_by", user.id);
 
       if (!active) return;
-
-      if (ownCompany) {
-        setInitialValues((v) => ({
-          ...v,
-          company_id: ownCompany.id,
-          company_name: ownCompany.name,
-        }));
-      }
-
       setSlotsUsed((jobRows || []).filter(countsTowardCap).length);
-      setReady(true);
     };
 
     load();
     return () => {
       active = false;
     };
-  }, [user.id, profile?.company_name]);
+  }, [user.id]);
 
   const handleSubmit = useCallback(
     async (values) => {
@@ -124,15 +110,10 @@ function RecruiterJobNew() {
           Post a role
         </h1>
         <p className="mt-2 text-slate-600">
-          You will see a summary before anything is published. There is no review queue at our end \u2014 once you confirm, the role is live.
+          You will see a summary before anything is published. There is no review queue at our end — once you confirm, the role is live.
         </p>
 
         <div className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-          {/* Held back until the prefill lookup lands. Remounting the form
-              afterwards would have thrown away anything already typed. */}
-          {!ready ? (
-            <p className="text-slate-500">Loading…</p>
-          ) : (
           <JobForm
             mode="create"
             initialValues={initialValues}
@@ -142,7 +123,6 @@ function RecruiterJobNew() {
             slotsUsed={slotsUsed}
             isVerified={Boolean(profile?.is_verified)}
           />
-          )}
         </div>
       </main>
 

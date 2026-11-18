@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   JOB_FUNCTIONS,
@@ -11,6 +11,7 @@ import {
 } from "../lib/jobOptions";
 import { EMPTY_JOB, DESCRIPTION_MIN, DESCRIPTION_MAX, validateJob } from "../lib/jobFormModel";
 import CompanyPicker from "./CompanyPicker";
+import { useUnsavedChanges } from "../lib/useUnsavedChanges";
 
 // ===========================================================================
 // The posting form, shared by /recruiter/jobs/new and the edit page.
@@ -92,6 +93,22 @@ function JobForm({
   const [stage, setStage] = useState("form");
   const topRef = useRef(null);
 
+  // "Something has actually been typed." An untouched form that is opened
+  // and left alone must never prompt, so this is a comparison against the
+  // values the form started with -- not a flag set by the first keystroke,
+  // which would stay set after the field was cleared again.
+  const isDirty = useMemo(
+    () =>
+      Object.keys(initialValues).some(
+        (key) => String(values[key] ?? "") !== String(initialValues[key] ?? "")
+      ),
+    [values, initialValues]
+  );
+
+  // Off while saving: the redirect that follows a successful save is not
+  // someone abandoning their work.
+  const { pending, leave, stay } = useUnsavedChanges(isDirty && !submitting);
+
   // Derived, not stored. Keeping errors in state meant a message stayed on
   // screen after the field was fixed, because nothing recomputed it until the
   // next submit. validateJob is pure and cheap, so this is always in step
@@ -168,6 +185,49 @@ function JobForm({
   return (
     <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate className="space-y-7">
       <div ref={topRef} />
+
+      {pending ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50" onClick={stay} />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="leave-heading"
+            className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+          >
+            <h2 id="leave-heading" className="text-lg font-bold text-slate-900">
+              {mode === "create"
+                ? "This role has not been posted yet"
+                : "These changes have not been saved"}
+            </h2>
+
+            <p className="mt-2 text-sm leading-relaxed text-slate-700">
+              {mode === "create"
+                ? "You have started filling this in but nothing has been published. If you leave now, what you have typed is gone."
+                : "You have changed this role but not saved it. If you leave now, the changes are gone and the live role stays as it was."}
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={stay}
+                className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Keep editing
+              </button>
+
+              <button
+                type="button"
+                onClick={leave}
+                className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Discard and leave
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* The cap, stated before they start typing rather than after they submit. */}
       {!isVerified && slotsUsed !== null && stage === "form" ? (
@@ -476,41 +536,28 @@ function JobForm({
         </fieldset>
 
         {/* ---------------------------------------------------------------- */}
-        <fieldset className="space-y-5 border-t border-slate-200 pt-6">
+        {/* Applications are in-platform only. The "send candidates to your
+            own site" option was removed on Rishi's decision: an external
+            link produced no application, no candidate and no funnel data,
+            which is the entire reason the board exists. An agency that has
+            to route into a client ATS is handled by email, at one to five
+            recruiters.
+
+            jobs.apply_mode and jobs.external_url are deliberately LEFT IN
+            THE SCHEMA, so bringing the option back is a form change and
+            never a migration. insertPayload() pins them to 'in_platform'
+            and null. */}
+        <fieldset className="space-y-3 border-t border-slate-200 pt-6">
           <legend className="text-base font-bold text-slate-900">
             How candidates apply
           </legend>
 
-          <div className="space-y-2">
-            <label className="flex items-start gap-2.5 text-sm text-slate-800">
-              <input type="radio" name="apply_mode" value="in_platform" className="mt-1"
-                checked={values.apply_mode === "in_platform"} onChange={set("apply_mode")} />
-              <span>
-                <strong>On iWorkAtGCC.</strong> Candidates apply with a resume and
-                you see the applications here. Recommended — it is why most people
-                use the site.
-              </span>
-            </label>
-
-            <label className="flex items-start gap-2.5 text-sm text-slate-800">
-              <input type="radio" name="apply_mode" value="external" className="mt-1"
-                checked={values.apply_mode === "external"} onChange={set("apply_mode")} />
-              <span>
-                <strong>On your own site.</strong> Candidates are sent to a link
-                you provide. You will not receive applications here, and we cannot
-                tell you who applied.
-              </span>
-            </label>
-          </div>
-
-          {values.apply_mode === "external" ? (
-            <Field label="Application link" htmlFor="external_url" required
-              hint="Must start with https://" error={errors.external_url}>
-              <input id="external_url" type="url" className={inputClass}
-                value={values.external_url} onChange={set("external_url")}
-                placeholder="https://careers.example.com/role/12345" />
-            </Field>
-          ) : null}
+          <p className="text-sm text-slate-700">
+            Candidates apply here, with a resume, and you see every
+            application against this role in your dashboard. There is no
+            other route — iWorkAtGCC does not send candidates to an external
+            site, so nothing is lost on the way.
+          </p>
         </fieldset>
 
         {/* ---------------------------------------------------------------- */}

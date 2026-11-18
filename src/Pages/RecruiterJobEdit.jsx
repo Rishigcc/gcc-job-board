@@ -46,8 +46,12 @@ function toFormValues(job) {
     experience_min: job.experience_min === null ? "" : String(job.experience_min),
     experience_max: job.experience_max === null ? "" : String(job.experience_max),
     description: job.description || "",
-    apply_mode: job.apply_mode || "in_platform",
-    external_url: job.external_url || "",
+    // Forced, not read back. No job can have been posted as 'external' --
+    // the option was removed before any recruiter used it -- but if one ever
+    // existed, saving it here would convert it to in-platform rather than
+    // silently keeping a route the form can no longer show or edit.
+    apply_mode: "in_platform",
+    external_url: "",
     salary_min: job.salary_min === null ? "" : String(job.salary_min),
     salary_max: job.salary_max === null ? "" : String(job.salary_max),
     salary_currency: job.salary_currency || "INR",

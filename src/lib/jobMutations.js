@@ -197,9 +197,11 @@ function insertPayload(values, companyId, userId) {
     experience_min: Number(values.experience_min),
     experience_max: Number(values.experience_max),
     description: values.description.trim(),
-    apply_mode: values.apply_mode,
-    external_url:
-      values.apply_mode === "external" ? values.external_url.trim() : null,
+    // Pinned, not taken from the form. Applications are in-platform only,
+    // and these two columns remain in the schema purely so that decision is
+    // reversible without a migration.
+    apply_mode: "in_platform",
+    external_url: null,
     salary_min: values.salary_min === "" ? null : Number(values.salary_min),
     salary_max: values.salary_max === "" ? null : Number(values.salary_max),
     salary_currency:

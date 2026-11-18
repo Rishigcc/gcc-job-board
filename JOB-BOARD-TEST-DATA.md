@@ -192,11 +192,41 @@ written exactly as it should display. The migration is data-only and
 overwrite a name a recruiter created. **Note that `public.companies` is
 readable by `anon`, so seeded names are on the public API immediately.**
 
-### Stage 4 — still to clean up after the first test round
+### Stage 4 — second test round, 18 Nov 2026
 
-- **10 test jobs** posted by `community@iworkatgcc.com`, plus the
-  **Test Co A** company row. Deletion SQL is in the table above. No DELETE
-  grant on `public.jobs` for `authenticated`, so this is Rishi's to run.
+One real failure, two cosmetic, two new requests. All fixed.
+
+| # | Issue | Resolution |
+|---|---|---|
+| 1 | **The duplicate backstop did not work.** Typing `test co a.` returned "no company matches" and offered to create a duplicate. | **Real failure, and the one that mattered.** `companySlug()` was applied at insert time but not at search time, so a collision could only be found by causing it. The picker now runs **two** queries — `name ilike %term%` **and** `slug ilike %companySlug(term)%` — merges them, and sorts an exact slug match to the top. Verified against the live table: the name query returns nothing for `test co a.`, the slug query returns Test Co A. |
+| 2 | Prefill fired against an empty companies table | My description was wrong, not just the code: only the *id* was conditional, the *name* was always prefilled. That is how the stray `iworkatgcctest1` row was created. **Prefill dropped entirely**, per Rishi — for an agency their own company is never the hiring company. |
+| 3 | `\u2014` rendered as literal text under "Post a role" | JSX text is not a JS string literal, so the escape never ran. One instance; the two in `jobFormModel.js` are inside real string literals and were always correct. |
+| 4 | Location type-ahead: `c` → Chennai, `c` → Chandigarh, third press nothing | **Not fixed, by agreement.** Native macOS select behaviour. The bug that *was* ours — the enabled `Choose…` placeholder swallowing the first keystroke — is fixed. Replacing native selects with custom components would be worse on phones and for screen readers. |
+| R1 | Remove the external-apply option | Done. The radio group is gone and `insertPayload()` pins `apply_mode` to `in_platform` and `external_url` to null. **`jobs.apply_mode` and `jobs.external_url` deliberately stay in the schema**, so reversing this is a form change and never a migration. |
+| R2 | Warn before losing a half-filled form | `src/lib/useUnsavedChanges.js`. See the limit below. |
+
+**Known limit of the unsaved-work warning: the browser Back button is not
+covered.** Blocking it needs React Router's `useBlocker`, which only works
+on a data router (`createBrowserRouter`). This app uses `<BrowserRouter>`
+with `<Routes>`, so `useBlocker` throws. Converting the app to a data router
+touches every route on the site, community pages included, and is not a
+change to make from inside the posting form. Links, the logo, Cancel, tab
+close and reload are all covered.
+
+**Known limit of the company search:** it matches on the name, and on the
+slug of what was typed. It will not connect a name typed with the word
+breaks removed — `testcoa` does not find `Test Co A` — because that slug has
+no hyphens to match. Punctuation, casing and spacing are all handled.
+
+### Stage 4 — still to clean up before the merge
+
+- **All test jobs** in `public.jobs`, from both test rounds.
+- **All company rows** created while testing — `Test Co A`, `Test Co B`, and
+  anything else added through the picker. `iworkatgcctest1` was deleted
+  during the second round.
+- Deletion SQL is in the table above. **Jobs first, then companies**, because
+  of the foreign key. No DELETE grant on `public.jobs` for `authenticated`,
+  so this is Rishi's to run in the SQL editor.
 
 ## Stage 4 onwards
 

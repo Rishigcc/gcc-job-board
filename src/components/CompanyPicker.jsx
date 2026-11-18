@@ -28,6 +28,18 @@ import { companySlug } from "../lib/jobOptions";
 //   GCC names and is expected to run to several thousand rows. public.
 //   companies is readable by anon and authenticated ("anyone reads
 //   companies"), so this needs no special grant.
+//
+//   TWO queries, not one, and the second is the important one. Searching the
+//   NAME alone misses exactly the case this component exists for: typing
+//   "test co a." found nothing, because the trailing full stop is not in
+//   "Test Co A", and the recruiter was then offered a duplicate to create.
+//   The normalisation was being applied at insert time but not at search
+//   time, so a collision could only be discovered by causing it.
+//
+//   So the slug of what was typed is searched as well. That is the same
+//   normalisation the insert uses, which means anything resolveCompany()
+//   would silently merge into an existing row is now visible BEFORE the
+//   recruiter commits to it.
 // ===========================================================================
 
 const MIN_CHARS = 2;
@@ -68,15 +80,45 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
     let cancelled = false;
 
     const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from("companies")
-        .select("id, name, slug")
-        .ilike("name", `%${query}%`)
-        .order("name")
-        .limit(MAX_RESULTS);
+      const [byName, bySlug] = await Promise.all([
+        supabase
+          .from("companies")
+          .select("id, name, slug")
+          .ilike("name", `%${query}%`)
+          .order("name")
+          .limit(MAX_RESULTS),
+        // `slug` is only ever [a-z0-9-], so it needs no escaping before it
+        // goes into the filter.
+        slug
+          ? supabase
+              .from("companies")
+              .select("id, name, slug")
+              .ilike("slug", `%${slug}%`)
+              .order("name")
+              .limit(MAX_RESULTS)
+          : Promise.resolve({ data: [] }),
+      ]);
 
       if (cancelled) return;
-      setResults({ term: query, rows: data || [] });
+
+      // Slug matches first: an exact slug match is the strongest signal we
+      // have that this is the same company under a different spelling.
+      const merged = [];
+      const seen = new Set();
+
+      for (const row of [...(bySlug.data || []), ...(byName.data || [])]) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        merged.push(row);
+      }
+
+      merged.sort((a, b) => {
+        const aExact = a.slug === slug ? 0 : 1;
+        const bExact = b.slug === slug ? 0 : 1;
+        return aExact - bExact || a.name.localeCompare(b.name);
+      });
+
+      setResults({ term: query, rows: merged.slice(0, MAX_RESULTS) });
       setHighlight(-1);
     }, DEBOUNCE_MS);
 
@@ -84,7 +126,7 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, resolved]);
+  }, [query, slug, resolved]);
 
   const handleType = (event) => {
     const next = event.target.value;
