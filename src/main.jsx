@@ -11,6 +11,8 @@ import {
 import "./index.css";
 import App from "./App.jsx";
 import Jobs from "./Pages/Jobs.jsx";
+import GccJobs from "./Pages/GccJobs.jsx";
+import GccJobDetail from "./Pages/GccJobDetail.jsx";
 import Signup from "./Pages/Signup.jsx";
 import Welcome from "./Pages/Welcome.jsx";
 import AskQuestion from "./Pages/AskQuestion.jsx";
@@ -203,8 +205,15 @@ function AppRoutes() {
       {/* Main website */}
       <Route path="/" element={<HomeRoute />} />
 
-      {/* Public job listings */}
+      {/* Public job listings, collated from elsewhere */}
       <Route path="/jobs" element={<Jobs />} />
+
+      {/* Roles posted directly on iWorkAtGCC. Public, but noindex until
+          stage 10 renders them server-side, and not prerendered -- the route
+          list in scripts/prerender.mjs is explicit, so these are excluded by
+          not being added to it. */}
+      <Route path="/gcc-jobs" element={<GccJobs />} />
+      <Route path="/gcc-jobs/:slugId" element={<GccJobDetail />} />
 
       {/* Signup */}
       <Route path="/signup" element={<Signup />} />

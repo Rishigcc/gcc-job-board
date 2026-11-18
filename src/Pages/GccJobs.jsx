@@ -1,0 +1,280 @@
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import SiteHeader from "../components/SiteHeader";
+import Footer from "../components/Footer";
+import Seo from "../components/Seo";
+import GccJobCard from "../components/GccJobCard";
+import { WORK_MODES } from "../lib/jobOptions";
+import { fetchFacets, fetchJobs, JOBS_PER_PAGE } from "../lib/publicJobs";
+
+// ===========================================================================
+// /gcc-jobs -- roles posted directly on iWorkAtGCC by recruiters.
+//
+// Separate from /jobs, which lists roles collated from elsewhere. Candidates
+// can apply to these; the collated ones send them off-site.
+//
+// noindex until stage 10, which renders job pages server-side. A page whose
+// content arrives after JavaScript has run is worth nothing to a crawler, and
+// a half-indexed job board is worse than an unindexed one.
+//
+// FILTER AND SEARCH STATE LIVES IN THE URL, not in useState. That makes a
+// filtered list a link someone can send, and makes the browser Back button
+// step back through filters instead of leaving the page.
+// ===========================================================================
+
+const selectClass =
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 " +
+  "focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100";
+
+const workModeLabel = (value) =>
+  WORK_MODES.find((m) => m.value === value)?.label || value;
+
+function GccJobs() {
+  const [params, setParams] = useSearchParams();
+
+  const search = params.get("q") || "";
+  const city = params.get("city") || "";
+  const jobFunction = params.get("function") || "";
+  const workMode = params.get("mode") || "";
+  const page = Math.max(1, Number(params.get("page") || 1));
+
+  // The box is a separate piece of state from the URL so that typing does not
+  // fire a query per keystroke. The URL is updated on submit.
+  const [draft, setDraft] = useState(search);
+
+  const [facets, setFacets] = useState({ cities: [], functions: [], workModes: [] });
+
+  // The result carries the query it answers. "Loading" is then derived from
+  // whether that matches the query on screen, rather than being a second
+  // piece of state set at the top of an effect -- which both avoids a
+  // cascading render and makes it impossible for the spinner and the list to
+  // disagree about which search they belong to.
+  const [result, setResult] = useState({ key: null, jobs: [], total: 0, error: null });
+
+  const queryKey = JSON.stringify({ search, city, jobFunction, workMode, page });
+  const loading = result.key !== queryKey;
+  const error = result.error;
+
+  useEffect(() => {
+    let active = true;
+
+    fetchFacets().then((f) => {
+      if (active) setFacets(f);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchJobs({ search, city, jobFunction, workMode, page }).then((r) => {
+      if (!active) return;
+      setResult({ key: queryKey, jobs: r.jobs, total: r.total, error: r.error });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [search, city, jobFunction, workMode, page, queryKey]);
+
+  // Any change to a filter resets to page 1: staying on page 4 of a result
+  // set that now has one page shows an empty list and looks broken.
+  const update = (changes) => {
+    const next = new URLSearchParams(params);
+
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+
+    if (!("page" in changes)) next.delete("page");
+    setParams(next);
+  };
+
+  const clearAll = () => {
+    setDraft("");
+    setParams(new URLSearchParams());
+  };
+
+  const filtered = Boolean(search || city || jobFunction || workMode);
+  const totalPages = Math.max(1, Math.ceil(result.total / JOBS_PER_PAGE));
+  const first = result.total === 0 ? 0 : (page - 1) * JOBS_PER_PAGE + 1;
+  const last = Math.min(page * JOBS_PER_PAGE, result.total);
+
+  return (
+    <div className="min-h-screen bg-slate-100">
+      <Seo
+        title="Roles posted on iWorkAtGCC"
+        description="Roles posted directly by recruiters hiring into India's Global Capability Centres."
+        path="/gcc-jobs"
+        noindex
+      />
+
+      <SiteHeader />
+
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          Roles posted on iWorkAtGCC
+        </h1>
+        <p className="mt-2 max-w-2xl text-slate-600">
+          Posted directly by the people hiring. Apply here with your resume —
+          you are not sent off to another site.
+        </p>
+
+        {/* ------------------------------------------------------------- */}
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              update({ q: draft.trim() });
+            }}
+            className="flex flex-col gap-2 sm:flex-row"
+          >
+            <input
+              type="search"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Job title, skill or company"
+              aria-label="Search roles"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+
+            <button
+              type="submit"
+              className="shrink-0 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              Search
+            </button>
+          </form>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <select
+              aria-label="Filter by location"
+              className={selectClass}
+              value={city}
+              onChange={(event) => update({ city: event.target.value })}
+            >
+              <option value="">All locations</option>
+              {facets.cities.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+
+            <select
+              aria-label="Filter by function"
+              className={selectClass}
+              value={jobFunction}
+              onChange={(event) => update({ function: event.target.value })}
+            >
+              <option value="">All functions</option>
+              {facets.functions.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+
+            <select
+              aria-label="Filter by work mode"
+              className={selectClass}
+              value={workMode}
+              onChange={(event) => update({ mode: event.target.value })}
+            >
+              <option value="">On-site, hybrid or remote</option>
+              {facets.workModes.map((m) => (
+                <option key={m} value={m}>{workModeLabel(m)}</option>
+              ))}
+            </select>
+          </div>
+
+          {filtered ? (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="mt-3 text-sm font-semibold text-blue-700 hover:underline"
+            >
+              Clear search and filters
+            </button>
+          ) : null}
+        </div>
+
+        {/* ------------------------------------------------------------- */}
+        <p className="mt-5 text-sm text-slate-600">
+          {loading
+            ? "Loading roles…"
+            : result.total === 0
+              ? "No roles"
+              : `Showing ${first}–${last} of ${result.total} role${result.total === 1 ? "" : "s"}`}
+        </p>
+
+        {error ? (
+          <div role="alert" className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-5">
+            <p className="font-semibold text-red-900">These roles could not be loaded.</p>
+            <p className="mt-1 font-mono text-xs text-red-700">{error.message}</p>
+          </div>
+        ) : null}
+
+        {!loading && !error && result.total === 0 ? (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-10 text-center">
+            <h2 className="text-lg font-bold text-slate-900">
+              {filtered ? "Nothing matches that" : "No roles posted yet"}
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-slate-600">
+              {filtered
+                ? "Try a broader search, or clear the filters to see everything that is open."
+                : "Recruiters post roles here directly. Check back shortly."}
+            </p>
+            {filtered ? (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="mt-4 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Clear search and filters
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-4 space-y-4">
+          {result.jobs.map((job) => (
+            <GccJobCard key={job.id} job={job} />
+          ))}
+        </div>
+
+        {/* ------------------------------------------------------------- */}
+        {totalPages > 1 ? (
+          <nav className="mt-7 flex items-center justify-between gap-3" aria-label="Pages">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => update({ page: String(page - 1) })}
+              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ← Previous
+            </button>
+
+            <span className="text-sm text-slate-600">
+              Page {page} of {totalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => update({ page: String(page + 1) })}
+              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next →
+            </button>
+          </nav>
+        ) : null}
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
+
+export default GccJobs;

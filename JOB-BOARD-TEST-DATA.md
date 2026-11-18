@@ -262,6 +262,47 @@ The Walmart company row and its test job were deleted during round three —
 a real company name should not sit in the table as a test artifact. Both
 Test Co rows and every test job still go before the merge.
 
+## Stage 5 — public jobs page and job detail
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| 24 sample roles, titles prefixed `[T5]` | `public.jobs` | `delete from public.jobs where title like '[T5]%';` | PLANNED |
+| `public.job_posting_agency(bigint)` | database | `supabase/migrations/005_public_job_detail_rollback.sql` — but keep it, it is product behaviour | LIVE after migration 005 |
+| Roles posted through the form while testing | `public.jobs` | `delete from public.jobs where posted_by in (select id from auth.users where email in ('community@iworkatgcc.com','feedback@iworkatgcc.com'));` | PLANNED |
+
+Notes:
+
+- **The 24 sample roles are inserted in the SQL editor, not through the
+  form.** Run there you are the `postgres` role, so the insert policy, the
+  column grants and the cap trigger are all bypassed — the trigger checks
+  `auth.uid()`, which is null in the editor. That is fine, and deliberate:
+  posting 24 roles by hand would re-prove stage 4 and nothing else. They are
+  scenery for the candidate side.
+- They all carry the `[T5]` prefix so one `like` clause removes every one.
+
+### Stage 5 — why the posting agency needed a migration
+
+`recruiter_profiles` is granted to `authenticated` only, and its read policy
+narrows that to the recruiter's own row plus admins — the same row carries
+their phone number and email domain. So the agency name could not be
+reached by a join from a public job. Migration 005 adds
+`public.job_posting_agency(bigint)`, which returns that one field and only
+for a job the caller can already see.
+
+Rejected alternatives, for the record: a view that bypasses RLS (flagged by
+Supabase's own security advisor, and easy to widen later) and a
+denormalised `posting_agency` column on `jobs` (goes stale the moment a
+recruiter corrects their own company name).
+
+### Stage 5 — one thing checked and found to be a non-issue
+
+`jobs.posted_by` is readable by `anon`, because the select grant on `jobs`
+is table-wide. That looked like it could link a recruiter's user id to their
+community identity. It cannot: `public.profiles` has no grant to `anon` at
+all, and its select policy for `authenticated` is `auth.uid() = id`, so even
+a signed-in candidate can read only their own row. The uuid joins to
+nothing. No change made.
+
 ## Stage 4 onwards
 
 (Appended at the end of each stage.)

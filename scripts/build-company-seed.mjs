@@ -16,7 +16,7 @@
 // HOW TO RUN IT
 //   node scripts/build-company-seed.mjs path/to/companies.txt
 //
-//   It writes supabase/migrations/005_seed_companies.sql and prints a report:
+//   It writes supabase/migrations/006_seed_companies.sql and prints a report:
 //   how many names were read, how many survive, and every pair that collided
 //   so they can be checked by eye before the migration is run.
 //
@@ -76,7 +76,7 @@ function q(value) {
 }
 
 const sql = `-- ===========================================================================
--- 005_seed_companies.sql
+-- 006_seed_companies.sql
 --
 -- Seeds public.companies so the hiring-company picker is useful to the first
 -- recruiter who uses it rather than empty.
@@ -103,7 +103,7 @@ ${rows.join(",\n")}
 on conflict (slug) do nothing;
 `;
 
-const out = "supabase/migrations/005_seed_companies.sql";
+const out = "supabase/migrations/006_seed_companies.sql";
 writeFileSync(out, sql);
 
 console.log(`read       ${lines.length} lines`);
