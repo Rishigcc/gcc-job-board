@@ -337,6 +337,55 @@ mauve and warm rose with amber accents, as used on the LinkedIn and YouTube
 banners — and will supply exact colours at a design stage after stage 10.
 Until then, plain and consistent.
 
+## Stage 6 — applying
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Test applications | `public.applications` | `delete from public.applications;` — there are none from real people yet | PLANNED |
+| Uploaded test resumes | Storage → `resumes` bucket | Delete the folders by hand in the dashboard. Deleting an application row does **not** delete its file. | PLANNED |
+| `applications` table, `resumes` bucket, two `private` functions | database | `supabase/migrations/007_applications_rollback.sql` — keep them, this is the product | LIVE after migration 007 |
+
+Notes:
+
+- **Use a throwaway PDF.** Anything uploaded is on production storage.
+- **Delete order:** rows first, then the files, because nothing cascades
+  from the row to the object. Stage 8's delete-my-data does both; doing it
+  by hand here does not.
+- The test Gmail community account is the candidate for this stage. It is
+  already on the carried-forward list for deletion before the merge
+  (item 5); its applications and resume go with it.
+
+### Stage 6 — how "a recruiter never receives candidate data" is enforced
+
+`public.applications` has **no select policy mentioning recruiters**. Not a
+narrowed one — none. There is no row a recruiter can read, so there is no
+column to leak, and that is far easier to verify than any policy would be:
+a recruiter calling `/rest/v1/applications` with the public key gets `[]`
+whatever they ask for. Stage 7 gives them what they are allowed to see
+through narrow functions returning only permitted columns; it must not
+widen this table.
+
+Resumes: the `resumes` bucket is private and **has no policies on
+`storage.objects` at all**, so no client role can read or write it. Every
+upload goes through `/api/upload-resume` under the service key; every
+future download will be a short-lived signed URL minted server-side.
+
+### Stage 6 — what the file check does and does not do
+
+`api/upload-resume.js` reads the uploaded bytes and requires `%PDF-<n>.<n>`
+at the start and `%%EOF` within the last 64 KB. This is the only honest
+check available: the filename, the `Content-Type` header and the bucket's
+`allowed_mime_types` are all supplied by whoever uploads, so a `.exe`
+renamed to `.pdf` and sent as `application/pdf` satisfies every one of them.
+
+The 64 KB window is deliberately generous. A junk file that slips through is
+caught by the header check and by the recruiter opening it; a real
+candidate's resume wrongly refused is an application silently lost.
+
+**It is a structure check, not antivirus.** A genuinely malicious PDF is
+still a PDF and will pass. Any job board carries that risk the moment a
+recruiter downloads a stranger's file.
+
 ## Stage 4 onwards
 
 (Appended at the end of each stage.)

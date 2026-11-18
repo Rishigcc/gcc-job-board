@@ -25,7 +25,11 @@ const CARD_COLUMNS =
   "salary_period, openings, skills, published_at, expires_at, status, " +
   "companies(name, logo_url)";
 
-const DETAIL_COLUMNS = CARD_COLUMNS + ", description";
+// posted_by only on the detail page, and only so the apply panel can tell a
+// recruiter they are looking at their own posting. It is a bare uuid that
+// joins to nothing a client can read: public.profiles has no grant to anon
+// at all, and its policy for signed-in users is auth.uid() = id.
+const DETAIL_COLUMNS = CARD_COLUMNS + ", description, posted_by";
 
 // ---------------------------------------------------------------------------
 // The dropdown options are built from the jobs that actually exist, not from

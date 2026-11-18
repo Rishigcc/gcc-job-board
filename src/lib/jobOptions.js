@@ -245,3 +245,21 @@ export const DAYS_LIVE = 30;
 export function companySlug(input) {
   return slugify((input || "").replace(/[.'\u2018\u2019\u02bc`]/g, ""));
 }
+
+// ---------------------------------------------------------------------------
+// Notice periods. These ARE a check constraint, on
+// public.applications.notice_period in migration 007, so the values below
+// must match it exactly. Changing one needs a migration.
+// ---------------------------------------------------------------------------
+export const NOTICE_PERIODS = [
+  { value: "immediate", label: "Immediate" },
+  { value: "15_days", label: "15 days" },
+  { value: "30_days", label: "30 days" },
+  { value: "60_days", label: "60 days" },
+  { value: "90_days", label: "90 days" },
+  { value: "serving_notice", label: "Serving notice" },
+];
+
+export function noticePeriodLabel(value) {
+  return NOTICE_PERIODS.find((n) => n.value === value)?.label || value;
+}

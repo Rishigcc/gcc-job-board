@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader";
 import Footer from "../components/Footer";
 import Seo from "../components/Seo";
+import ApplyPanel from "../components/ApplyPanel";
 import { WORK_MODES, EMPLOYMENT_TYPES } from "../lib/jobOptions";
 import { fetchJob } from "../lib/publicJobs";
 import {
@@ -62,6 +63,7 @@ function Shell({ children }) {
 
 function GccJobDetail() {
   const { slugId } = useParams();
+  const [params] = useSearchParams();
   const { id, slug } = parseJobParam(slugId);
 
   const [fetched, setFetched] = useState({ status: "loading" });
@@ -246,16 +248,14 @@ function GccJobDetail() {
           </div>
         </div>
 
-        {/* Stage 6. A placeholder that says what it is, rather than a button
-            that does nothing. */}
-        <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
-          <h2 className="text-lg font-bold text-slate-900">Apply for this role</h2>
-          <p className="mx-auto mt-2 max-w-md text-slate-600">
-            Applying is built in the next stage. When it is ready, you will
-            upload a resume here and the recruiter will see your application
-            straight away.
-          </p>
-        </div>
+        {/* ?apply=1 is what the sign-in round trip comes back with, so
+            someone who signed in to apply lands on an open form rather than
+            on a button they have to find and press again. */}
+        <ApplyPanel
+          job={job}
+          agency={agency}
+          openByDefault={params.get("apply") === "1"}
+        />
       </main>
 
       <Footer />

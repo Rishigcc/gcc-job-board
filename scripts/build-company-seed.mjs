@@ -16,9 +16,14 @@
 // HOW TO RUN IT
 //   node scripts/build-company-seed.mjs path/to/companies.txt
 //
-//   It writes supabase/migrations/007_seed_companies.sql and prints a report:
+//   It writes supabase/seed/companies.sql and prints a report:
 //   how many names were read, how many survive, and every pair that collided
 //   so they can be checked by eye before the migration is run.
+//
+// WHY supabase/seed/ AND NOT supabase/migrations/
+//   It is data, not schema. Keeping it out of the numbered sequence means
+//   the seed does not have to be renumbered every time a stage adds a real
+//   migration, and re-running it is always safe.
 //
 // WHY A GENERATED FILE AND NOT A COPY-PASTE
 //   public.companies.slug is unique. Two names that slugify the same way
@@ -76,7 +81,7 @@ function q(value) {
 }
 
 const sql = `-- ===========================================================================
--- 007_seed_companies.sql
+-- companies.sql
 --
 -- Seeds public.companies so the hiring-company picker is useful to the first
 -- recruiter who uses it rather than empty.
@@ -103,7 +108,7 @@ ${rows.join(",\n")}
 on conflict (slug) do nothing;
 `;
 
-const out = "supabase/migrations/007_seed_companies.sql";
+const out = "supabase/seed/companies.sql";
 writeFileSync(out, sql);
 
 console.log(`read       ${lines.length} lines`);
