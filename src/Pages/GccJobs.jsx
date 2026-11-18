@@ -5,7 +5,6 @@ import Footer from "../components/Footer";
 import Seo from "../components/Seo";
 import GccJobCard from "../components/GccJobCard";
 import Pagination from "../components/Pagination";
-import { WORK_MODES } from "../lib/jobOptions";
 import { fetchFacets, fetchJobs, JOBS_PER_PAGE } from "../lib/publicJobs";
 
 // ===========================================================================
@@ -27,23 +26,20 @@ const selectClass =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 " +
   "focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100";
 
-const workModeLabel = (value) =>
-  WORK_MODES.find((m) => m.value === value)?.label || value;
-
 function GccJobs() {
   const [params, setParams] = useSearchParams();
 
   const search = params.get("q") || "";
   const city = params.get("city") || "";
   const jobFunction = params.get("function") || "";
-  const workMode = params.get("mode") || "";
+  const band = params.get("exp") || "";
   const page = Math.max(1, Number(params.get("page") || 1));
 
   // The box is a separate piece of state from the URL so that typing does not
   // fire a query per keystroke. The URL is updated on submit.
   const [draft, setDraft] = useState(search);
 
-  const [facets, setFacets] = useState({ cities: [], functions: [], workModes: [] });
+  const [facets, setFacets] = useState({ cities: [], functions: [], bands: [] });
 
   // The result carries the query it answers. "Loading" is then derived from
   // whether that matches the query on screen, rather than being a second
@@ -52,7 +48,7 @@ function GccJobs() {
   // disagree about which search they belong to.
   const [result, setResult] = useState({ key: null, jobs: [], total: 0, error: null });
 
-  const queryKey = JSON.stringify({ search, city, jobFunction, workMode, page });
+  const queryKey = JSON.stringify({ search, city, jobFunction, band, page });
   const loading = result.key !== queryKey;
   const error = result.error;
 
@@ -71,7 +67,7 @@ function GccJobs() {
   useEffect(() => {
     let active = true;
 
-    fetchJobs({ search, city, jobFunction, workMode, page }).then((r) => {
+    fetchJobs({ search, city, jobFunction, band, page }).then((r) => {
       if (!active) return;
       setResult({ key: queryKey, jobs: r.jobs, total: r.total, error: r.error });
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -80,7 +76,7 @@ function GccJobs() {
     return () => {
       active = false;
     };
-  }, [search, city, jobFunction, workMode, page, queryKey]);
+  }, [search, city, jobFunction, band, page, queryKey]);
 
   // Any change to a filter resets to page 1: staying on page 4 of a result
   // set that now has one page shows an empty list and looks broken.
@@ -101,7 +97,7 @@ function GccJobs() {
     setParams(new URLSearchParams());
   };
 
-  const filtered = Boolean(search || city || jobFunction || workMode);
+  const filtered = Boolean(search || city || jobFunction || band);
   const totalPages = Math.max(1, Math.ceil(result.total / JOBS_PER_PAGE));
   const first = result.total === 0 ? 0 : (page - 1) * JOBS_PER_PAGE + 1;
   const last = Math.min(page * JOBS_PER_PAGE, result.total);
@@ -177,15 +173,19 @@ function GccJobs() {
               ))}
             </select>
 
+            {/* Experience, not work mode. GCC roles are overwhelmingly
+                on-site or hybrid so that filter barely splits the set, and
+                most of this audience is early to mid career, where
+                experience is the first thing they screen on. */}
             <select
-              aria-label="Filter by work mode"
+              aria-label="Filter by experience"
               className={selectClass}
-              value={workMode}
-              onChange={(event) => update({ mode: event.target.value })}
+              value={band}
+              onChange={(event) => update({ exp: event.target.value })}
             >
-              <option value="">On-site, hybrid or remote</option>
-              {facets.workModes.map((m) => (
-                <option key={m} value={m}>{workModeLabel(m)}</option>
+              <option value="">Any experience</option>
+              {facets.bands.map((b) => (
+                <option key={b.value} value={b.value}>{b.label}</option>
               ))}
             </select>
           </div>

@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { sanitise } from "./jobDisplay";
+import { EXPERIENCE_BANDS, findBand, jobMatchesBand, sanitise } from "./jobDisplay";
 
 // ===========================================================================
 // Reading directly-posted jobs as a candidate sees them.
@@ -35,18 +35,22 @@ const DETAIL_COLUMNS = CARD_COLUMNS + ", description";
 export async function fetchFacets() {
   const { data, error } = await supabase
     .from("jobs")
-    .select("city, job_function, work_mode")
+    .select("city, job_function, experience_min, experience_max")
     .limit(1000);
 
-  if (error) return { cities: [], functions: [], workModes: [], error };
+  if (error) return { cities: [], functions: [], bands: [], error };
 
+  const rows = data || [];
   const uniq = (key) =>
-    [...new Set((data || []).map((row) => row[key]).filter(Boolean))].sort();
+    [...new Set(rows.map((row) => row[key]).filter(Boolean))].sort();
 
   return {
     cities: uniq("city"),
     functions: uniq("job_function"),
-    workModes: uniq("work_mode"),
+    // Same rule as the other two: only offer a band some role falls into.
+    bands: EXPERIENCE_BANDS.filter((band) =>
+      rows.some((row) => jobMatchesBand(row, band))
+    ),
     error: null,
   };
 }
@@ -68,7 +72,7 @@ export async function fetchFacets() {
 // into the same `or` as an id list. Two small round trips rather than one
 // clever query.
 // ---------------------------------------------------------------------------
-export async function fetchJobs({ search, city, jobFunction, workMode, page }) {
+export async function fetchJobs({ search, city, jobFunction, band, page }) {
   const term = sanitise(search);
 
   let companyIds = [];
@@ -90,7 +94,12 @@ export async function fetchJobs({ search, city, jobFunction, workMode, page }) {
 
   if (city) query = query.eq("city", city);
   if (jobFunction) query = query.eq("job_function", jobFunction);
-  if (workMode) query = query.eq("work_mode", workMode);
+
+  // Range overlap, so a 3-8 year role is found under both 3-5 and 6-10.
+  const range = findBand(band);
+  if (range) {
+    query = query.lte("experience_min", range.max).gte("experience_max", range.min);
+  }
 
   if (term) {
     const clauses = [

@@ -322,7 +322,7 @@ Rishi's decisions at sign-off:
   barely splits the set, and ~75% of the audience is early to mid career,
   where experience is the first screen. Bands overlap by design: a 3–8 year
   role appears in both 3–5 and 6–10. Work mode may become a fourth filter
-  later. **Not yet built — this is the first item of stage 6's Part 0.**
+  later. Built, with overlap tested in `scripts/stage5-display-test.mjs`.
 - **`/gcc-jobs` is not linked in the nav yet.** Linking a near-empty page
   from the header makes the board look dead while he is recruiting
   recruiters. Revisit at five or more real direct postings, roughly when

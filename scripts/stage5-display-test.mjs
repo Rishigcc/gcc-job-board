@@ -29,6 +29,9 @@ import {
   formatSalary,
   formatPosted,
   formatCloses,
+  findBand,
+  jobMatchesBand,
+  EXPERIENCE_BANDS,
 } from "../src/lib/jobDisplay.js";
 
 let pass = 0, fail = 0;
@@ -109,6 +112,31 @@ t("closes today", formatCloses(daysFromNow(0)), "Closes today");
 t("tomorrow", formatCloses(daysFromNow(0.5)), "Closes tomorrow");
 t("ten days", formatCloses(daysFromNow(9.5)), "Closes in 10 days");
 t("already past", formatCloses(daysFromNow(-1)), "This role has closed");
+
+// ---------------------------------------------------------------------------
+// Experience bands. A band matches a job when the two RANGES OVERLAP, which
+// Rishi chose deliberately: matching only on the job's minimum would hide a
+// 3-8 year role from someone with seven years' experience.
+// ---------------------------------------------------------------------------
+const band = (v) => findBand(v);
+const job = (min, max) => ({ experience_min: min, experience_max: max });
+
+console.log("\nexperience bands -- overlap, not containment");
+t("a 3-8 year role appears under 3-5",  jobMatchesBand(job(3, 8), band("3-5")), true);
+t("the same role appears under 6-10",   jobMatchesBand(job(3, 8), band("6-10")), true);
+t("and not under 0-2",                  jobMatchesBand(job(3, 8), band("0-2")), false);
+t("and not under 10+",                  jobMatchesBand(job(3, 8), band("10+")), false);
+t("a role exactly on the lower edge",   jobMatchesBand(job(5, 9), band("3-5")), true);
+t("a role exactly on the upper edge",   jobMatchesBand(job(0, 3), band("3-5")), true);
+t("a fresher role is 0-2 only",         jobMatchesBand(job(0, 0), band("0-2")), true);
+t("a fresher role is not 3-5",          jobMatchesBand(job(0, 0), band("3-5")), false);
+t("a 14-20 year role is 10+",           jobMatchesBand(job(14, 20), band("10+")), true);
+t("a role at exactly 10 is in 6-10",    jobMatchesBand(job(10, 10), band("6-10")), true);
+t("and also in 10+, by design",         jobMatchesBand(job(10, 10), band("10+")), true);
+t("no band means no filter",            jobMatchesBand(job(3, 8), null), true);
+t("an unknown band value is no filter", findBand("nonsense"), null);
+t("every band is reachable: 0 to 50 spans all four",
+  EXPERIENCE_BANDS.filter((b) => jobMatchesBand(job(0, 50), b)).length, 4);
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

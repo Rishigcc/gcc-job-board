@@ -101,3 +101,37 @@ export function sanitise(term) {
   return (term || "").replace(/[,()%*"\\]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+
+// ---------------------------------------------------------------------------
+// Experience bands.
+//
+// A band matches a job when the two RANGES OVERLAP, not when the job sits
+// inside the band. A role advertised at 3-8 years appears under both "3-5"
+// and "6-10", because it is genuinely open to both people. Rishi accepted
+// that overlap explicitly: the alternative, matching only on the minimum,
+// hides a 3-8 year role from someone with seven years' experience, which is
+// the opposite of what a filter is for.
+//
+// Overlap is `job.min <= band.max AND job.max >= band.min`, which is two
+// plain comparisons in the query -- no OR string to escape, and both columns
+// are plain ints.
+//
+// The top band runs to 50 because that is the CHECK constraint's ceiling on
+// experience_max in migration 001.
+// ---------------------------------------------------------------------------
+export const EXPERIENCE_BANDS = [
+  { value: "0-2", label: "0–2 years", min: 0, max: 2 },
+  { value: "3-5", label: "3–5 years", min: 3, max: 5 },
+  { value: "6-10", label: "6–10 years", min: 6, max: 10 },
+  { value: "10+", label: "10+ years", min: 10, max: 50 },
+];
+
+export function findBand(value) {
+  return EXPERIENCE_BANDS.find((b) => b.value === value) || null;
+}
+
+export function jobMatchesBand(job, band) {
+  if (!band) return true;
+  if (job.experience_min === null || job.experience_max === null) return false;
+  return job.experience_min <= band.max && job.experience_max >= band.min;
+}
