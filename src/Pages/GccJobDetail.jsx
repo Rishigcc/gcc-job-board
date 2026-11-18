@@ -24,9 +24,6 @@ import {
 // serving the same job on two URLs.
 //
 // noindex until stage 10 renders these server-side.
-//
-// WHAT IS NOT HERE: applying. That is stage 6. The panel at the bottom says
-// so rather than showing a button that does nothing.
 // ===========================================================================
 
 const workModeLabel = (value) =>
@@ -162,37 +159,42 @@ function GccJobDetail() {
           ← All roles
         </Link>
 
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                {job.title}
-              </h1>
-              {company ? (
-                <p className="mt-1 text-lg font-semibold text-slate-700">{company}</p>
-              ) : null}
-            </div>
+        {/* THE SIDEBAR RUNS THE FULL HEIGHT OF THE CARD.
+            The earlier attempt made the grey panel match the DESCRIPTION
+            column, which still left white card above it (the title block
+            spanned the full width) and white below it (the card's own
+            padding). So the card itself is now the grid: its padding is
+            given to each column instead, the grey is a column rather than a
+            box sitting inside one, and overflow-hidden lets it meet the
+            rounded corners. Grid items stretch by default, so the colour
+            reaches the bottom whichever column is taller. */}
+        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="grid md:grid-cols-[1fr_270px]">
+            <div className="min-w-0 p-6 sm:p-8">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                    {job.title}
+                  </h1>
+                  {company ? (
+                    <p className="mt-1 text-lg font-semibold text-slate-700">{company}</p>
+                  ) : null}
+                </div>
 
-            {job.companies?.logo_url ? (
-              <img
-                src={job.companies.logo_url}
-                alt=""
-                className="h-14 w-14 shrink-0 rounded-xl object-contain"
-              />
-            ) : null}
-          </div>
+                {job.companies?.logo_url ? (
+                  <img
+                    src={job.companies.logo_url}
+                    alt=""
+                    className="h-14 w-14 shrink-0 rounded-xl object-contain"
+                  />
+                ) : null}
+              </div>
 
-          <p className="mt-3 text-sm text-slate-500">
-            {formatPosted(job.published_at)} · {formatCloses(job.expires_at)}
-          </p>
+              <p className="mt-3 text-sm text-slate-500">
+                {formatPosted(job.published_at)} · {formatCloses(job.expires_at)}
+              </p>
 
-          {/* The grid stretches both columns to the taller of the two, but
-              the panel INSIDE the sidebar was only as tall as its own
-              content, leaving a block of empty card below it. h-full on the
-              dl is what closes that gap. */}
-          <div className="mt-6 grid items-stretch gap-8 md:grid-cols-[1fr_260px]">
-            <div className="min-w-0">
-              <h2 className="text-base font-bold text-slate-900">About the role</h2>
+              <h2 className="mt-7 text-base font-bold text-slate-900">About the role</h2>
 
               {/* Plain text from the recruiter, rendered as text. Line breaks
                   are preserved by CSS; nothing here is ever parsed as HTML. */}
@@ -217,8 +219,8 @@ function GccJobDetail() {
               ) : null}
             </div>
 
-            <aside>
-              <dl className="h-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-1">
+            <aside className="border-t border-slate-200 bg-slate-50 px-6 py-3 sm:px-8 md:border-l md:border-t-0 md:px-6">
+              <dl>
                 <Fact label="Location">{job.city}</Fact>
                 <Fact label="Work mode">{workModeLabel(job.work_mode)}</Fact>
                 <Fact label="Experience">{experience || "Not stated"}</Fact>

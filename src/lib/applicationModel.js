@@ -18,7 +18,13 @@ export const MAX_RESUME_BYTES = 2 * 1024 * 1024;
 // Mirrors the CHECK constraints on public.applications. Same contract as the
 // posting form: the database stays the enforcement, this turns a constraint
 // name into a sentence.
-export function validateApplication(v) {
+// `hasResumeOnFile` is the one rule that is not a CHECK constraint, because
+// the resume is no longer a column on the application at all (migration 008).
+// It lives on the candidate, and applying to a second role reuses it. So the
+// form needs a file only when there is nothing on file yet -- and the
+// database enforces the same thing from the other side: private
+// .applications_guard() refuses an insert by a candidate with no resume row.
+export function validateApplication(v, { hasResumeOnFile = false } = {}) {
   const e = {};
 
   const name = (v.full_name || "").trim();
@@ -39,8 +45,8 @@ export function validateApplication(v) {
     e.notice_period = "Choose a notice period from the list.";
   }
 
-  if (!v.resume) e.resume = "Attach your resume as a PDF.";
-  else if (v.resume.size > MAX_RESUME_BYTES) {
+  if (!v.resume && !hasResumeOnFile) e.resume = "Attach your resume as a PDF.";
+  else if (v.resume && v.resume.size > MAX_RESUME_BYTES) {
     e.resume = "That file is larger than 2 MB. Most resumes are well under that.";
   }
 

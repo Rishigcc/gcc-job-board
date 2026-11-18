@@ -39,7 +39,12 @@ const t = (name, got, want) => {
   ok ? pass++ : fail++;
 };
 
-const keys = (values) => Object.keys(validateApplication(values)).sort();
+// The second argument is the one rule that is not a CHECK constraint: a
+// resume already on the candidate's account (migration 008) means the form
+// needs no file at all. Default false, so every existing case still reads as
+// "this candidate has never uploaded anything".
+const keys = (values, opts) =>
+  Object.keys(validateApplication(values, opts)).sort();
 
 const file = (size) => ({ name: "cv.pdf", size });
 
@@ -86,6 +91,20 @@ console.log("\nresume -- 2 MB, matching the bucket's file_size_limit");
 t("missing rejected",            keys({ ...base, resume: null }), ["resume"]);
 t("exactly 2 MB accepted",       keys({ ...base, resume: file(MAX_RESUME_BYTES) }), []);
 t("one byte over rejected",      keys({ ...base, resume: file(MAX_RESUME_BYTES + 1) }), ["resume"]);
+
+console.log("\nresume on file -- one resume per candidate, reused across roles");
+t("no file needed when one is already on file",
+  keys({ ...base, resume: null }, { hasResumeOnFile: true }), []);
+t("still required when nothing is on file",
+  keys({ ...base, resume: null }, { hasResumeOnFile: false }), ["resume"]);
+t("a replacement is still size-checked, on file or not",
+  keys({ ...base, resume: file(MAX_RESUME_BYTES + 1) }, { hasResumeOnFile: true }), ["resume"]);
+t("a valid replacement is accepted",
+  keys({ ...base, resume: file(300 * 1024) }, { hasResumeOnFile: true }), []);
+t("a resume on file does not excuse the other fields",
+  keys({ full_name: "", email: "", phone: "", notice_period: "", resume: null, consent: false },
+       { hasResumeOnFile: true }),
+  ["consent", "email", "full_name", "notice_period"].sort());
 
 console.log("\nconsent -- a timestamp in the database, a gate here");
 t("unticked rejected", keys({ ...base, consent: false }), ["consent"]);

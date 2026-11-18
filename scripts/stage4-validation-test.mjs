@@ -31,6 +31,7 @@
 // ===========================================================================
 
 import { validateJob, EMPTY_JOB } from "../src/lib/jobFormModel.js";
+import { liveSlotsLabel } from "../src/lib/jobOptions.js";
 
 const base = {
   ...EMPTY_JOB,
@@ -148,6 +149,30 @@ t("punctuation-only accepted when an existing row was picked",
 console.log("\nan empty form reports every required field at once");
 t("EMPTY_JOB", EMPTY_JOB,
   ["title","company_name","city","work_mode","job_function","experience_min","experience_max","description"]);
+
+// ---------------------------------------------------------------------------
+// The slot counter. The cap is enforced in the INSERT POLICY, not in this
+// form, so the live count can legitimately exceed it -- a seeded batch, an
+// admin fix, verification lifting the cap after the fact. "25 of 10 roles
+// live" is an honest number in a sentence that reads like a broken counter.
+// ---------------------------------------------------------------------------
+const label = (name, got, want) => {
+  const ok = got === want;
+  console.log(`${ok ? "  PASS" : "  FAIL"}  ${name}`);
+  if (!ok) console.log(`          want ${JSON.stringify(want)}  got ${JSON.stringify(got)}`);
+  ok ? pass++ : fail++;
+};
+
+console.log("\nthe live-roles counter");
+label("none live",            liveSlotsLabel(0),  "0 of 10 roles live.");
+label("one live is still 'roles' -- the noun belongs to the cap",
+                              liveSlotsLabel(1),  "1 of 10 roles live.");
+label("mid-range",            liveSlotsLabel(7),  "7 of 10 roles live.");
+label("exactly at the cap",   liveSlotsLabel(10), "10 of 10 roles live.");
+label("one over the cap reads as a count, not a fraction",
+                              liveSlotsLabel(11), "11 roles live (limit 10).");
+label("well over the cap",    liveSlotsLabel(25), "25 roles live (limit 10).");
+label("a cap of 1 is singular", liveSlotsLabel(0, 1), "0 of 1 role live.");
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

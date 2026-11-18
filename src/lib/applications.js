@@ -4,12 +4,19 @@ export { MAX_RESUME_BYTES, validateApplication } from "./applicationModel";
 // ===========================================================================
 // Applying to a job.
 //
-// Two writes, in this order, and the order matters: the resume is uploaded
-// first and the application row is written second. If the row fails, an
-// orphaned file sits in the bucket costing nothing and visible to nobody.
-// If it were the other way round, a failed upload would leave an application
-// pointing at a resume that does not exist -- which a recruiter would see as
-// a candidate who applied with no CV.
+// THE RESUME IS NOT PART OF THE APPLICATION ROW (migration 008)
+//   It lives on the candidate, one per person, in public.candidate_resumes.
+//   Applying to a sixth role does not mean finding the file a sixth time.
+//   The cost of that is that a recruiter always sees the current document
+//   rather than the one that was sent -- which is why the date it was last
+//   updated travels with it and is shown beside the recruiter's download.
+//
+// WHEN A FILE IS SENT, IT IS SENT FIRST
+//   The upload is a separate request to our own endpoint, and it completes
+//   before the application row is written. If the row then fails, an orphan
+//   sits in a private bucket costing nothing. The other order would leave an
+//   application by someone with no resume at all -- which the database now
+//   refuses outright, so it would simply be a worse error.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
@@ -53,12 +60,32 @@ async function uploadResume(file) {
     return { error: { message: payload.error || "The resume could not be uploaded." } };
   }
 
-  return { path: payload.path };
+  return { path: payload.path, updatedAt: payload.updated_at };
 }
 
-export async function submitApplication({ job, values, userId }) {
-  const upload = await uploadResume(values.resume);
-  if (upload.error) return { error: upload.error };
+// The resume on file, if there is one. Readable only by its owner: the
+// select policy on candidate_resumes is candidate_id = auth.uid(), and there
+// is no policy for anyone else except an admin.
+export async function fetchMyResume(userId) {
+  const { data } = await supabase
+    .from("candidate_resumes")
+    .select("resume_path, updated_at")
+    .eq("candidate_id", userId)
+    .maybeSingle();
+
+  return data || null;
+}
+
+export async function submitApplication({ job, values, userId, hasResumeOnFile }) {
+  // A file is only sent when one was chosen -- either because nothing is on
+  // file yet, or because this is a deliberate replacement. Uploading replaces
+  // the resume everywhere, which the form says before the button is pressed.
+  if (values.resume) {
+    const upload = await uploadResume(values.resume);
+    if (upload.error) return { error: upload.error };
+  } else if (!hasResumeOnFile) {
+    return { error: { message: "Attach your resume as a PDF before sending this." } };
+  }
 
   const { error } = await supabase.from("applications").insert({
     job_id: job.id,
@@ -67,9 +94,9 @@ export async function submitApplication({ job, values, userId }) {
     email: values.email.trim(),
     phone: values.phone.trim() || null,
     notice_period: values.notice_period,
-    resume_path: upload.path,
-    // consent_at and status are not granted columns. The server clock
-    // records when consent was given; the default status is 'applied'.
+    // No resume_path: the column is gone. consent_at and status are not
+    // granted columns either -- the server clock records when consent was
+    // given, and the default status is 'applied'.
   });
 
   if (!error) return { ok: true };

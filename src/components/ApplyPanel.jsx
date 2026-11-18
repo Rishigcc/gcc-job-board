@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabase";
 import { setPostLoginRedirect } from "../lib/postLoginRedirect";
 import { NOTICE_PERIODS, noticePeriodLabel } from "../lib/jobOptions";
 import { jobPath } from "../lib/jobDisplay";
-import { fetchMyApplication, submitApplication } from "../lib/applications";
+import { fetchMyApplication, fetchMyResume, submitApplication } from "../lib/applications";
 import { MAX_RESUME_BYTES, validateApplication } from "../lib/applicationModel";
 
 // ===========================================================================
@@ -22,6 +22,12 @@ import { MAX_RESUME_BYTES, validateApplication } from "../lib/applicationModel";
 //   the profile. An application is a record of what someone said on the day.
 //   Changing your display name next month must not rewrite applications you
 //   already sent.
+//
+//   The resume is the deliberate exception. It lives on the candidate, one
+//   per person, so applying to a sixth role is four fields and a button
+//   rather than hunting for a file again. The consequence is stated on the
+//   form before anyone presses Replace: a new upload becomes the resume for
+//   every application, including ones already sent.
 // ===========================================================================
 
 const inputClass =
@@ -57,11 +63,20 @@ function Panel({ tone = "plain", children }) {
   );
 }
 
+const longDate = (value) =>
+  new Date(value).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
 function ApplyPanel({ job, agency, openByDefault }) {
   const navigate = useNavigate();
 
   const [session, setSession] = useState(undefined);
   const [existing, setExisting] = useState(undefined);
+  const [resumeOnFile, setResumeOnFile] = useState(undefined);
+  const [replacing, setReplacing] = useState(false);
   const [open, setOpen] = useState(Boolean(openByDefault));
 
   const [values, setValues] = useState({
@@ -89,6 +104,7 @@ function ApplyPanel({ job, agency, openByDefault }) {
 
       if (!next) {
         setExisting(null);
+        setResumeOnFile(null);
         return;
       }
 
@@ -102,8 +118,15 @@ function ApplyPanel({ job, agency, openByDefault }) {
         email: v.email || next.user.email || "",
       }));
 
-      fetchMyApplication(job.id, next.user.id).then((row) => {
-        if (active) setExisting(row);
+      // In parallel: have they applied to this role, and is there already a
+      // resume on their account from another one?
+      Promise.all([
+        fetchMyApplication(job.id, next.user.id),
+        fetchMyResume(next.user.id),
+      ]).then(([row, resume]) => {
+        if (!active) return;
+        setExisting(row);
+        setResumeOnFile(resume);
       });
     });
 
@@ -112,7 +135,10 @@ function ApplyPanel({ job, agency, openByDefault }) {
     };
   }, [job.id]);
 
-  const errors = touched ? validateApplication(values) : {};
+  // A file is required only when there is nothing on file. The same rule is
+  // enforced in the database by private.applications_guard().
+  const hasResumeOnFile = Boolean(resumeOnFile);
+  const errors = touched ? validateApplication(values, { hasResumeOnFile }) : {};
   const errorCount = Object.keys(errors).length;
 
   const set = (key) => (event) =>
@@ -122,7 +148,7 @@ function ApplyPanel({ job, agency, openByDefault }) {
     event.preventDefault();
     setTouched(true);
 
-    const found = validateApplication(values);
+    const found = validateApplication(values, { hasResumeOnFile });
     if (Object.keys(found).length > 0) {
       requestAnimationFrame(() => {
         document
@@ -139,6 +165,7 @@ function ApplyPanel({ job, agency, openByDefault }) {
       job,
       values,
       userId: session.user.id,
+      hasResumeOnFile,
     });
 
     if (result.error) {
@@ -153,7 +180,7 @@ function ApplyPanel({ job, agency, openByDefault }) {
 
   // ---------------------------------------------------------------- states
 
-  if (session === undefined || existing === undefined) {
+  if (session === undefined || existing === undefined || resumeOnFile === undefined) {
     return (
       <Panel>
         <p className="text-slate-500">Loading…</p>
@@ -164,7 +191,9 @@ function ApplyPanel({ job, agency, openByDefault }) {
   if (submitted) {
     return (
       <Panel tone="done">
-        <h2 className="text-lg font-bold text-emerald-950">Application sent</h2>
+        <h2 className="text-lg font-bold text-emerald-950">
+          You have applied to this job
+        </h2>
         <p className="mt-2 text-[15px] leading-relaxed text-emerald-900">
           Your resume and details have gone to the recruiter for{" "}
           <strong>{job.title}</strong>
@@ -181,9 +210,12 @@ function ApplyPanel({ job, agency, openByDefault }) {
           </p>
         ) : null}
 
+        {/* Says only what is true today. It deliberately stops short of
+            promising we will never email about an application: candidate
+            email is deferred, not ruled out, and published copy should not
+            have to be walked back. */}
         <p className="mt-3 text-sm text-emerald-900">
-          Recruiters contact candidates directly. We do not chase them on your
-          behalf, and we will not email you about this application.
+          Recruiters contact candidates directly.
         </p>
       </Panel>
     );
@@ -192,17 +224,23 @@ function ApplyPanel({ job, agency, openByDefault }) {
   if (existing) {
     return (
       <Panel tone="done">
-        <h2 className="text-lg font-bold text-emerald-950">You have applied to this role</h2>
+        {/* Same sentence as the confirmation panel above: this is the same
+            fact, read a minute later or a week later. */}
+        <h2 className="text-lg font-bold text-emerald-950">
+          You have applied to this job
+        </h2>
         <p className="mt-2 text-[15px] text-emerald-900">
-          Sent on{" "}
-          {new Date(existing.created_at).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
-          , with a notice period of {noticePeriodLabel(existing.notice_period).toLowerCase()}.
-          Only one application per role is kept.
+          Sent on {longDate(existing.created_at)}, with a notice period of{" "}
+          {noticePeriodLabel(existing.notice_period).toLowerCase()}. Only one
+          application per role is kept.
         </p>
+
+        {resumeOnFile ? (
+          <p className="mt-2 text-sm text-emerald-900">
+            The recruiter sees the resume on your account, updated{" "}
+            {longDate(resumeOnFile.updated_at)}.
+          </p>
+        ) : null}
       </Panel>
     );
   }
@@ -248,8 +286,9 @@ function ApplyPanel({ job, agency, openByDefault }) {
       <Panel>
         <h2 className="text-lg font-bold text-slate-900">Apply for this role</h2>
         <p className="mt-2 max-w-lg text-[15px] leading-relaxed text-slate-700">
-          A PDF resume and four short answers. The recruiter sees it straight
-          away — there is no queue at our end.
+          {resumeOnFile
+            ? "Four short answers. Your resume is already on file, so there is nothing to upload."
+            : "A PDF resume and four short answers. The recruiter sees it straight away — there is no queue at our end."}
         </p>
 
         <button
@@ -312,28 +351,71 @@ function ApplyPanel({ job, agency, openByDefault }) {
           </Field>
         </div>
 
+        {/* One resume per candidate. Someone applying to their fifth role
+            should not be looking for the file again -- and the one thing
+            that is NOT obvious, that replacing it changes what every
+            recruiter sees, is said before the button, not after it. */}
         <Field
           label="Resume"
-          htmlFor="resume"
+          htmlFor={resumeOnFile && !replacing ? undefined : "resume"}
           required
-          hint="PDF only, up to 2 MB. We check the file itself, not its name — a document renamed to .pdf is refused."
+          hint={
+            resumeOnFile && !replacing
+              ? "This is the resume every recruiter you apply to will see."
+              : resumeOnFile
+                ? "PDF only, up to 2 MB. This replaces the resume on your account for every role, including ones you have already applied to."
+                : "PDF only, up to 2 MB. We check the file itself, not its name — a document renamed to .pdf is refused. It is kept on your account, so you only upload it once."
+          }
           error={errors.resume}
         >
-          <input
-            id="resume"
-            type="file"
-            accept="application/pdf,.pdf"
-            onChange={(event) =>
-              setValues((v) => ({ ...v, resume: event.target.files?.[0] || null }))
-            }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700"
-          />
-          {values.resume ? (
-            <p className="mt-1 text-xs text-slate-500">
-              {values.resume.name} · {(values.resume.size / 1024).toFixed(0)} KB
-              {values.resume.size > MAX_RESUME_BYTES ? " — too large" : ""}
-            </p>
-          ) : null}
+          {resumeOnFile && !replacing ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5">
+              <p className="text-sm text-slate-800">
+                <strong>Resume on file</strong> — updated{" "}
+                {longDate(resumeOnFile.updated_at)}.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setReplacing(true)}
+                className="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Replace it
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                id="resume"
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={(event) =>
+                  setValues((v) => ({ ...v, resume: event.target.files?.[0] || null }))
+                }
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700"
+              />
+
+              {values.resume ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  {values.resume.name} · {(values.resume.size / 1024).toFixed(0)} KB
+                  {values.resume.size > MAX_RESUME_BYTES ? " — too large" : ""}
+                </p>
+              ) : null}
+
+              {resumeOnFile ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplacing(false);
+                    setValues((v) => ({ ...v, resume: null }));
+                  }}
+                  className="mt-2 text-xs font-semibold text-blue-700 underline"
+                >
+                  Keep the resume already on file
+                </button>
+              ) : null}
+            </>
+          )}
         </Field>
 
         <div data-invalid={errors.consent ? "true" : "false"}>

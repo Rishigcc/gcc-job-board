@@ -25,6 +25,14 @@ import { createClient } from "@supabase/supabase-js";
 //   against Supabase before anything else happens. The destination path is
 //   built here from the verified user id -- it is never accepted as input,
 //   so one candidate cannot write into another's folder.
+//
+// ONE RESUME PER CANDIDATE (migration 008)
+//   This is also the only writer of public.candidate_resumes, which has no
+//   write grant and no write policy for anyone. A candidate uploads once and
+//   applies many times; uploading again replaces what is on file, for every
+//   application including ones already sent. The old object is deleted after
+//   the row has been repointed, never before -- a failed delete leaves an
+//   orphan nobody can reach, a delete in the other order loses a live resume.
 // ===========================================================================
 
 export const config = {
@@ -136,6 +144,14 @@ export default async function handler(req, res) {
     });
   }
 
+  // What is on file now, read before anything is written, so the old object
+  // can be removed once it is no longer referenced.
+  const { data: prior } = await supabase
+    .from("candidate_resumes")
+    .select("resume_path")
+    .eq("candidate_id", userId)
+    .maybeSingle();
+
   // Built here, from the verified user id. Never taken from the request.
   const path = `${userId}/${Date.now()}-${crypto.randomUUID()}.pdf`;
 
@@ -148,7 +164,35 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: "The resume could not be stored. Try again." });
   }
 
-  // The path only. No signed URL: nothing in this stage needs to read the
-  // file back, and a URL handed to the browser is a URL that can be shared.
-  return res.status(200).json({ path });
+  const { data: row, error: rowError } = await supabase
+    .from("candidate_resumes")
+    .upsert({ candidate_id: userId, resume_path: path }, { onConflict: "candidate_id" })
+    .select("updated_at")
+    .single();
+
+  if (rowError) {
+    // The file is uploaded but unreferenced. Leaving the previous resume in
+    // place is the safe failure: the candidate still has one, and this one
+    // is an orphan in a private bucket.
+    console.error("upload-resume: candidate_resumes upsert failed", rowError);
+    return res.status(502).json({ error: "The resume could not be saved. Try again." });
+  }
+
+  // Only now, and only if it is genuinely a different object.
+  if (prior?.resume_path && prior.resume_path !== path) {
+    const { error: removeError } = await supabase.storage
+      .from(BUCKET)
+      .remove([prior.resume_path]);
+
+    // Not fatal: the new resume is already live. An orphan costs storage,
+    // not correctness, and failing the request here would tell the candidate
+    // their upload did not work when it did.
+    if (removeError) {
+      console.error("upload-resume: old resume not removed", prior.resume_path, removeError);
+    }
+  }
+
+  // The path and the date, no signed URL: nothing on the candidate side needs
+  // to read the file back, and a URL handed to the browser can be shared.
+  return res.status(200).json({ path, updated_at: row.updated_at, replaced: Boolean(prior) });
 }

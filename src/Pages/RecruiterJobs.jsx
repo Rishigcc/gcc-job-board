@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRecruiter } from "../lib/useRecruiter";
-import { jobDisplayStatus, countsTowardCap } from "../lib/jobOptions";
+import { jobDisplayStatus, countsTowardCap, liveSlotsLabel } from "../lib/jobOptions";
 import { setJobStatus } from "../lib/jobMutations";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
@@ -122,7 +122,7 @@ function RecruiterJobs() {
             <p className="mt-1.5 text-slate-600">
               {isVerified
                 ? "Your company is verified, so there is no limit on live roles."
-                : `${liveCount} of 10 roles live. Closing a role, or letting one expire, frees a slot.`}
+                : `${liveSlotsLabel(liveCount)} Closing a role, or letting one expire, frees a slot.`}
             </p>
           </div>
 

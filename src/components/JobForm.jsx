@@ -8,6 +8,7 @@ import {
   SALARY_CURRENCIES,
   SALARY_PERIODS,
   DAYS_LIVE,
+  liveSlotsLabel,
 } from "../lib/jobOptions";
 import { EMPTY_JOB, DESCRIPTION_MIN, DESCRIPTION_MAX, validateJob } from "../lib/jobFormModel";
 import CompanyPicker from "./CompanyPicker";
@@ -239,9 +240,7 @@ function JobForm({
           }
         >
           <p className="text-sm text-slate-800">
-            <strong>
-              {slotsUsed} of 10 roles live.
-            </strong>{" "}
+            <strong>{liveSlotsLabel(slotsUsed)}</strong>{" "}
             Until your company is verified you can keep 10 live at a time.
             Closing a role, or letting one expire, frees a slot.
           </p>

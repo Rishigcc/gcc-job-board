@@ -190,6 +190,28 @@ export function countsTowardCap(job) {
   return job.status === "live" && new Date(job.expires_at) > new Date();
 }
 
+export const FREE_LIVE_CAP = 10;
+
+// "3 of 10 roles live." -- except when the count is somehow ABOVE the cap,
+// where "25 of 10 roles live" reads as a broken counter rather than as a
+// number worth trusting.
+//
+// It can genuinely happen. The cap is enforced in the insert policy, so
+// anything written another way -- a seeded batch, an admin fix, a future
+// bulk import -- bypasses it, and the count is then honest while the phrasing
+// is not. Verification also lifts the cap without lowering the count. So the
+// label states the live count first and the limit as an aside.
+export function liveSlotsLabel(liveCount, cap = FREE_LIVE_CAP) {
+  if (liveCount > cap) {
+    // "25 roles live" -- the noun belongs to the count.
+    return `${liveCount} ${liveCount === 1 ? "role" : "roles"} live (limit ${cap}).`;
+  }
+
+  // "1 of 10 roles live" -- the noun belongs to the CAP, not the count, which
+  // is what "1 of 10 role live" got wrong.
+  return `${liveCount} of ${cap} ${cap === 1 ? "role" : "roles"} live.`;
+}
+
 // ---------------------------------------------------------------------------
 // Slugs.
 //

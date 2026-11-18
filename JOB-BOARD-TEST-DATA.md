@@ -344,6 +344,8 @@ Until then, plain and consistent.
 | Test applications | `public.applications` | `delete from public.applications;` — there are none from real people yet | PLANNED |
 | Uploaded test resumes | Storage → `resumes` bucket | Delete the folders by hand in the dashboard. Deleting an application row does **not** delete its file. | PLANNED |
 | `applications` table, `resumes` bucket, two `private` functions | database | `supabase/migrations/007_applications_rollback.sql` — keep them, this is the product | LIVE after migration 007 |
+| Resumes on file | `public.candidate_resumes` | `delete from public.candidate_resumes;` **then** delete the objects in Storage by hand. Deleting the row does not delete the file. | PLANNED |
+| `candidate_resumes` table + guard | database | `supabase/migrations/008_candidate_resumes_rollback.sql` — keep it, this is the product | LIVE after migration 008 |
 
 Notes:
 
@@ -369,6 +371,46 @@ Resumes: the `resumes` bucket is private and **has no policies on
 `storage.objects` at all**, so no client role can read or write it. Every
 upload goes through `/api/upload-resume` under the service key; every
 future download will be a short-lived signed URL minted server-side.
+
+### Stage 6 — one resume per candidate (migration 008)
+
+**This reverses a spec line, on purpose.** Migration 007 stored a resume path
+on every application, so an application recorded exactly what was sent that
+day. Rishi's decision, 18 Nov 2026: candidates should not re-upload for every
+role. The resume now lives on the candidate — one row in
+`public.candidate_resumes` — and every application points at whatever is
+current.
+
+**The trade-off, accepted knowingly.** A recruiter who shortlisted someone in
+March and opens the file in May may be reading a different document. The
+mitigation is `candidate_resumes.updated_at`, shown as "Resume updated on
+&lt;date&gt;" beside the recruiter's download in stage 7. There is no silent
+substitution: the date is always on screen next to the file.
+
+**Nothing writes this table from a browser.** No insert, update or delete
+policy and no write grant — only `/api/upload-resume` under the service key,
+which has already read the file's first bytes and built the path from a
+verified user id. `private.candidate_resumes_guard()` is the second lock: the
+service key bypasses RLS but not triggers, and the trigger pins every path to
+`^<candidate_id>/`.
+
+**Replacing deletes the old object**, but only after the row has been
+repointed. A failed delete leaves an orphan nobody can reach; a delete in the
+other order would lose a live resume.
+
+**An application still cannot exist without a resume.** That used to be the
+`not null` on `applications.resume_path`, which migration 008 drops. It is now
+`private.applications_guard()` refusing an INSERT by a candidate with no
+`candidate_resumes` row — on INSERT only, because stage 8 anonymises by UPDATE
+after the resume is gone.
+
+**Stage 7 owes this:** the "Resume updated on &lt;date&gt;" line beside the
+download. The data is in place; there is no recruiter-facing UI yet to put it
+in.
+
+**Stage 8 owes this:** a standalone "my resume" control, so replacing it does
+not require opening a job. Today the only place to manage it is the apply
+form.
 
 ### Stage 6 — what the file check does and does not do
 
@@ -399,6 +441,7 @@ recruiter downloads a stranger's file.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 13 | **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
 | 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |
