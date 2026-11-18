@@ -228,6 +228,40 @@ no hyphens to match. Punctuation, casing and spacing are all handled.
   of the foreign key. No DELETE grant on `public.jobs` for `authenticated`,
   so this is Rishi's to run in the SQL editor.
 
+### Stage 4 — SIGNED OFF 18 Nov 2026
+
+Three test rounds. Commits `bb66739`, `a6040af`, `6d9729e`, `5f8f9ec`.
+
+Round one passed everything including the cap test and raised nine UI
+issues plus the hiring-company redesign. Round two found the one failure
+that mattered — the duplicate backstop searched names but normalised slugs,
+so a collision could only be discovered by causing it. Round three passed
+clean.
+
+Rishi's decisions recorded at sign-off:
+
+- **Browser Back button: do not schedule the router change.** Converting to
+  a data router rewrites routing for every page including the community
+  pages ~2,492 people use daily, to close a gap on one button in one form
+  in a feature that is not live. Revisit after merge, on its own.
+- **Same-name message: keep the add button suppressed.** A rare recruiter
+  emailing about a genuine collision costs one reply; duplicate company
+  rows cost admin work forever.
+- Applications are in-platform only. `apply_mode` and `external_url` stay
+  in the schema so this is reversible without a migration.
+
+Test data deliberately **kept** for stage 5, because the candidate side
+needs live roles to browse:
+
+| Row | Note |
+|---|---|
+| `Test Co A` | company, 0 jobs |
+| `Test Co B` | company, 1 live job |
+
+The Walmart company row and its test job were deleted during round three —
+a real company name should not sit in the table as a test artifact. Both
+Test Co rows and every test job still go before the merge.
+
 ## Stage 4 onwards
 
 (Appended at the end of each stage.)
