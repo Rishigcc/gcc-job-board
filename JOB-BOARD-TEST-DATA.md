@@ -520,6 +520,72 @@ on `public.applications`, and that is to be left that way.
 
 (Appended at the end of each stage.)
 
+## `public.question_authors` — settled 19 Nov 2026 (migration 010)
+
+Raised by Rishi as its own piece of work, not folded into a stage: the
+Security Advisor flags a Security Definer View on `public.question_authors`,
+which predates the job board. Was it actually a problem?
+
+**Partly, and not where the advisor points.** The view was
+`select id, display_name from profiles`, owned by `postgres`, no
+`security_invoker`, granted to `anon` and `authenticated` — so it bypassed the
+`auth.uid() = id` policy on `profiles`.
+
+**That bypass is necessary.** The Q&A pages must show who wrote what, and RLS
+cannot express "anyone may read the display name but nothing else": a policy
+is row-level, so letting you read a row lets you read every column of it.
+Column grants are the tool for that, and `profiles` grants `authenticated` the
+whole table (`arwdDxtm`), so fixing it there would mean rewriting the
+privileges of the table the whole community depends on.
+
+**The scope was the problem.** Named `question_authors`, it returned every
+profile row:
+
+| | |
+|---|---|
+| Rows the view returned | 2,464 |
+| With a display name | 166 |
+| People who have ever asked, answered or hearted | 97 |
+| **Named but never participated — published for nothing** | **76** |
+
+No email, no avatar, no contact detail. A membership list, not a breach.
+
+**The real risk was structural.** A definer view silently ignores RLS, so
+adding `email` for some future "contact the author" feature would publish
+2,464 addresses with nothing in the way. The advisor flags the shape, not
+today's columns.
+
+**The fix: a function, not a view.** `public.author_names(uuid[])` resolves
+ids the caller already has. There is no `select *`, so there is nothing to
+enumerate — you must know the uuid to learn the name, and every uuid this app
+passes came from questions, answers or hearts in the first place. It is the
+pattern this project already uses for the same problem
+(`public.job_posting_agency`, migration 005). Widening it to return an email
+means changing a signature and every caller, which is a visible act; adding a
+column to a view was not.
+
+**A correction to my own earlier analysis.** I said narrowing could not break
+the app because `authors.js` only ever queries ids taken from questions and
+answers. That was wrong: `NotificationsBell.jsx` also passes the ids of people
+who **hearted** a question or answer, and a hearter need not have posted
+anything. Hence 97 "with a public presence", not 89 authors — and hence a
+function taking explicit ids rather than a narrowed row set being the right
+answer anyway.
+
+**The view is NOT dropped yet, on purpose.** Production serves the main
+branch, which still reads it. Dropping it now would replace every author name
+on the live community with "Community Member" until the branch merges. So the
+view stays, narrowed to 90 rows, and
+`supabase/post-merge/drop_question_authors.sql` removes it after the merge.
+**Until then the advisor will keep flagging it, correctly.**
+
+**Measured sequencing risk.** The prerender runs the real app against the real
+database, so the order matters. With the branch's code and no migration 010,
+prerendered question pages carry **95** "Community Member" fallbacks; with
+author names resolving, **2** (people who genuinely have no display name).
+Run migration 010 **before** the preview rebuilds, or redeploy after it.
+Production is unaffected either way.
+
 ## Carried-forward items (must be done before the final merge)
 
 | # | Item | Raised in | Due |
@@ -529,6 +595,7 @@ on `public.applications`, and that is to be left that way.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
 | 13 | **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
