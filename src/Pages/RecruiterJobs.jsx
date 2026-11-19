@@ -4,6 +4,8 @@ import { supabase } from "../lib/supabase";
 import { useRecruiter } from "../lib/useRecruiter";
 import { jobDisplayStatus, countsTowardCap, liveSlotsLabel } from "../lib/jobOptions";
 import { setJobStatus } from "../lib/jobMutations";
+import { fetchApplicationCounts } from "../lib/recruiterApplications";
+import { applicationCountLabel } from "../lib/applicationDisplay";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
 import Seo from "../components/Seo";
@@ -44,6 +46,10 @@ function RecruiterJobs() {
   const justSaved = searchParams.get("saved");
 
   const [jobs, setJobs] = useState(null);
+  // job_id -> { count, latestAt }. Allowed before verification: a number and
+  // a date say nothing about who applied. Loaded alongside the jobs rather
+  // than per card, so one call covers the whole page.
+  const [counts, setCounts] = useState({});
   const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState(null);
@@ -57,11 +63,14 @@ function RecruiterJobs() {
     let active = true;
 
     const run = async () => {
-      const { data, error } = await supabase
-        .from("jobs")
-        .select(SELECT)
-        .eq("posted_by", user.id)
-        .order("published_at", { ascending: false });
+      const [{ data, error }, countResult] = await Promise.all([
+        supabase
+          .from("jobs")
+          .select(SELECT)
+          .eq("posted_by", user.id)
+          .order("published_at", { ascending: false }),
+        fetchApplicationCounts(),
+      ]);
 
       if (!active) return;
 
@@ -72,6 +81,9 @@ function RecruiterJobs() {
       }
       setLoadError(null);
       setJobs(data || []);
+      // A failed count is not a failed page. The jobs are the point; the
+      // badge just goes quiet.
+      setCounts(countResult.byJob || {});
     };
 
     run();
@@ -212,6 +224,7 @@ function RecruiterJobs() {
           <ul className="mt-6 space-y-3">
             {jobs.map((job) => {
               const display = jobDisplayStatus(job);
+              const applications = counts[job.id] || null;
               const busy = busyId === job.id;
               const canClose = display.key === "live";
               const canReopen = display.key === "closed" && new Date(job.expires_at) > new Date();
@@ -248,6 +261,30 @@ function RecruiterJobs() {
                         {job.apply_mode === "external"
                           ? " · Applications go to your own site"
                           : null}
+                      </p>
+
+                      {/* The count is shown whether or not the company is
+                          verified -- it is the honest number, and it is the
+                          reason to verify. Who applied is a different
+                          question, answered on the other page. */}
+                      <p className="mt-2 text-sm">
+                        {applications ? (
+                          <Link
+                            to={`/recruiter/jobs/${job.id}/applications`}
+                            className="font-semibold text-blue-700 hover:underline"
+                          >
+                            {applicationCountLabel(applications.count)}
+                          </Link>
+                        ) : (
+                          <span className="text-slate-500">
+                            {applicationCountLabel(0)}
+                          </span>
+                        )}
+                        {applications && !isVerified ? (
+                          <span className="text-slate-500">
+                            {" "}— verify your company to see who
+                          </span>
+                        ) : null}
                       </p>
                     </div>
 

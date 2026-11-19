@@ -28,6 +28,7 @@ import RecruiterHome from "./Pages/RecruiterHome.jsx";
 import RecruiterJobs from "./Pages/RecruiterJobs.jsx";
 import RecruiterJobNew from "./Pages/RecruiterJobNew.jsx";
 import RecruiterJobEdit from "./Pages/RecruiterJobEdit.jsx";
+import RecruiterApplications from "./Pages/RecruiterApplications.jsx";
 import RecruiterRoute from "./components/RecruiterRoute.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
 import { isRecruiterUser } from "./lib/accountType";
@@ -262,6 +263,14 @@ function AppRoutes() {
         element={
           <RecruiterRoute>
             <RecruiterJobEdit />
+          </RecruiterRoute>
+        }
+      />
+      <Route
+        path="/recruiter/jobs/:id/applications"
+        element={
+          <RecruiterRoute>
+            <RecruiterApplications />
           </RecruiterRoute>
         }
       />

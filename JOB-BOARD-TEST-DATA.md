@@ -520,6 +520,82 @@ on `public.applications`, and that is to be left that way.
 
 (Appended at the end of each stage.)
 
+## Stage 7 — the recruiter sees applications
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Statuses moved to Shortlisted / Not selected while testing | `public.applications.status` | `update public.applications set status = 'applied';` — or leave it, the rows are going anyway | PLANNED |
+| Four `public.recruiter_*` functions | database | `supabase/migrations/011_recruiter_applications_rollback.sql` — keep them, this is the product | LIVE after migration 011 |
+
+**Nothing else is created by this stage.** No table, no bucket, no row. It adds
+four functions and reads what stage 6 already stored.
+
+### Stage 7 — how the verification gate is enforced
+
+**`public.applications` is untouched.** Migration 011 adds no policy, no grant
+and no column to it. Stage 6's three policies — one INSERT, two SELECT, none
+for recruiters — are exactly as they were tested, and the check queries at the
+bottom of 011 re-print them so a regression is visible on the day.
+
+**Why a policy could not have done this job.** RLS is row-level. A policy that
+lets a recruiter match their applications lets them read *every column* of
+those rows, names and emails included, and there is no second policy that
+takes columns back. Column grants can restrict columns, but a grant is
+per-role, not per-row — it cannot say "this recruiter but not that one".
+Verification is a per-row, per-column rule, so it belongs in a function with a
+named column list.
+
+So: four SECURITY DEFINER functions, each checking ownership and verification
+itself.
+
+| Function | Who | Returns |
+|---|---|---|
+| `recruiter_application_counts()` | any active recruiter | job_id, count, latest date — **no per-candidate row at all** |
+| `recruiter_applications(job_id)` | verified only | nine named columns; **no `candidate_id`**, no `consent_at`, no `resume_path` |
+| `recruiter_resume_path(id)` | verified only | one path, one application at a time |
+| `recruiter_set_application_status(id, status)` | verified only | the stored status; cannot set `withdrawn` |
+
+**An unverified caller gets an empty result, not an error.** That is what
+makes the gate checkable in one browser request: `[]` while applications sit
+in the table. The page does **not** infer "nobody applied" from that — it
+reads `is_verified` from the recruiter's own profile row and shows the gate
+with the count from the counts function. `fetchApplications()` returns
+`gated: true` rather than a bare empty array so that distinction cannot be
+lost in a later edit.
+
+**`candidate_id` is deliberately not returned.** A recruiter has no use for
+the uuid, and withholding it means they cannot carry it to any other table.
+
+### Stage 7 — the resume download, and why it takes two clients
+
+`/api/resume-url` uses two Supabase clients and the split is the security
+property:
+
+- **The database decides whether.** The first client is built with the
+  **publishable** key and the recruiter's own bearer token, so inside
+  `recruiter_resume_path()` `auth.uid()` is the recruiter and the function's
+  checks apply. Null means no — not your job, not verified, suspended,
+  anonymised, no resume — and which one is never reported back.
+- **The service key decides how.** The bucket has no policies on
+  `storage.objects`, so only the service key can read it. It signs the URL and
+  does nothing else.
+
+Doing it the other way round — verifying the token with the service key and
+checking ownership in JavaScript — would put the same authorisation rule in
+two places, and the copy that drifts is always the one nobody is looking at.
+
+The URL lasts **60 seconds** and is never stored. `Content-Disposition` is
+built from the application id, which the server knows and the client does not
+get to choose: a filename from the client would be a header the client writes.
+
+### Stage 7 — the grant rule, applied
+
+Migration 007 granted `service_role` nothing on `public.applications` and
+**migration 011 leaves it that way.** A SECURITY DEFINER function runs as its
+owner, `postgres`, so it needs no grant; and `/api/resume-url` never reads the
+table with the service key. If a later stage finds it needs direct service-key
+access to applications, that is a sign the work belongs in a function instead.
+
 ## `public.question_authors` — settled 19 Nov 2026 (migration 010)
 
 Raised by Rishi as its own piece of work, not folded into a stage: the
