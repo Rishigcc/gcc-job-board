@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { setPostLoginRedirect } from "../lib/postLoginRedirect";
-import { NOTICE_PERIODS, noticePeriodLabel } from "../lib/jobOptions";
+import { NOTICE_PERIODS } from "../lib/jobOptions";
 import { jobPath } from "../lib/jobDisplay";
 import { fetchMyApplication, fetchMyResume, submitApplication } from "../lib/applications";
 import { MAX_RESUME_BYTES, validateApplication } from "../lib/applicationModel";
@@ -229,18 +229,14 @@ function ApplyPanel({ job, agency, openByDefault }) {
         <h2 className="text-lg font-bold text-emerald-950">
           You have applied to this job
         </h2>
+        {/* One line. The notice period is something they typed and can see
+            nowhere useful here; "one application per role" only matters while
+            they are deciding whether to send another, which they cannot; and
+            the resume is already described on the form as the one every
+            recruiter sees. */}
         <p className="mt-2 text-[15px] text-emerald-900">
-          Sent on {longDate(existing.created_at)}, with a notice period of{" "}
-          {noticePeriodLabel(existing.notice_period).toLowerCase()}. Only one
-          application per role is kept.
+          Sent on {longDate(existing.created_at)}.
         </p>
-
-        {resumeOnFile ? (
-          <p className="mt-2 text-sm text-emerald-900">
-            The recruiter sees the resume on your account, updated{" "}
-            {longDate(resumeOnFile.updated_at)}.
-          </p>
-        ) : null}
       </Panel>
     );
   }
@@ -335,7 +331,12 @@ function ApplyPanel({ job, agency, openByDefault }) {
               onChange={set("email")} autoComplete="email" />
           </Field>
 
-          <Field label="Phone" htmlFor="phone" hint="Optional." error={errors.phone}>
+          <Field
+            label="Phone"
+            htmlFor="phone"
+            hint="Optional. An Indian mobile number, 10 digits."
+            error={errors.phone}
+          >
             <input id="phone" type="tel" className={inputClass} value={values.phone}
               onChange={set("phone")} autoComplete="tel" placeholder="+91 98765 43210" />
           </Field>

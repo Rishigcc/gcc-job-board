@@ -171,10 +171,17 @@ export default async function handler(req, res) {
     .single();
 
   if (rowError) {
-    // The file is uploaded but unreferenced. Leaving the previous resume in
-    // place is the safe failure: the candidate still has one, and this one
-    // is an orphan in a private bucket.
     console.error("upload-resume: candidate_resumes upsert failed", rowError);
+
+    // Nothing references the file just uploaded -- the row still points at
+    // the previous resume, or at nothing -- so clean it up rather than leave
+    // an orphan behind on every retry. Only ever the path built above: the
+    // previous resume is still live and must not be touched.
+    const { error: cleanupError } = await supabase.storage.from(BUCKET).remove([path]);
+    if (cleanupError) {
+      console.error("upload-resume: orphan not cleaned up", path, cleanupError);
+    }
+
     return res.status(502).json({ error: "The resume could not be saved. Try again." });
   }
 

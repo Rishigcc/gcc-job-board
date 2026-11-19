@@ -15,6 +15,43 @@ import { NOTICE_PERIODS } from "./jobOptions";
 
 export const MAX_RESUME_BYTES = 2 * 1024 * 1024;
 
+// ---------------------------------------------------------------------------
+// Phone numbers.
+//
+// Optional -- a candidate who would rather not give one still applies. But
+// "777777" was being accepted, and a recruiter who cannot reach someone does
+// not go looking for the real number; the application is simply dead.
+//
+// STRICTER THAN THE DATABASE, ON PURPOSE. The CHECK constraint is only
+// "length between 6 and 20", because a constraint has to hold for every row
+// ever written and a phone format is a product decision that may change. So
+// this is the one rule here that does not mirror a constraint -- it narrows.
+//
+// WHAT COUNTS
+//   Ten digits, first one 6-9. That is the whole of the Indian mobile range;
+//   nothing else is a mobile number.
+//   Optionally prefixed +91, 91 or 0, which is how people actually write it.
+//   Spaces and hyphens anywhere, which is also how people actually write it.
+//
+// WHAT IS DELIBERATELY REJECTED
+//   Landlines, mostly. The field asks for a mobile and a recruiter will text
+//   or call one. Someone whose only number is a landline leaves it blank and
+//   is contacted by email, which is the required field.
+//
+//   "Mostly", because of one hole that cannot be closed. A landline fails on
+//   the digit after the trunk zero -- 011 Delhi, 022 Mumbai, 0484 Kochi --
+//   but 08x and 09x codes do not. "080 2555 1234" is exactly as many digits
+//   as a mobile written "0 8025551234", so nothing can separate a Bangalore
+//   landline from a mobile with a leading zero. Accepting the leading zero
+//   was the requirement, and this is the right way for the error to fall: a
+//   real mobile is never refused, and the cost of the rare landline getting
+//   through is one recruiter dialling a desk.
+// ---------------------------------------------------------------------------
+export function isIndianMobile(input) {
+  const compact = (input || "").replace(/[\s-]/g, "");
+  return /^(?:\+91|91|0)?[6-9]\d{9}$/.test(compact);
+}
+
 // Mirrors the CHECK constraints on public.applications. Same contract as the
 // posting form: the database stays the enforcement, this turns a constraint
 // name into a sentence.
@@ -36,8 +73,18 @@ export function validateApplication(v, { hasResumeOnFile = false } = {}) {
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "That does not look like an email address.";
 
   const phone = (v.phone || "").trim();
-  if (phone && (phone.length < 6 || phone.length > 20)) {
-    e.phone = "A phone number should be between 6 and 20 characters, or left blank.";
+  if (phone) {
+    // The 20-character ceiling is the database's (CHECK length between 6 and
+    // 20), and it is checked first so the form can never accept something the
+    // insert would then refuse with a constraint name -- "+91 9-8-7-6-5-4-3-2
+    // -1-0" is a valid mobile written in 24 characters.
+    if (phone.length > 20) {
+      e.phone = "That is longer than we can store. Write the number without extra spacing.";
+    } else if (!isIndianMobile(phone)) {
+      e.phone =
+        "Enter a 10-digit Indian mobile number, like 98765 43210. " +
+        "+91 or a leading 0 is fine. Leave it blank if you would rather not give one.";
+    }
   }
 
   if (!v.notice_period) e.notice_period = "Choose your notice period.";

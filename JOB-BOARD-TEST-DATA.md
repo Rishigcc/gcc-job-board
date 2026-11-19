@@ -342,7 +342,7 @@ Until then, plain and consistent.
 | What | Where | How to remove | Status |
 |---|---|---|---|
 | Test applications | `public.applications` | `delete from public.applications;` — there are none from real people yet | PLANNED |
-| Uploaded test resumes | Storage → `resumes` bucket | Delete the folders by hand in the dashboard. Deleting an application row does **not** delete its file. | PLANNED |
+| Uploaded test resumes | Storage → `resumes` bucket | Delete the folders by hand in the dashboard. Deleting an application row does **not** delete its file. **Includes orphans from the failed replace attempts before migration 009** — the upload succeeded and the row write failed, so those objects are referenced by nothing. The endpoint now cleans up after itself on that path, but the ones already there predate the fix. | PLANNED |
 | `applications` table, `resumes` bucket, two `private` functions | database | `supabase/migrations/007_applications_rollback.sql` — keep them, this is the product | LIVE after migration 007 |
 | Resumes on file | `public.candidate_resumes` | `delete from public.candidate_resumes;` **then** delete the objects in Storage by hand. Deleting the row does not delete the file. | PLANNED |
 | `candidate_resumes` table + guard | database | `supabase/migrations/008_candidate_resumes_rollback.sql` — keep it, this is the product | LIVE after migration 008 |
@@ -411,6 +411,49 @@ in.
 **Stage 8 owes this:** a standalone "my resume" control, so replacing it does
 not require opening a job. Today the only place to manage it is the apply
 form.
+
+### Stage 6 — the grant migration 008 forgot (migration 009)
+
+**This is the trap most likely to bite stages 7 to 10, so it is written here
+rather than only in the migration.**
+
+Replacing a resume returned 502. The Vercel log: `42501, permission denied
+for table candidate_resumes`. Migration 008 said the only writer was
+`/api/upload-resume` under the service key, then never granted the service
+key anything.
+
+**Why it was not obvious.** In a default Supabase project, a new table in
+`public` inherits read and write for `anon`, `authenticated` **and**
+`service_role`, and the work is in revoking them. This project is not
+default. Its default privileges are:
+
+```
+for role postgres, schema public, tables:
+  postgres=arwdDxtm  anon=Dxtm  authenticated=Dxtm  service_role=Dxtm
+```
+
+`Dxtm` is TRUNCATE, REFERENCES, TRIGGER, MAINTAIN. No insert, select, update
+or delete for **any** of the three API roles. So a new table starts with no
+data access at all and every privilege must be named — including the service
+key's.
+
+> **A new table that server code has to write needs an explicit grant to
+> `service_role`, in the same migration that creates it.**
+
+The community tables already follow this: `profiles` carries an explicit
+SELECT and UPDATE for `service_role`, `questions` / `answers` / the hearts
+tables carry SELECT, and nothing carries INSERT or DELETE. Migrations 007 and
+008 both omitted it; 007 got away with it because no server code writes
+`public.applications` yet. **Stage 7 must not assume it has access.**
+
+Migration 009 grants `select, insert, update` on `candidate_resumes` to
+`service_role` — and deliberately not DELETE, and nothing on `applications`.
+A SECURITY DEFINER function runs as its owner and needs no grant, which is
+how stage 7 should read applications.
+
+`service_role` bypasses RLS but **not** triggers, so
+`private.candidate_resumes_guard()` still pins every path on a service-key
+write.
 
 ### Stage 6 — what the file check does and does not do
 

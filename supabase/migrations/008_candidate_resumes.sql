@@ -102,6 +102,13 @@ create policy "admin reads all resumes" on public.candidate_resumes
 revoke all on public.candidate_resumes from anon, authenticated;
 grant select on public.candidate_resumes to authenticated;
 
+-- INCOMPLETE AS SHIPPED. This file forgot that the service key needs an
+-- explicit grant too: in this project the default privileges give the three
+-- API roles only Dxtm on a new public table, so service_role starts with no
+-- data access either, and /api/upload-resume failed with 42501. The grant is
+-- in 009_service_role_grants.sql, which explains the whole trap. This file is
+-- left as it was run rather than quietly corrected.
+
 -- ---------------------------------------------------------------------------
 -- 4. BACKFILL -- before the old column is dropped, not after
 --

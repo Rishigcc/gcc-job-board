@@ -27,7 +27,7 @@
 //   stage 6 checklist.
 // ===========================================================================
 
-import { validateApplication, MAX_RESUME_BYTES } from "../src/lib/applicationModel.js";
+import { validateApplication, MAX_RESUME_BYTES, isIndianMobile } from "../src/lib/applicationModel.js";
 import { looksLikePdf } from "../api/upload-resume.js";
 
 let pass = 0, fail = 0;
@@ -74,12 +74,49 @@ t("leading at-sign rejected",  keys({ ...base, email: "@example.com" }), ["email
 t("no dot in the domain rejected", keys({ ...base, email: "priya@example" }), ["email"]);
 t("ordinary address accepted", keys({ ...base, email: "p.r+jobs@sub.example.co.in" }), []);
 
-console.log("\nphone -- check (phone is null or length(btrim(phone)) between 6 and 20)");
-t("blank accepted (nullable)", keys({ ...base, phone: "" }), []);
-t("5 chars rejected",          keys({ ...base, phone: "12345" }), ["phone"]);
-t("6 chars accepted",          keys({ ...base, phone: "123456" }), []);
-t("20 chars accepted",         keys({ ...base, phone: "1".repeat(20) }), []);
-t("21 chars rejected",         keys({ ...base, phone: "1".repeat(21) }), ["phone"]);
+console.log("\nphone -- optional, but a 10-digit Indian mobile when given");
+const ph = (value) => keys({ ...base, phone: value });
+
+t("blank accepted -- still optional",      ph(""), []);
+t("whitespace only accepted as blank",     ph("   "), []);
+t("plain 10 digits",                       ph("9876543210"), []);
+t("+91 and a space",                       ph("+91 9876543210"), []);
+t("+91 and grouped digits",                ph("+91 98765 43210"), []);
+t("91 without the plus",                   ph("919876543210"), []);
+t("leading zero",                          ph("09876543210"), []);
+t("hyphens",                               ph("98765-43210"), []);
+t("every mobile first digit is allowed",   ph("6012345678").concat(ph("7012345678"), ph("8012345678"), ph("9012345678")), []);
+
+t("'777777' -- the number that got through before", ph("777777"), ["phone"]);
+t("9 digits rejected",                     ph("987654321"), ["phone"]);
+t("11 digits rejected",                    ph("98765432101"), ["phone"]);
+// Most landlines fail on the first digit after the trunk 0: 011 Delhi,
+// 022 Mumbai, 0484 Kochi. The ones that do not are 08x and 09x -- and "080
+// 2555 1234" is EXACTLY as many digits as "0 8025551234", so no rule can
+// tell a Bangalore landline from a mobile written with a leading zero. The
+// leading zero was asked for; this is its price, and it is the right way
+// round: a real mobile is never refused.
+t("a Delhi landline is rejected",           ph("01123456789"), ["phone"]);
+t("a Mumbai landline is rejected",          ph("02226543210"), ["phone"]);
+t("a Bangalore landline IS accepted -- indistinguishable from 0 + mobile",
+  ph("08025551234"), []);
+t("first digit 5 rejected",                ph("5876543210"), ["phone"]);
+t("first digit 0 after no prefix rejected", ph("0876543210"), ["phone"]);
+t("letters rejected",                      ph("98765abcde"), ["phone"]);
+t("a wrong country code rejected",         ph("+44 7700900123"), ["phone"]);
+t("the database ceiling is checked first", ph("+91 9-8-7-6-5-4-3-2-1-0"), ["phone"]);
+t("21 characters rejected",                ph("1".repeat(21)), ["phone"]);
+
+console.log("\nisIndianMobile on its own");
+const mob = (name, got, want) => {
+  const ok = got === want;
+  console.log(`${ok ? "  PASS" : "  FAIL"}  ${name}`);
+  if (!ok) console.log(`          want ${want}  got ${got}`);
+  ok ? pass++ : fail++;
+};
+mob("empty string is not a mobile", isIndianMobile(""), false);
+mob("undefined does not throw",     isIndianMobile(undefined), false);
+mob("9876543210",                   isIndianMobile("9876543210"), true);
 
 console.log("\nnotice_period -- check (notice_period in (...))");
 t("unset rejected",        keys({ ...base, notice_period: "" }), ["notice_period"]);
