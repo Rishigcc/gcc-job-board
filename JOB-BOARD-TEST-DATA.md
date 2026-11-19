@@ -471,6 +471,51 @@ candidate's resume wrongly refused is an application silently lost.
 still a PDF and will pass. Any job board carries that risk the moment a
 recruiter downloads a stranger's file.
 
+### Stage 6 — SIGNED OFF 19 Nov 2026
+
+Three test rounds. The security property held on the first one and did not
+have to be revisited.
+
+**The main result, in Rishi's own test.** Signed in as `community@`, the
+recruiter who posted the role, `GET /rest/v1/applications?select=*` returned
+`200 []`. The identical call as the candidate returned one row. So the empty
+array means filtered, not a broken request. A direct `GET` on the real resume
+path as the recruiter returned `400 {"statusCode":"404"}` — refused without
+even being told the file exists.
+
+| Round | What came back | Outcome |
+|---|---|---|
+| 1 | Sidebar still not full height; four changes; two non-bugs | The sidebar fix had targeted the description column, not the card |
+| 2 | **Blocker: replacing a resume returned 502** | Migration 008 granted the service key nothing — see the grant rule above |
+| 3 | All passed | Signed off |
+
+Decisions taken during the stage:
+
+- **One resume per candidate**, overriding the spec line that each
+  application stores its own copy. Rishi's call, knowing that a recruiter may
+  open a different document than the one they shortlisted; the mitigation is
+  the updated-on date travelling with the file. Migration 008.
+- **The landline collision stays.** `080 2555 1234` has the same digits as a
+  mobile written with a leading zero, so 08x and 09x landlines pass the phone
+  check. Rishi: "Refusing a real mobile loses a candidate silently, while
+  accepting a rare landline costs a recruiter one wasted dial. And a landline
+  in a phone field isn't wrong anyway — it's a working number."
+- **Both confirmation panels say "You have applied to this job"**, and the
+  applied panel is one line: "Sent on &lt;date&gt;."
+- **The confirmation does not promise never to email.** Candidate email is
+  deferred, not cancelled, and published copy should not need walking back.
+
+Two things that looked like bugs and were not:
+
+- "Fresher" is the display rule for a 0–0 year role, not a form option.
+- A `.docx` renamed to `.pdf` is accepted *into the file field* by the
+  browser — `accept` filters the picker, it does not validate. The real check
+  runs on Send, and refused it.
+
+Carried into stage 7: the "Resume updated on &lt;date&gt;" line beside the
+download, and the grant rule — migration 007 granted `service_role` nothing
+on `public.applications`, and that is to be left that way.
+
 ## Stage 4 onwards
 
 (Appended at the end of each stage.)
