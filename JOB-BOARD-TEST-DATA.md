@@ -712,6 +712,36 @@ author names resolving, **2** (people who genuinely have no display name).
 Run migration 010 **before** the preview rebuilds, or redeploy after it.
 Production is unaffected either way.
 
+## Function search_path — settled 20 Nov 2026 (migration 012)
+
+The Security Advisor flags `update_updated_at`, `prevent_slug_change` and
+`mark_answer_edited` as "Function Search Path Mutable". All three predate the
+job board.
+
+**Honest severity: lower than the same warning on a SECURITY DEFINER
+function.** All three are SECURITY INVOKER — they run with the privileges of
+whoever triggered them, so a mutable `search_path` cannot escalate anything.
+All three are also trivial and reference no object in `public` at all, only
+`NEW`, `OLD` and `now()`. There was nothing to hijack.
+
+**Pinned anyway**, because the warning is about what a function could become:
+these are trigger functions, so the moment a body grows a reference to a
+table, that name resolves according to whoever is writing the row.
+
+Done with `alter function ... set search_path`, **not** `create or replace`,
+so the bodies are provably untouched — these fire on the community's questions
+and answers, and there was no reason to retype them.
+
+`public, pg_catalog` rather than Supabase's recommended `''`, because every
+function in this project has used that since migration 001 and one convention
+applied consistently beats a marginally tighter setting on three functions
+that resolve nothing.
+
+**The sweep at the bottom of 012 is the reusable part.** It counts every
+unpinned function across `public` and `private`, so it proves nothing was
+missed and is the query to re-run after any later migration adds one. It
+should read 0 from now on.
+
 ## Carried-forward items (must be done before the final merge)
 
 | # | Item | Raised in | Due |
