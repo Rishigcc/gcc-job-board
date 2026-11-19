@@ -4,7 +4,6 @@ import { supabase } from "../lib/supabase";
 import { useRecruiter } from "../lib/useRecruiter";
 import { jobDisplayStatus, noticePeriodLabel } from "../lib/jobOptions";
 import {
-  RECRUITER_STATUSES,
   statusLabel,
   statusTone,
   formatApplicationDate,
@@ -52,6 +51,38 @@ function toneClass(tone) {
   if (tone === "good") return "bg-emerald-50 text-emerald-800 ring-emerald-200";
   if (tone === "new") return "bg-blue-50 text-blue-800 ring-blue-200";
   return "bg-slate-100 text-slate-600 ring-slate-200";
+}
+
+// One status, one button, and pressing it again undoes it. aria-pressed is
+// what tells a screen reader this is a toggle rather than an action that
+// fires every time.
+function StatusButton({ row, value, idle, active, busy, onChange, tone }) {
+  const on = row.status === value;
+
+  const onClass =
+    tone === "good"
+      ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+      : "border-slate-700 bg-slate-700 text-white hover:bg-slate-800";
+
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={busy}
+      title={
+        on
+          ? `Undo — put this application back to Applied`
+          : `Mark this application ${active.toLowerCase()}`
+      }
+      onClick={() => onChange(row.id, on ? "applied" : value)}
+      className={
+        "rounded-full border px-4 py-2 text-sm font-semibold transition disabled:opacity-50 " +
+        (on ? onClass : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50")
+      }
+    >
+      {on ? `${active} ✓` : idle}
+    </button>
+  );
 }
 
 function Shell({ children }) {
@@ -289,30 +320,30 @@ function RecruiterApplications() {
               : "No applications yet"}
           </h2>
 
-          {count > 0 ? (
-            <p className="mt-2 text-[15px] leading-relaxed text-amber-900">
-              The most recent arrived on {formatApplicationDate(latestAt)}. We
-              are not holding their details back from this page — your account
-              has not been sent them at all. Names, email addresses, phone
-              numbers and resumes stay in the database until your company is
-              verified.
-            </p>
-          ) : (
-            <p className="mt-2 text-[15px] leading-relaxed text-amber-900">
-              When someone applies you will see the count here straight away.
-              Their details need your company verified first.
-            </p>
-          )}
+          <p className="mt-2 text-[15px] leading-relaxed text-amber-900">
+            Please verify your company to see candidate details. For security,
+            candidate details are not shared with unverified accounts.
+          </p>
 
           <p className="mt-3 text-[15px] leading-relaxed text-amber-900">
             <strong>To get verified:</strong> reply to your signup email with
             your company website and GSTIN. We verify within two working days.
-            Verification also removes the 10-live-roles limit.
+          </p>
+
+          <p className="mt-3 text-[15px] leading-relaxed text-amber-900">
+            Nothing expires while you wait — applications keep arriving and
+            will all be here.
           </p>
 
           <p className="mt-3 text-sm text-amber-900">
-            Nothing expires while you wait. Applications keep arriving and are
-            all here when verification comes through.
+            Problems? Write to{" "}
+            <a
+              href="mailto:jobs@iworkatgcc.com"
+              className="font-semibold underline"
+            >
+              jobs@iworkatgcc.com
+            </a>
+            .
           </p>
         </div>
       ) : null}
@@ -395,22 +426,31 @@ function RecruiterApplications() {
                     {!row.is_anonymised ? (
                       <div className="flex shrink-0 flex-col items-end gap-1.5">
                         <div className="flex flex-wrap items-center gap-2">
-                          <label className="sr-only" htmlFor={`status-${row.id}`}>
-                            Status for {row.full_name}
-                          </label>
-                          <select
-                            id={`status-${row.id}`}
-                            value={row.status}
-                            disabled={busy}
-                            onChange={(event) => changeStatus(row.id, event.target.value)}
-                            className="rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
-                          >
-                            {RECRUITER_STATUSES.map((s) => (
-                              <option key={s.value} value={s.value}>
-                                {s.label}
-                              </option>
-                            ))}
-                          </select>
+                          {/* Buttons, not a dropdown. Marking someone "Not
+                              selected" is a judgement about a person, and on
+                              a dropdown that is one stray scroll away. These
+                              also make the common action a single click.
+                              Pressing the active one puts the application
+                              back to Applied, so nothing here is one-way. */}
+                          <StatusButton
+                            row={row}
+                            value="shortlisted"
+                            idle="Shortlist"
+                            active="Shortlisted"
+                            busy={busy}
+                            onChange={changeStatus}
+                            tone="good"
+                          />
+
+                          <StatusButton
+                            row={row}
+                            value="not_selected"
+                            idle="Not selected"
+                            active="Not selected"
+                            busy={busy}
+                            onChange={changeStatus}
+                            tone="muted"
+                          />
 
                           <button
                             type="button"

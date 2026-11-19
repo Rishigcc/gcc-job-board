@@ -31,6 +31,7 @@
 //   it, because the point is what the database does and does not return.
 // ===========================================================================
 
+import { RECRUITER_JOB_SORTS, sortRecruiterJobs } from "../src/lib/jobOptions.js";
 import {
   RECRUITER_STATUSES,
   statusLabel,
@@ -116,6 +117,48 @@ t("an unknown status is counted, not dropped",
 t("the total always matches the list length",
   summariseStatuses(rows("applied", "shortlisted", "not_selected", "withdrawn")),
   "1 new · 1 shortlisted · 1 not selected · 1 withdrawn");
+
+// ---------------------------------------------------------------------------
+// Ordering the recruiter's own roles. An ordering bug is silent -- the list
+// still renders, just wrong -- so the tie-break in "most applications" is
+// pinned here rather than eyeballed.
+// ---------------------------------------------------------------------------
+const job = (id, day) => ({ id, published_at: `2026-11-${String(day).padStart(2, "0")}T00:00:00Z` });
+const ids = (rows) => rows.map((r) => r.id);
+
+const three = [job(1, 5), job(2, 15), job(3, 10)];
+const counts = { 1: { count: 9 }, 3: { count: 2 } };
+
+console.log("\nsorting roles");
+t("three options", RECRUITER_JOB_SORTS.map((s) => s.value),
+  ["newest", "oldest", "applications"]);
+t("newest first",  ids(sortRecruiterJobs(three, counts, "newest")), [2, 3, 1]);
+t("oldest first",  ids(sortRecruiterJobs(three, counts, "oldest")), [1, 3, 2]);
+t("most applications first",
+  ids(sortRecruiterJobs(three, counts, "applications")), [1, 3, 2]);
+t("a role with no applications never sits above one that has some",
+  ids(sortRecruiterJobs([job(1, 30), job(2, 1)], { 2: { count: 4 } }, "applications")),
+  [2, 1]);
+t("ties fall back to newest",
+  ids(sortRecruiterJobs([job(1, 5), job(2, 20)], { 1: { count: 3 }, 2: { count: 3 } }, "applications")),
+  [2, 1]);
+t("no counts at all is just newest",
+  ids(sortRecruiterJobs(three, {}, "applications")), [2, 3, 1]);
+t("an unknown sort falls back to newest",
+  ids(sortRecruiterJobs(three, counts, "sideways")), [2, 3, 1]);
+t("the default is newest",
+  ids(sortRecruiterJobs(three, counts)), [2, 3, 1]);
+t("an unusable date sorts to the bottom, not at random",
+  ids(sortRecruiterJobs([{ id: 1, published_at: null }, job(2, 3)], {}, "newest")), [2, 1]);
+t("empty list",  sortRecruiterJobs([], counts, "newest"), []);
+t("null list",   sortRecruiterJobs(null, counts, "newest"), []);
+t("the input array is not mutated", (() => {
+  const original = [job(1, 5), job(2, 15)];
+  sortRecruiterJobs(original, counts, "oldest");
+  return ids(original);
+})(), [1, 2]);
+t("every role survives the sort",
+  sortRecruiterJobs(three, counts, "applications").length, 3);
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

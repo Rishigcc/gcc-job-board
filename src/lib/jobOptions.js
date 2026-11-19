@@ -285,3 +285,45 @@ export const NOTICE_PERIODS = [
 export function noticePeriodLabel(value) {
   return NOTICE_PERIODS.find((n) => n.value === value)?.label || value;
 }
+
+// ---------------------------------------------------------------------------
+// Ordering a recruiter's own roles.
+//
+// Here rather than in the page so it can be tested in plain Node: an ordering
+// bug is silent -- the list still renders, just wrong -- and "most
+// applications" in particular has a tie-break that no amount of looking at
+// the screen would confirm.
+//
+// Sorting is client-side because "most applications" is not a column. The
+// counts come from public.recruiter_application_counts(), a separate call, so
+// the database cannot order by them without a join this page does not need.
+// A recruiter has at most a few dozen roles.
+// ---------------------------------------------------------------------------
+export const RECRUITER_JOB_SORTS = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "applications", label: "Most applications" },
+];
+
+export function sortRecruiterJobs(jobs, counts = {}, sort = "newest") {
+  const copy = [...(jobs || [])];
+  const applied = (job) => counts[job.id]?.count || 0;
+  const posted = (job) => {
+    const time = new Date(job.published_at).getTime();
+    // A row with no usable date sorts to the bottom of every order rather
+    // than landing wherever NaN happens to put it.
+    return Number.isNaN(time) ? 0 : time;
+  };
+
+  if (sort === "oldest") {
+    copy.sort((a, b) => posted(a) - posted(b));
+  } else if (sort === "applications") {
+    // Ties fall back to newest, so the order is stable and a role with no
+    // applications never sits above one that has some.
+    copy.sort((a, b) => applied(b) - applied(a) || posted(b) - posted(a));
+  } else {
+    copy.sort((a, b) => posted(b) - posted(a));
+  }
+
+  return copy;
+}

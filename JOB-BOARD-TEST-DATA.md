@@ -588,6 +588,35 @@ The URL lasts **60 seconds** and is never stored. `Content-Disposition` is
 built from the application id, which the server knows and the client does not
 get to choose: a filename from the client would be a header the client writes.
 
+### Stage 7 — where the apply form's name prefill comes from
+
+Asked at the first test round, because a prefill is what most people accept
+without thinking: if a community **nickname** were prefilled into a job
+application, candidates would send recruiters the wrong name without noticing.
+
+**It is the Google account name, and it always was.** `ApplyPanel` reads
+`user.user_metadata.full_name` (falling back to `.name`), which is written
+only by the identity provider at sign-in. **Nothing in this codebase ever
+writes `user_metadata`** — there is no `supabase.auth.updateUser` call
+anywhere — and `saveDisplayName()` writes `public.profiles.display_name` and
+nothing else. The two values are never connected.
+
+Worth confirming rather than reasoning about, because the two agree for most
+accounts and a test account cannot tell them apart:
+
+```sql
+-- 132 on 19 Nov 2026
+select count(*) from auth.users u join public.profiles p on p.id = u.id
+ where p.display_name is not null
+   and coalesce(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name') is not null
+   and p.display_name is distinct from
+       coalesce(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name');
+```
+
+**So this is a rule to keep, not a bug that was fixed.** Anything that starts
+writing `user_metadata` — a "complete your profile" screen, a nickname sync —
+would silently change what gets prefilled into every job application.
+
 ### Stage 7 — the grant rule, applied
 
 Migration 007 granted `service_role` nothing on `public.applications` and
@@ -595,6 +624,27 @@ Migration 007 granted `service_role` nothing on `public.applications` and
 owner, `postgres`, so it needs no grant; and `/api/resume-url` never reads the
 table with the service key. If a later stage finds it needs direct service-key
 access to applications, that is a sign the work belongs in a function instead.
+
+### Stage 7 — decisions at the first test round (19 Nov 2026)
+
+- **Status control is buttons, not a dropdown.** Rishi: "Setting someone to
+  'Not selected' is a judgement about a person, and a dropdown puts that one
+  stray scroll away on Windows." Pressing the active button returns the
+  application to Applied, so nothing is one-way.
+- **The privacy paragraph stays exactly as written** — the only place a
+  recruiter is reminded while actually holding someone's email address.
+- **The gate panel is about half its original length**, and says *company*
+  verification throughout — never "verify your email" or "verify your
+  account", because they confirmed their email at signup and would read either
+  of those as a bug.
+- **Sort on My jobs: newest, oldest, most applications.** No filter — an
+  unverified recruiter caps at ten live roles, and filtering ten items is not
+  worth the surface. The 25 in testing only exist because of the SQL-inserted
+  samples.
+
+**Not verified, and recorded as such rather than as a pass:** the 60-second
+signed-URL expiry. It is Supabase's own behaviour and was skipped at the first
+round.
 
 ## `public.question_authors` — settled 19 Nov 2026 (migration 010)
 

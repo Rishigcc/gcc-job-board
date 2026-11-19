@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRecruiter } from "../lib/useRecruiter";
-import { jobDisplayStatus, countsTowardCap, liveSlotsLabel } from "../lib/jobOptions";
+import {
+  jobDisplayStatus,
+  countsTowardCap,
+  liveSlotsLabel,
+  RECRUITER_JOB_SORTS,
+  sortRecruiterJobs,
+} from "../lib/jobOptions";
 import { setJobStatus } from "../lib/jobMutations";
 import { fetchApplicationCounts } from "../lib/recruiterApplications";
 import { applicationCountLabel } from "../lib/applicationDisplay";
@@ -111,6 +117,21 @@ function RecruiterJobs() {
   const isVerified = Boolean(profile?.is_verified);
   const liveCount = (jobs || []).filter(countsTowardCap).length;
 
+  // In the URL, so a sorted list survives a reload and can be linked to. An
+  // unrecognised value falls through to newest rather than showing nothing.
+  const sort = RECRUITER_JOB_SORTS.some((s) => s.value === searchParams.get("sort"))
+    ? searchParams.get("sort")
+    : "newest";
+
+  const sortedJobs = jobs === null ? null : sortRecruiterJobs(jobs, counts, sort);
+
+  const changeSort = (value) => {
+    const merged = new URLSearchParams(searchParams);
+    if (value === "newest") merged.delete("sort");
+    else merged.set("sort", value);
+    setSearchParams(merged, { replace: true });
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Seo
@@ -138,12 +159,34 @@ function RecruiterJobs() {
             </p>
           </div>
 
-          <Link
-            to="/recruiter/jobs/new"
-            className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            Post a new job
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            {jobs && jobs.length > 1 ? (
+              <>
+                <label className="sr-only" htmlFor="sort">
+                  Sort roles
+                </label>
+                <select
+                  id="sort"
+                  value={sort}
+                  onChange={(event) => changeSort(event.target.value)}
+                  className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                >
+                  {RECRUITER_JOB_SORTS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
+
+            <Link
+              to="/recruiter/jobs/new"
+              className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              Post a new job
+            </Link>
+          </div>
         </div>
 
         {justPosted ? (
@@ -204,9 +247,9 @@ function RecruiterJobs() {
           </div>
         ) : null}
 
-        {jobs === null ? (
+        {sortedJobs === null ? (
           <p className="mt-8 text-slate-500">Loading…</p>
-        ) : jobs.length === 0 ? (
+        ) : sortedJobs.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
             <h2 className="text-lg font-bold text-slate-900">No roles yet</h2>
             <p className="mx-auto mt-2 max-w-md text-slate-600">
@@ -222,7 +265,7 @@ function RecruiterJobs() {
           </div>
         ) : (
           <ul className="mt-6 space-y-3">
-            {jobs.map((job) => {
+            {sortedJobs.map((job) => {
               const display = jobDisplayStatus(job);
               const applications = counts[job.id] || null;
               const busy = busyId === job.id;
