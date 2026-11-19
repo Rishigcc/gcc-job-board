@@ -376,7 +376,7 @@ function RecruiterApplications() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-base font-bold text-slate-900">
+                        <h2 className="break-words text-base font-bold text-slate-900">
                           {row.is_anonymised ? "Details removed" : row.full_name}
                         </h2>
                         <span
@@ -394,7 +394,10 @@ function RecruiterApplications() {
                         </p>
                       ) : (
                         <>
-                          <p className="mt-1 text-sm text-slate-700">
+                          {/* An email address is one unbreakable token, so
+                              min-w-0 alone would not stop a long one pushing
+                              the card wider than the screen. */}
+                          <p className="mt-1 break-words text-sm text-slate-700">
                             <a
                               href={`mailto:${row.email}`}
                               className="font-medium text-blue-700 hover:underline"
@@ -423,9 +426,21 @@ function RecruiterApplications() {
                       )}
                     </div>
 
+                    {/* OVERFLOWED AT 375px, AND shrink-0 WAS THE CAUSE.
+                        With shrink-0 this column takes its max-content width,
+                        so the flex-wrap inside it had nothing to wrap
+                        against: the three buttons sat on one 433px-wide line
+                        inside a 303px card and pushed the whole page
+                        sideways. Measured, not reasoned about.
+
+                        So the column is full width below sm -- which gives
+                        the buttons a real constraint to wrap against -- and
+                        takes its natural width only from sm up, where the
+                        desktop layout is unchanged. min-w-0 stops a long
+                        word doing the same thing again. */}
                     {!row.is_anonymised ? (
-                      <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex w-full min-w-0 flex-col items-start gap-1.5 sm:w-auto sm:shrink-0 sm:items-end">
+                        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                           {/* Buttons, not a dropdown. Marking someone "Not
                               selected" is a judgement about a person, and on
                               a dropdown that is one stray scroll away. These
