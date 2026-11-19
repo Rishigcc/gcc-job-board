@@ -646,6 +646,60 @@ access to applications, that is a sign the work belongs in a function instead.
 signed-URL expiry. It is Supabase's own behaviour and was skipped at the first
 round.
 
+### Stage 7 — SIGNED OFF 20 Nov 2026
+
+Two rounds. The security property passed on the first one and was not
+revisited.
+
+**The results that mattered, in Rishi's own tests.** Unverified, with
+applications in the table, `recruiter_application_counts()` returned six rows
+of numbers and dates while `recruiter_applications()` returned `200 []`;
+`recruiter_set_application_status` returned `400 / P0001` with its own
+sentence and `recruiter_resume_path` returned `null`. After verification the
+full card appeared — and `GET /rest/v1/applications?select=*` **still**
+returned `200 []`, with a direct storage read on the real resume path still
+`400`. **Verification opens the functions, not the table.**
+
+Also confirmed: suspension empties the counts and the list; the second
+recruiter account, which has posted nothing, gets `[]` from both RPCs; a
+status of `withdrawn` is refused with a readable message; "Not selected" never
+renders as "rejected" or as a raw value.
+
+| Round | What came back | Outcome |
+|---|---|---|
+| 1 | All passed. Three changes, three decisions, one question | Status control, gate wording, sort |
+| 2 | All passed, plus the 375px overflow fixed on the real preview | Signed off |
+
+Changes made between the rounds:
+
+- **Status control is buttons, not a dropdown.** Both directions reversible,
+  and Not selected → Shortlist moves straight across without going via
+  Applied.
+- **Gate panel about half its length**, company verification throughout.
+- **Sort on My jobs** — newest, oldest, most applications. URL state holds
+  across a fresh tab, `?sort=sideways` falls back cleanly, no roles dropped.
+- **The applications card overflowed at 375px** and `shrink-0` was the cause:
+  with it the button column takes its max-content width, so the `flex-wrap`
+  inside had nothing to wrap against. 433px inside a 303px card. Fixed in its
+  own commit and verified on the real preview.
+
+**Still not verified, and recorded as such rather than as a pass:** the
+60-second signed-URL expiry. It is Supabase's own behaviour.
+
+**Confirmed, not changed:** the apply form's name prefill is the Google
+account name, not `profiles.display_name` — see the section above. 132 real
+users have a display name that differs, so this would have mattered.
+
+## Deferred — the wording pass (after all eleven stages)
+
+Logged, **not to be changed now**. Both are Rishi's calls from the stage 7
+sign-off.
+
+| # | Item | Note |
+|---|---|---|
+| W1 | The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
+| W2 | Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
+
 ## `public.question_authors` — settled 19 Nov 2026 (migration 010)
 
 Raised by Rishi as its own piece of work, not folded into a stage: the
@@ -769,16 +823,39 @@ break without any test failing.
 
 ### I1 — `profiles.google_email` must stay null for recruiters
 
+**Corrected 20 Nov 2026.** The earlier wording said the null `google_email`
+is what keeps recruiters out of the weekly digest. That was the wrong reason
+for the right outcome, as Rishi spotted: **neither recruiter has a `profiles`
+row at all**, and `api/send-digest.js` iterates `profiles`, so they are never
+considered in the first place. The column filter does not even run on them
+today.
+
+The invariant still matters, though, and the correction is to its *trigger
+condition* rather than to the rule:
+
 **The rule.** `profiles.google_email` is written by exactly one thing: the
 Google sign-in sync in `src/Pages/Welcome.jsx`. Nothing else may write it.
 
-**What depends on it.** It is the only thing keeping recruiters out of the
-weekly digest. `api/send-digest.js` skips any profile whose `google_email` is
-null (`reason: "no_email"`). A recruiter is allowed to have a `profiles` row
-— see item 10 — so the row's existence cannot be the filter. The null column
-is the filter.
+**What actually keeps recruiters out of the digest, in order:**
 
-**How it breaks.** Any of these would silently start emailing recruiters:
+1. **Today: they have no `profiles` row.** Verified 20 Nov 2026 — both
+   recruiter accounts return `has_profile_row = 0`. Nothing to iterate, so
+   nothing to filter.
+2. **The moment one creates a row, the null column is the only thing left.**
+   And a recruiter *is allowed* to create one: `saveDisplayName()` upserts a
+   `profiles` row and is reachable from `/profile`, `/ask` and any question
+   page. That is item 10 — Rishi's deliberate decision, because someone who
+   sets a display name is choosing to join the community.
+
+So the row's existence cannot be the filter, and layer 1 is luck rather than
+design: it holds only for as long as no recruiter ever sets a display name.
+Layer 2 is the actual guarantee, which is why this invariant exists and why
+the reasoning is written at the check in `api/send-digest.js` where whoever
+edits that line will see it.
+
+**How it breaks.** Any of these would silently start emailing recruiters —
+but only once a recruiter has a `profiles` row, which is why this can sit
+latent and look fine:
 
 - backfilling `google_email` from `auth.users.email`
 - setting `google_email` in `saveDisplayName()` or anywhere in the recruiter
@@ -792,19 +869,22 @@ and a recruiter, and that person *should* get the digest. The real question is
 exactly that. A role-based filter would exclude the dual-role case wrongly.
 
 **How to check it still holds.** Before any stage that touches `profiles`,
-the digest, or recruiter signup:
+the digest, or recruiter signup. The old check was a single `0`, which could
+not tell "no rows" apart from "rows, all safe" — the two cases this
+correction is about. This reports both:
 
 ```sql
--- Must return 0. Any row here is a recruiter who will receive the digest.
-select count(*)
-  from public.profiles p
-  join public.user_roles r on r.user_id = p.id
- where r.role = 'recruiter'
-   and p.google_email is not null;
+-- recruiters_with_a_profile_row: 0 today. Not required to stay 0 -- a
+--   recruiter may legitimately join the community.
+-- recruiters_who_would_be_emailed: MUST be 0. Any row here is a recruiter
+--   who will receive the next digest.
+select
+  count(*) filter (where p.id is not null)                              as recruiters_with_a_profile_row,
+  count(*) filter (where p.google_email is not null)                    as recruiters_who_would_be_emailed
+  from public.user_roles r
+  left join public.profiles p on p.id = r.user_id
+ where r.role = 'recruiter';
 ```
-
-The reasoning is also written at the check itself in `api/send-digest.js`,
-so whoever edits that line sees it.
 
 ## Project-wide settings changed (NOT undone by the rollback scripts)
 
