@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchMyResume, uploadResume } from "../lib/applications";
 import { MAX_RESUME_BYTES } from "../lib/applicationModel";
-import { fetchMyApplications } from "../lib/candidateData";
+import { fetchMyApplications, fetchMyResumeUrl } from "../lib/candidateData";
 import { formatApplicationDate } from "../lib/applicationDisplay";
 
 // ===========================================================================
@@ -105,6 +105,30 @@ function ProfileJobBoard({ userId }) {
     setBusy(false);
   };
 
+  const download = async () => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    const result = await fetchMyResumeUrl();
+
+    if (result.error) {
+      setError(result.error.message);
+      setBusy(false);
+      return;
+    }
+
+    // Valid for 60 seconds and used immediately. An anchor click rather than
+    // window.open, so the browser treats it as the download it is instead of
+    // leaving a blank tab behind.
+    const link = document.createElement("a");
+    link.href = result.url;
+    link.rel = "noopener";
+    link.click();
+
+    setBusy(false);
+  };
+
   const cancel = () => {
     setChosen(null);
     setError(null);
@@ -191,13 +215,30 @@ function ProfileJobBoard({ userId }) {
                 </div>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="mt-4 inline-block rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                {resume ? "Upload a new resume" : "Upload a resume"}
-              </button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {/* Only when there is a file. Without this a candidate can
+                    replace their resume but never see which one a recruiter
+                    is actually being given. */}
+                {resume ? (
+                  <button
+                    type="button"
+                    onClick={download}
+                    disabled={busy}
+                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:bg-slate-300"
+                  >
+                    {busy ? "Opening…" : "Download"}
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={busy}
+                  className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {resume ? "Upload a new resume" : "Upload a resume"}
+                </button>
+              </div>
             )}
 
             {error ? (

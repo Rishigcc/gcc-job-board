@@ -91,3 +91,18 @@ export async function deleteMyResume() {
 export async function deleteMyJobData(confirmation) {
   return postAsUser("/api/delete-my-data", { confirmation });
 }
+
+// ---------------------------------------------------------------------------
+// The candidate's own resume, as a short-lived signed URL.
+//
+// Sends NO identity of any kind -- not a user id, not an empty object with a
+// field the server might read. The endpoint derives the caller from the
+// bearer token, so there is no parameter to tamper with and no comparison on
+// the server that could be got wrong.
+// ---------------------------------------------------------------------------
+export async function fetchMyResumeUrl() {
+  const result = await postAsUser("/api/my-resume-url", {});
+
+  if (result.error) return result;
+  return { url: result.data?.url };
+}

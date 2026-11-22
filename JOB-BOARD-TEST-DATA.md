@@ -814,6 +814,20 @@ panel on a page the whole community opens every day.
   the stripped-back block, because the policy promises a resume can be deleted
   on its own.
 
+- **A Download option was added to the resume block**, because a candidate
+  could replace their resume but never see which file a recruiter was being
+  given. `/api/my-resume-url` **takes no identity input of any kind** — not a
+  user id in the body, not one in the query string. It verifies the bearer
+  token with the service key and looks up only the row keyed by that verified
+  id, so there is no parameter to tamper with and no server-side comparison
+  that could be got wrong. That is a stronger guarantee than validating an id
+  would be: the recruiter endpoint has to ask the database whether the caller
+  owns an application, because it is reaching for someone else's data on
+  purpose; here the caller *is* the answer. The path is still checked against
+  the verified id before signing, because this function can sign any object in
+  the bucket and should refuse rather than trust that the write-time trigger
+  held. Signed for 60 seconds, filename built from the row's own `updated_at`.
+
 Two policy sentences had to follow the controls, and both were approved: the
 resume paragraph now says replacing happens on the profile and deleting on its
 own happens on the delete page, with the clause that deleting a resume does not
