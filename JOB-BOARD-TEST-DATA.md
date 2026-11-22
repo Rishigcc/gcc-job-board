@@ -1013,6 +1013,7 @@ should read 0 from now on.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 16 | **STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.** Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
 | 15 | **STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.** The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
 | 13 | **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
@@ -1029,6 +1030,63 @@ should read 0 from now on.
 These are not to-do items. They are rules that currently hold, that nothing
 enforces mechanically, and that a reasonable-looking future change could
 break without any test failing.
+
+### I2 — deletion means the folder is empty, not that the named file is gone
+
+**The rule.** `/api/delete-my-resume` and `/api/delete-my-data` must clear
+**every** object under `resumes/<candidate_id>/`. Neither may go back to
+deleting the single path held in `candidate_resumes.resume_path`.
+
+**Why it is a rule and not a preference.** A file can exist with no row
+pointing at it, for reasons no error handling prevents:
+
+| How | Can it be prevented? |
+|---|---|
+| The upload succeeded and the function died before the row was written — a timeout or an evicted instance | **No.** There is no process left to run a cleanup. |
+| The row was replaced and deleting the superseded file failed | **No**, not without making it worse: that failure is deliberately non-fatal, because the new resume is already live and failing the request would tell a candidate their upload did not work when it did. |
+| Two uploads landed at once, so the loser is referenced by nothing and was never the "previous" path either | Not without locking an upload path that does not need it. |
+| The row write failed outright | Fixed — migration 009. This is what produced the three real orphans on 19 Nov 2026, before the service key had write access: *every* upload orphaned a file. |
+
+So an orphan is not an error state to be designed out. It is a state that will
+occur, which means deletion has to be defined by the end state of the folder
+rather than by what we believe is in it. **Deleting by row name can only ever
+be as reliable as the row.**
+
+**What depends on it.** The privacy policy says *"Your resume file is
+permanently deleted from our storage. This cannot be undone."* Deleting by row
+name leaves orphans behind and makes that sentence false for exactly the
+candidates whose upload once half-failed.
+
+**How it breaks.** Any of these would silently reintroduce it:
+
+- "simplifying" either endpoint back to `remove([row.resume_path])`
+- removing the pagination loop in `clearResumeFolder`, so a deletion stops at
+  100 objects
+- adding a third deletion path that does not use the helper
+
+**How to check it still holds.** After any change to either endpoint, or to
+`api/_lib/resumeStorage.js`:
+
+```sql
+-- orphans MUST be 0 after any delete-my-data or delete-my-resume test.
+-- Before launch, objects_total and resume_rows should also agree.
+select
+  (select count(*) from storage.objects where bucket_id = 'resumes') as objects_total,
+  (select count(*) from public.candidate_resumes)                   as resume_rows,
+  (select count(*) from storage.objects o
+     where o.bucket_id = 'resumes'
+       and not exists (select 1 from public.candidate_resumes cr
+                        where cr.resume_path = o.name))             as orphans;
+```
+
+`scripts/stage8-candidate-test.mjs` covers the helper against a fake client,
+including the cases production will not produce on demand: a second page of
+results, three files where the row names one, a prefix placeholder, and a
+listing entry that is not a plain filename.
+
+**Not covered by this, on purpose.** Orphans belonging to people who never ask
+for deletion. Those need a sweep across every folder, which is stage 9 — see
+carried-forward item 16.
 
 ### I1 — `profiles.google_email` must stay null for recruiters
 

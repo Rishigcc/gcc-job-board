@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { clearResumeFolder } from "./_lib/resumeStorage.js";
 
 // ===========================================================================
 // POST /api/delete-my-resume   ->   { deleted: true, path }
@@ -20,12 +21,16 @@ import { createClient } from "@supabase/supabase-js";
 //   A failed file delete changes nothing and can be retried. The other order
 //   makes "permanently deleted" untrue with nothing left to notice it.
 //
-// THE PATH IS NOT ACCEPTED FROM THE CLIENT.
-//   It is read from the caller's own row, and then checked against the
-//   verified user id before anything is deleted. Even though that path was
-//   pinned to `^<uid>/` by a trigger when it was written, it is checked
-//   again here: this function can delete any object in the bucket, so it
-//   should be the thing that refuses rather than trusting history.
+// DELETION MEANS THE FOLDER IS EMPTY, NOT THAT THE NAMED FILE IS GONE.
+//   Nothing here deletes by the path in candidate_resumes. It clears every
+//   object under the caller's own folder, because a file can exist with no
+//   row pointing at it for reasons no error handling prevents -- see
+//   api/_lib/resumeStorage.js. Deleting by row name would leave exactly those
+//   files behind, and the privacy policy says the resume is permanently
+//   deleted.
+//
+//   The folder is derived from the verified user id, never from the request,
+//   so there is no path to tamper with.
 // ===========================================================================
 
 const BUCKET = "resumes";
@@ -63,6 +68,8 @@ export default async function handler(req, res) {
 
   const userId = userData.user.id;
 
+  // Read only to report what the caller will think happened. It is NOT used
+  // to decide what to delete.
   const { data: row, error: readError } = await admin
     .from("candidate_resumes")
     .select("resume_path")
@@ -74,37 +81,42 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: "We could not read your resume record. Try again." });
   }
 
-  if (!row) {
-    // Nothing to do, and saying so is not an error: the end state the caller
-    // asked for is the state they are already in.
-    return res.status(200).json({ deleted: false, path: null });
-  }
+  // Files first, every file, then the row. A failed removal changes nothing
+  // and can be retried; the other order would make "permanently deleted"
+  // untrue with nothing left to notice it.
+  const cleared = await clearResumeFolder(admin, BUCKET, userId);
 
-  if (!row.resume_path.startsWith(`${userId}/`)) {
-    console.error("delete-my-resume: path outside the caller's folder", userId, row.resume_path);
-    return res.status(500).json({ error: "That resume could not be deleted. Write to jobs@iworkatgcc.com." });
-  }
-
-  const { error: removeError } = await admin.storage.from(BUCKET).remove([row.resume_path]);
-
-  if (removeError) {
-    // Nothing has changed. The row still points at a file that still exists,
-    // so a retry is clean.
-    console.error("delete-my-resume: storage remove failed", row.resume_path, removeError);
+  if (cleared.error) {
+    console.error("delete-my-resume: folder clear failed", userId, cleared.error);
     return res.status(502).json({ error: "Your resume file could not be deleted. Nothing was changed — please try again." });
   }
 
-  const { error: rowError } = await admin.rpc("delete_resume_for", { p_user: userId });
-
-  if (rowError) {
-    // The file is gone and the row is not. The next upload replaces the row
-    // anyway, and /api/resume-url returns a path whose object no longer
-    // exists, which the recruiter page already shows as unavailable. Logged
-    // loudly because it needs cleaning up, but the file -- the thing the
-    // caller asked to be destroyed -- is destroyed.
-    console.error("delete-my-resume: row delete failed AFTER file removal", userId, rowError);
-    return res.status(502).json({ error: "Your resume file was deleted but your record was not fully cleared. Write to jobs@iworkatgcc.com." });
+  if (cleared.removed.length > 1) {
+    // Expected to be rare and worth seeing when it happens: the extras were
+    // orphans that deleting by row name would have left behind.
+    console.log(`delete-my-resume: removed ${cleared.removed.length} objects for ${userId}`);
   }
 
-  return res.status(200).json({ deleted: true, path: row.resume_path });
+  if (!row && cleared.removed.length === 0) {
+    // The end state the caller asked for is the state they are already in.
+    return res.status(200).json({ deleted: false, filesRemoved: 0 });
+  }
+
+  if (row) {
+    const { error: rowError } = await admin.rpc("delete_resume_for", { p_user: userId });
+
+    if (rowError) {
+      // The files are gone and the row is not. The next upload replaces the
+      // row anyway, and the recruiter page already renders a missing object
+      // as unavailable. Logged loudly because it needs clearing up by hand,
+      // but the thing the caller asked to be destroyed is destroyed.
+      console.error("delete-my-resume: row delete failed AFTER file removal", userId, rowError);
+      return res.status(502).json({ error: "Your resume file was deleted but your record was not fully cleared. Write to jobs@iworkatgcc.com." });
+    }
+  }
+
+  return res.status(200).json({
+    deleted: true,
+    filesRemoved: cleared.removed.length,
+  });
 }

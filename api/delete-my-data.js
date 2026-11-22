@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { clearResumeFolder } from "./_lib/resumeStorage.js";
 
 // ===========================================================================
 // POST /api/delete-my-data   ->   { applications_anonymised, resume_deleted }
@@ -24,7 +25,14 @@ import { createClient } from "@supabase/supabase-js";
 // THE TYPED CONFIRMATION IS CHECKED HERE, NOT ONLY IN THE FORM
 //   A confirmation only the browser verifies is decoration.
 //
-// ORDER: FILE, THEN DATABASE. A failed file delete changes nothing.
+// ORDER: FILES, THEN DATABASE. A failed removal changes nothing.
+//
+// AND IT IS EVERY FILE UNDER THE FOLDER, NOT THE ONE NAMED IN THE ROW.
+//   A file can exist with no row pointing at it for reasons no error handling
+//   prevents -- see api/_lib/resumeStorage.js. Deleting by row name would
+//   leave exactly those behind, while the policy says the resume is
+//   permanently deleted. The folder comes from the verified user id, so there
+//   is nothing in the request that could redirect it.
 // ===========================================================================
 
 const BUCKET = "resumes";
@@ -78,7 +86,8 @@ export default async function handler(req, res) {
 
   const userId = userData.user.id;
 
-  // The file first, while the row still points at it.
+  // Read only to report what the caller will think happened. It is NOT used
+  // to decide what to delete.
   const { data: resumeRow, error: readError } = await admin
     .from("candidate_resumes")
     .select("resume_path")
@@ -90,18 +99,15 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: "We could not read your records. Nothing was changed — please try again." });
   }
 
-  if (resumeRow?.resume_path) {
-    if (!resumeRow.resume_path.startsWith(`${userId}/`)) {
-      console.error("delete-my-data: path outside the caller's folder", userId, resumeRow.resume_path);
-      return res.status(500).json({ error: "Your data could not be deleted. Write to jobs@iworkatgcc.com." });
-    }
+  const cleared = await clearResumeFolder(admin, BUCKET, userId);
 
-    const { error: removeError } = await admin.storage.from(BUCKET).remove([resumeRow.resume_path]);
+  if (cleared.error) {
+    console.error("delete-my-data: folder clear failed", userId, cleared.error);
+    return res.status(502).json({ error: "Your resume file could not be deleted. Nothing was changed — please try again." });
+  }
 
-    if (removeError) {
-      console.error("delete-my-data: storage remove failed", resumeRow.resume_path, removeError);
-      return res.status(502).json({ error: "Your resume file could not be deleted. Nothing was changed — please try again." });
-    }
+  if (cleared.removed.length > 1) {
+    console.log(`delete-my-data: removed ${cleared.removed.length} objects for ${userId}`);
   }
 
   const { data: result, error: rpcError } = await admin.rpc("anonymise_job_data_for", {
@@ -122,11 +128,14 @@ export default async function handler(req, res) {
 
   console.log(
     `delete-my-data: user ${userId} anonymised ${row?.applications_anonymised ?? 0} application(s)` +
-      `, resume ${resumeRow?.resume_path ? "deleted" : "none on file"}`
+      `, removed ${cleared.removed.length} storage object(s)`
   );
 
   return res.status(200).json({
     applications_anonymised: row?.applications_anonymised ?? 0,
-    resume_deleted: Boolean(resumeRow?.resume_path),
+    // True if anything was actually destroyed, which includes an orphan with
+    // no row -- the case deleting by row name would have missed.
+    resume_deleted: Boolean(resumeRow?.resume_path) || cleared.removed.length > 0,
+    files_removed: cleared.removed.length,
   });
 }

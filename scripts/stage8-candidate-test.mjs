@@ -26,6 +26,7 @@
 //   holds.
 // ===========================================================================
 
+import { clearResumeFolder } from "../api/_lib/resumeStorage.js";
 import {
   candidateStatusLabel,
   candidateStatusTone,
@@ -100,6 +101,120 @@ t("the Closed hint says the recruiter did not decide, rather than implying one",
   candidateStatusHint(row("applied", true)).includes("did not mark your application either way"), true);
 t("the Applied hint does not promise we will email them",
   /email|notify|inform you/i.test(candidateStatusHint(row("applied", false))), false);
+
+// ---------------------------------------------------------------------------
+// clearResumeFolder -- "deletion means the folder is empty".
+//
+// Worth testing with a fake client because the cases that matter are the ones
+// production will not show you on demand: a second page of results, an
+// orphan with no row, and a listing entry that is not a plain filename. The
+// real thing only ever holds one or two files, so none of those would ever
+// come up while clicking.
+// ---------------------------------------------------------------------------
+const UID = "ddd2be0b-f8d9-4753-8005-87424c795329";
+
+// `pages` is what list() returns in sequence; `removed` records what the
+// helper asked to delete.
+const fakeAdmin = (pages, { listError = null, removeError = null } = {}) => {
+  const calls = { list: [], remove: [] };
+  return {
+    calls,
+    storage: {
+      from: () => ({
+        list: async (folder, opts) => {
+          calls.list.push({ folder, ...opts });
+          if (listError) return { data: null, error: listError };
+          const index = calls.list.length - 1;
+          return { data: pages[index] || [], error: null };
+        },
+        remove: async (paths) => {
+          calls.remove.push(paths);
+          return { error: removeError };
+        },
+      }),
+    },
+  };
+};
+
+const file = (name) => ({ id: name, name, metadata: { size: 1 } });
+
+console.log("\nclearResumeFolder");
+
+{
+  const admin = fakeAdmin([[]]);
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("an empty folder removes nothing", r.removed, []);
+  t("and does not call remove at all", admin.calls.remove.length, 0);
+}
+
+{
+  const admin = fakeAdmin([[file("a.pdf")]]);
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("one file is prefixed with the folder", r.removed, [`${UID}/a.pdf`]);
+}
+
+{
+  // The case the whole change exists for: the row names one file, three are
+  // there. Deleting by row name would leave two behind.
+  const admin = fakeAdmin([[file("a.pdf"), file("b.pdf"), file("c.pdf")]]);
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("orphans are removed too, not just the named file", r.removed.length, 3);
+  t("all of them in one remove call", admin.calls.remove.length, 1);
+}
+
+{
+  const admin = fakeAdmin([[{ id: null, name: "nested", metadata: null }, file("a.pdf")]]);
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("a prefix placeholder is skipped, a real object is not", r.removed, [`${UID}/a.pdf`]);
+}
+
+{
+  const admin = fakeAdmin([[file("../escape.pdf"), file("sub/deep.pdf"), file("ok.pdf")]]);
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("a name containing a slash is refused, however it is spelled",
+    r.removed, [`${UID}/ok.pdf`]);
+}
+
+{
+  const full = Array.from({ length: 100 }, (_, i) => file(`f${i}.pdf`));
+  const admin = fakeAdmin([full, [file("last.pdf")]]);
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("a full page is followed by another request", admin.calls.list.length, 2);
+  t("and every object across both pages is removed", r.removed.length, 101);
+  t("the second request is offset by one page", admin.calls.list[1].offset, 100);
+}
+
+{
+  const full = Array.from({ length: 100 }, (_, i) => file(`f${i}.pdf`));
+  const admin = fakeAdmin([full, full.slice(0, 99)]);
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("a short page ends the loop", admin.calls.list.length, 2);
+  t("199 objects", r.removed.length, 199);
+}
+
+{
+  const admin = fakeAdmin([[]], { listError: { message: "network" } });
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("a listing failure is reported, not swallowed", r.error?.message, "network");
+  t("and nothing is removed", admin.calls.remove.length, 0);
+}
+
+{
+  const admin = fakeAdmin([[file("a.pdf")]], { removeError: { message: "denied" } });
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("a removal failure is reported", r.error?.message, "denied");
+  t("and no 'removed' list is returned", r.removed, undefined);
+}
+
+{
+  // Nothing legitimate reaches this, but an endless loop against storage is
+  // a worse failure than an incomplete delete that logs.
+  const page = Array.from({ length: 100 }, (_, i) => file(`f${i}.pdf`));
+  const admin = fakeAdmin(Array.from({ length: 200 }, () => page));
+  const r = await clearResumeFolder(admin, "resumes", UID);
+  t("pagination is capped rather than unbounded", admin.calls.list.length, 100);
+  t("and it still returns a result", Array.isArray(r.removed), true);
+}
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
