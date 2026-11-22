@@ -642,9 +642,9 @@ access to applications, that is a sign the work belongs in a function instead.
   worth the surface. The 25 in testing only exist because of the SQL-inserted
   samples.
 
-**Not verified, and recorded as such rather than as a pass:** the 60-second
-signed-URL expiry. It is Supabase's own behaviour and was skipped at the first
-round.
+**The 60-second signed-URL expiry is now verified** — at stage 8 sign-off
+Rishi fetched a signed URL two minutes later and got 400. It had been recorded
+here as unverified rather than as a pass.
 
 ### Stage 7 — SIGNED OFF 20 Nov 2026
 
@@ -683,8 +683,9 @@ Changes made between the rounds:
   inside had nothing to wrap against. 433px inside a 303px card. Fixed in its
   own commit and verified on the real preview.
 
-**Still not verified, and recorded as such rather than as a pass:** the
-60-second signed-URL expiry. It is Supabase's own behaviour.
+**The 60-second signed-URL expiry is now verified** — at stage 8 sign-off
+Rishi fetched a signed URL two minutes later and got 400. It had been recorded
+here as unverified rather than as a pass.
 
 **Confirmed, not changed:** the apply form's name prefill is the Google
 account name, not `profiles.display_name` — see the section above. 132 real
@@ -867,6 +868,68 @@ why `candidate_id` is erased.
 `RecruiterTerms.jsx` still carries its own date and is unaffected — carried
 item 1 still applies to it.
 
+### Stage 8 — SIGNED OFF 22 Nov 2026
+
+Five rounds, four of them changes rather than failures. Nothing in the security
+design had to be revisited.
+
+**The results that mattered, in Rishi's own tests.** Every application row came
+back with `candidate_id`, `full_name`, `email`, `phone` and `notice_period`
+**null** — erased in the column, not hidden by a function — with `status` and
+`consent_at` surviving. The recruiter saw *"Details removed"*, and
+`recruiter_applications` returned all nulls with `is_anonymised` true.
+Re-applying worked. All three write functions returned **403** from the browser.
+Download returned only the caller's own file, and passing three different id
+fields in the body changed nothing.
+
+**Folder clearing was proved against the real orphans:** four objects removed,
+including the three from 19 November that deleting by row name could never have
+reached. Storage is now completely empty and the invariant query reads 0, 0, 0.
+
+| Round | What came back | Outcome |
+|---|---|---|
+| 1 | Not testable — built but not pushed | Led to the standing push-before-checklist rule |
+| 2 | Three changes: strip `/profile`, move deletion to its own route, saved jobs | Plus two policy corrections |
+| 3 | Add a resume Download | Endpoint takes no identity input at all |
+| 4 | Back link wrong when arriving from `/my-applications` | Router state, so a shared link cannot mislead |
+| 5 | An orphan survived deletion | Became invariant I2 |
+| — | All passed | Signed off |
+
+**Two carried items closed by this stage:**
+
+- **The 60-second signed URL expiry**, recorded as unverified at stage 7
+  sign-off. Rishi fetched one two minutes later and got 400.
+- **The three orphaned storage objects** carried since stage 6. Removed by the
+  feature that exists because of them, which is a better outcome than clearing
+  them by hand.
+
+### Stage 8 — what the Security Advisor says, and which of it matters
+
+Worth triaging once rather than re-reading the warnings before every launch
+check. The dashboard's count and a raw lint count group these differently, so
+the categories matter more than the number.
+
+| Finding | Level | Verdict |
+|---|---|---|
+| `security_definer_view` on `question_authors` | **ERROR** | Known. Dropped after the merge — carried item 14. The only error. |
+| `rls_enabled_no_policy` on `user_activity` | INFO | **Correct as designed.** RLS on with no policy means no client role can touch it; `record_activity()` writes it as definer and the digest reads it with the service key. The same "absence is the design" pattern as `applications`. |
+| `anon_security_definer_function_executable` ×4 | WARN | `author_names` and `job_posting_agency` are deliberate — anonymous visitors read author names and job pages. The other two are below. |
+| `authenticated_security_definer_function_executable` ×9 | WARN | Seven are the job board's own, each checking ownership and verification itself; that is the design. The three **write** functions correctly do **not** appear, which is the advisor confirming the service-role-only grant. |
+| `auth_leaked_password_protection` | WARN | Carried item 7. Needs Pro. |
+
+**Two of those warnings cannot do harm, and it is worth knowing why rather
+than trying to fix them:**
+
+- **`record_activity()`** opens with `if auth.uid() is null then return; end
+  if;`. An anonymous caller gets a no-op, so the `anon` grant is noise.
+- **`rls_auto_enable()`** is declared `returns event_trigger`. Postgres refuses
+  to call such a function any way other than as an event trigger, so the grant
+  is unreachable by construction. It is also useful: it enables RLS
+  automatically on any new table in `public`.
+
+Neither is ours and neither needs changing. Recorded so nobody spends launch
+day on them.
+
 ## Deferred — saved jobs, to stage 10
 
 A candidate bookmarking a recruiter-posted role on `/gcc-jobs`, the same idea
@@ -906,6 +969,8 @@ sign-off.
 | # | Item | Note |
 |---|---|---|
 | W1 | The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
+| W3 | The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** |
+| W4 | The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
 | W2 | Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
 
 ## `public.question_authors` — settled 19 Nov 2026 (migration 010)
@@ -1016,7 +1081,7 @@ should read 0 from now on.
 | 16 | **STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.** Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
 | 15 | **STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.** The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
-| 13 | **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
+| 13 | **Partly done by stage 8's own testing, 22 Nov 2026: `candidate_resumes` is empty and the `resumes` bucket is completely empty, so those two lines are closed.** What remains: the anonymised `applications` rows, the 24 `[T5]` jobs, `Test Co A` and `Test Co B`, the two recruiter accounts, and `iworkatgcctest3@gmail.com`. Order still matters — jobs before companies, because of the foreign key. **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
 | 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |
