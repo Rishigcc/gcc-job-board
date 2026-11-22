@@ -29,6 +29,7 @@ import RecruiterJobs from "./Pages/RecruiterJobs.jsx";
 import RecruiterJobNew from "./Pages/RecruiterJobNew.jsx";
 import RecruiterJobEdit from "./Pages/RecruiterJobEdit.jsx";
 import RecruiterApplications from "./Pages/RecruiterApplications.jsx";
+import MyApplications from "./Pages/MyApplications.jsx";
 import RecruiterRoute from "./components/RecruiterRoute.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
 import { isRecruiterUser } from "./lib/accountType";
@@ -301,6 +302,18 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Profile />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* The candidate's own applications. ProtectedRoute without
+          blockRecruiters: one person may be both a candidate and a
+          recruiter, and the candidate half is theirs to see. */}
+      <Route
+        path="/my-applications"
+        element={
+          <ProtectedRoute>
+            <MyApplications />
           </ProtectedRoute>
         }
       />

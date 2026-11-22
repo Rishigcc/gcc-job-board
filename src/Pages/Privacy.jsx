@@ -1,9 +1,24 @@
 import PolicyLayout from "../components/PolicyLayout";
 
-// NOTE: this page describes the finished job board, including the application
-// and delete-my-data flows built in stages 6-8. It must not reach production
-// before those stages exist.
-const LAST_UPDATED = "16 November 2026";
+// This page describes the finished job board. The flows it promises now
+// exist: applying in stage 6, the verification gate in stage 7, and the
+// resume and delete-my-data controls in stage 8.
+//
+// THREE PARAGRAPHS WERE CORRECTED IN STAGE 8, AND THE REASON IS WORTH
+// KEEPING. The policy was written before the code and then the code
+// disagreed with it:
+//
+//   - it said replacing a resume does not reach back into past applications,
+//     which stage 6 deliberately reversed
+//   - it promised a withdraw feature, which version 1 does not have
+//   - its list of what anonymising erases named experience and location,
+//     which are not collected, and omitted email and phone, which are
+//
+// The fix was to make the policy describe what the system does. Where the
+// policy was the better design -- "neither we nor the recruiter can link that
+// application back to you" -- the code was changed to match it instead, which
+// is why candidate_id is erased and not merely hidden.
+const LAST_UPDATED = "22 November 2026";
 
 function Privacy() {
   return (
@@ -130,36 +145,72 @@ function Privacy() {
       </p>
       <ul>
         <li>
-          <strong>Your resume files are permanently deleted</strong> from our
+          <strong>Your resume file is permanently deleted</strong> from our
           storage. This cannot be undone.
         </li>
         <li>
           <strong>
             Your applications are anonymised rather than removed.
           </strong>{" "}
-          Your name, experience, location, notice period and the link to your
-          resume are stripped out. What remains is that an application existed
-          and when. We do this so a recruiter part-way through hiring is not
-          left with a broken record. Once anonymised, neither we nor the
-          recruiter can link that application back to you.
+          Your name, email address, phone number, notice period and the
+          reference linking the application to your account are all erased
+          from our database — not hidden, erased. What remains is that an
+          application was made to that role, and when.
         </li>
         <li>
-          Your community account, questions and answers are removed on request
-          as a separate step — tell us if you want both.
+          Because the account reference is erased too,{" "}
+          <strong>
+            neither we nor the recruiter can connect that application back to
+            you afterwards.
+          </strong>{" "}
+          That also means it disappears from your own list of applications,
+          and we cannot restore it or tell you later what you applied to.
+        </li>
+        <li>You can apply to the same role again afterwards if you want to.</li>
+        <li>
+          <strong>
+            Your community account, questions and answers are not touched.
+          </strong>{" "}
+          They are removed on request as a separate step — email{" "}
+          <a href="mailto:jobs@iworkatgcc.com">jobs@iworkatgcc.com</a> and say
+          you want both.
         </li>
       </ul>
+      <h2>Your resume</h2>
       <p>
-        You can also just replace or delete your resume on its own, from your
-        profile, without deleting anything else. Note that an application
-        already submitted keeps the exact file the recruiter was given;
-        replacing your profile resume does not reach back into past
-        applications.
+        You keep one resume on iWorkAtGCC, not one per application. Replacing
+        it replaces it everywhere — including for roles you applied to
+        earlier, because every application points at your current file rather
+        than keeping a copy.
+      </p>
+      <p>
+        We do this so you only have to upload once. It means a recruiter may
+        open a newer version than the one they first read, so every
+        application shows them the date your resume was last updated, and they
+        are never handed a changed file without being told.
+      </p>
+      <p>
+        You can replace or delete your resume on its own, from your profile,
+        without deleting anything else.
       </p>
 
-      <h2>Withdrawing an application</h2>
+      <h2>Can I take an application back?</h2>
       <p>
-        You can withdraw any application from your dashboard. The recruiter
-        stops seeing it as active. We keep a record that it was withdrawn.
+        Not yet. Once you apply, the recruiter has your application and there
+        is no way to un-send it from your side. We would rather say so than
+        imply otherwise.
+      </p>
+      <p>
+        What you can do now is <strong>Delete my data</strong>, above. That
+        strips your name and contact details from every application you have
+        sent and permanently deletes your resume file. It is not the same as
+        withdrawing — the recruiter keeps an anonymous record that an
+        application was made — and it cannot be undone.
+      </p>
+      <p>
+        If you want a recruiter to stop considering you for a specific role,
+        email <a href="mailto:jobs@iworkatgcc.com">jobs@iworkatgcc.com</a> and
+        we will pass it on.
       </p>
 
       <h2>If you are a recruiter</h2>

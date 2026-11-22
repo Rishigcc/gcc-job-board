@@ -690,6 +690,130 @@ Changes made between the rounds:
 account name, not `profiles.display_name` — see the section above. 132 real
 users have a display name that differs, so this would have mattered.
 
+## Stage 8 — the candidate's own side
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Anonymised applications from testing delete-my-data | `public.applications` | **Cannot be undone.** The row survives with nulls; delete it with the rest of the test rows. | PLANNED |
+| `jobs.closed_at` on test roles | `public.jobs` | Goes with the test jobs | PLANNED |
+| Four `public` functions, one `private` trigger function | database | `supabase/migrations/013_candidate_dashboard_rollback.sql` — keep them, this is the product | LIVE after migration 013 |
+
+**Nothing new is created by this stage** beyond a column and five functions. It
+deletes rather than collects.
+
+### Stage 8 — why the columns are nullable instead of hidden
+
+Stage 7 hides candidate data from an unverified recruiter by having a function
+not return it. That is right **there**, where the data must still exist for a
+verified recruiter to see later.
+
+It is **wrong here.** The privacy policy says the name, email, phone, notice
+period and account reference are *"erased from our database — not hidden,
+erased"*. A column that still holds the name has erased nothing, whatever the
+read function does with it. So migration 013 drops `NOT NULL` on
+`candidate_id`, `full_name`, `email` and `notice_period`, and
+`anonymise_job_data_for()` nulls them.
+
+Every CHECK constraint on those columns already tolerates NULL — a CHECK that
+evaluates to NULL passes — so none needed altering. Verified against the live
+definitions before writing the migration rather than after it failed.
+
+**`candidate_id` goes because of one sentence**: *"neither we nor the recruiter
+can connect that application back to you."* Nulling the name while keeping the
+account reference would leave that false. Two consequences, both of them
+decided and both stated on the button before it is pressed: the candidate
+loses sight of the application too, and `one_application_per_job` no longer
+stops them applying to that role again, because NULLs do not collide in a
+Postgres unique index.
+
+### Stage 8 — the delete functions are not callable from a browser
+
+Deleting a resume is two things that must both happen: a row goes and a file
+in a private bucket goes. Only the service key can delete the file.
+
+So `delete_resume_for(uuid)` and `anonymise_job_data_for(uuid)` take a user id
+and are granted to **`service_role` only**. There is no client-callable path to
+either. If there were, a hand-written RPC call from the console would
+anonymise the row and leave the file in storage — and *"permanently deleted"*
+would be quietly false with nothing left to notice it.
+
+The endpoints verify the bearer token with the service key and pass the
+verified id, the same shape `/api/upload-resume` already uses.
+`my_applications()` is read-only and stays callable by the candidate.
+
+**The grant is the only thing between "pass your own id" and "pass anybody's",
+so it must not be widened to `authenticated`.**
+
+**Order of operations: file first, then the database.** A failed file delete
+then changes nothing and can be retried. The other order leaves a row saying
+the resume is gone while the file still sits in storage, which is the single
+outcome the policy forbids.
+
+### Stage 8 — the 12-month sweep rides an existing cron
+
+The policy says applications are kept *"for up to 12 months after it closes or
+expires"*. The Hobby plan allows two cron jobs and both were taken.
+
+It did not need a third. The sweep touches **no files** — resumes have their
+own retention and there is one per candidate, not one per application — so it
+is a single SQL statement in `public.purge_expired_applications()`, called once
+a day from `api/rebuild.js`.
+
+`rebuild.js` hosts it rather than `send-digest.js` deliberately: the digest
+reaches ~2,500 people and a crash part-way through risks double-sending, while
+`rebuild.js` sends nothing. The sweep runs **after** the deploy hook has fired
+and is wrapped so it can never fail a rebuild — its outcome goes in the
+response body and the log, never into the status code. The count is logged on
+every run including zero, so a sweep that has silently stopped working shows
+up as an absence.
+
+**`jobs.closed_at` had to exist first.** Closing early was not recorded
+anywhere and `updated_at` moves on any edit, so "12 months after it closes"
+could not be computed. Measuring from `expires_at` instead would have
+**breached** the sentence rather than satisfied it: a role closed on day 3
+still expires on day 30, so its applications would be held about 12.9 months
+after closing. Rishi's decision, 22 Nov 2026: record the date rather than
+reword around not having it, since once roles close without it that date is
+gone for good and stage 9's admin queue will want it.
+
+Reopening clears it, so retention always measures from the most recent close.
+**There is deliberately no backfill** — for roles already closed the date is
+not recoverable, and inventing one would be worse than the `coalesce` fallback
+to `expires_at`. Every such row today is test data.
+
+### Stage 8 — status precedence, which is the part no test round would catch
+
+A recruiter can shortlist someone and the role can then expire. Both facts are
+true and only one can be a chip. **The recruiter's decision wins**, because
+"Shortlisted" tells the candidate something about themselves while "Closed"
+only tells them about the calendar — and showing "Closed" over a shortlist
+reads as a rejection, which is the crueller of the two mistakes.
+
+Seeing it by hand would need a shortlisted application on an expired role,
+which is exactly the state nobody sets up by accident, so it is pinned in
+`scripts/stage8-candidate-test.mjs` instead.
+
+### Stage 8 — the privacy policy was corrected, not the code
+
+Three paragraphs disagreed with the built system. `Privacy.jsx` is on the
+branch only and has never been on `main`, so none of this was ever published —
+it would have gone live at the merge.
+
+| Said | Reality | Fixed by |
+|---|---|---|
+| Replacing a resume *"does not reach back into past applications"* | Stage 6 deliberately reversed exactly this | Rewriting the paragraph to describe one resume per candidate and the updated-on date as the mitigation |
+| A whole *"Withdrawing an application"* section | Version 1 has no withdraw | Replacing it with "Can I take an application back?" — not yet, and why |
+| Anonymising erases *"name, experience, location, notice period"* | There is no experience or location column; email and phone are collected and were not listed | Listing the columns that actually exist |
+
+**One went the other way.** *"Neither we nor the recruiter can link that
+application back to you"* was the better design, so the code was changed to
+match the policy rather than the policy softened to match the code. That is
+why `candidate_id` is erased.
+
+`LAST_UPDATED` on the privacy policy moves to **22 November 2026**.
+`RecruiterTerms.jsx` still carries its own date and is unaffected — carried
+item 1 still applies to it.
+
 ## Deferred — the wording pass (after all eleven stages)
 
 Logged, **not to be changed now**. Both are Rishi's calls from the stage 7

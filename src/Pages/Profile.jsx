@@ -5,6 +5,7 @@ import { saveDisplayName } from "../lib/useDisplayName";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
 import Seo from "../components/Seo";
+import ProfileJobBoard from "../components/ProfileJobBoard";
 
 function Profile() {
   const navigate = useNavigate();
@@ -228,6 +229,13 @@ function Profile() {
             </button>
           </div>
         )}
+
+        {/* The job board half of the profile: applications, the resume on
+            file, and Delete my data -- which lives here because the privacy
+            policy says it does. Kept in its own component so this page, which
+            the community has used since before the job board existed, gains
+            one line rather than two hundred. */}
+        {!loading && <ProfileJobBoard userId={userId} />}
 
       </section>
 

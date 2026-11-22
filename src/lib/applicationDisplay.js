@@ -80,3 +80,63 @@ export function summariseStatuses(rows) {
 
   return parts.join(" · ");
 }
+
+// ---------------------------------------------------------------------------
+// What the CANDIDATE sees, which is not quite what the recruiter sees.
+//
+// The locked vocabulary is Applied / Shortlisted / Not selected / Closed, and
+// "Closed" is the one that is not a stored value -- it is derived from the
+// role having ended, the same way expiry is derived everywhere else.
+//
+// PRECEDENCE MATTERS, AND IT IS NOT OBVIOUS.
+//   A recruiter can shortlist someone and the role can then expire. Both
+//   facts are true, and only one can be a chip. The recruiter's decision
+//   wins, because "Shortlisted" tells the candidate something about
+//   themselves while "Closed" only tells them about the calendar. Showing
+//   "Closed" over a shortlist would read as a rejection and would be the
+//   crueller of the two mistakes.
+//
+//   So: an explicit decision first, then the role's state, then the default.
+// ---------------------------------------------------------------------------
+export function candidateStatusLabel(row) {
+  const status = row?.status;
+
+  if (status === "shortlisted") return "Shortlisted";
+  if (status === "not_selected") return "Not selected";
+  if (status === "withdrawn") return "Withdrawn";
+  if (row?.job_has_ended) return "Closed";
+
+  return "Applied";
+}
+
+export function candidateStatusTone(row) {
+  const label = candidateStatusLabel(row);
+
+  if (label === "Shortlisted") return "good";
+  if (label === "Not selected") return "muted";
+  if (label === "Withdrawn") return "muted";
+  if (label === "Closed") return "muted";
+
+  return "new";
+}
+
+// The sentence under the chip. A chip alone leaves a candidate guessing what,
+// if anything, they should do -- and the honest answer is usually nothing.
+export function candidateStatusHint(row) {
+  const label = candidateStatusLabel(row);
+
+  if (label === "Shortlisted") {
+    return "The recruiter has shortlisted you. They contact candidates directly.";
+  }
+  if (label === "Not selected") {
+    return "The recruiter is not taking this one forward.";
+  }
+  if (label === "Withdrawn") {
+    return "This application was withdrawn.";
+  }
+  if (label === "Closed") {
+    return "This role has closed or passed its closing date. The recruiter did not mark your application either way.";
+  }
+
+  return "Sent. The recruiter has it and contacts candidates directly.";
+}
