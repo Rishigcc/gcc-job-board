@@ -25,7 +25,7 @@ export { MAX_RESUME_BYTES, validateApplication } from "./applicationModel";
 // can write to it -- and because the endpoint reads the file's first bytes
 // instead of believing its name. See api/upload-resume.js.
 // ---------------------------------------------------------------------------
-async function uploadResume(file) {
+export async function uploadResume(file) {
   const {
     data: { session },
   } = await supabase.auth.getSession();

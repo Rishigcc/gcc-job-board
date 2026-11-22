@@ -18,6 +18,11 @@ import PolicyLayout from "../components/PolicyLayout";
 // policy was the better design -- "neither we nor the recruiter can link that
 // application back to you" -- the code was changed to match it instead, which
 // is why candidate_id is erased and not merely hidden.
+//
+// Corrected again when /profile was stripped back: deleting a resume on its
+// own moved to /profile/delete-data, so "from your profile" was no longer
+// where that control lived. The policy and the button now also use the same
+// name -- "Delete my job board data" -- rather than two names for one thing.
 const LAST_UPDATED = "22 November 2026";
 
 function Privacy() {
@@ -137,7 +142,8 @@ function Privacy() {
 
       <h2>Deleting your data</h2>
       <p>
-        There is a <strong>Delete my data</strong> option in your profile. You
+        There is a <strong>Delete my job board data</strong> link on your
+        profile, which opens a page explaining exactly what it does. You
         can also email{" "}
         <a href="mailto:jobs@iworkatgcc.com">jobs@iworkatgcc.com</a> and we
         will do it for you. Here is exactly what happens, because the two
@@ -190,8 +196,12 @@ function Privacy() {
         are never handed a changed file without being told.
       </p>
       <p>
-        You can replace or delete your resume on its own, from your profile,
-        without deleting anything else.
+        You can replace your resume at any time from your profile. You can
+        also delete it on its own, without deleting anything else — that
+        option is on the <strong>Delete my job board data</strong> page, which
+        your profile links to. Deleting your resume does not withdraw
+        anything: recruiters keep the applications you already sent and simply
+        see that no resume is attached.
       </p>
 
       <h2>Can I take an application back?</h2>

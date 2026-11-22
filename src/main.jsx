@@ -30,6 +30,7 @@ import RecruiterJobNew from "./Pages/RecruiterJobNew.jsx";
 import RecruiterJobEdit from "./Pages/RecruiterJobEdit.jsx";
 import RecruiterApplications from "./Pages/RecruiterApplications.jsx";
 import MyApplications from "./Pages/MyApplications.jsx";
+import DeleteMyData from "./Pages/DeleteMyData.jsx";
 import RecruiterRoute from "./components/RecruiterRoute.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
 import { isRecruiterUser } from "./lib/accountType";
@@ -314,6 +315,18 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MyApplications />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Everything destructive about the candidate's job board data lives
+          on its own route, so /profile carries a text link rather than a red
+          panel on a page the whole community opens daily. */}
+      <Route
+        path="/profile/delete-data"
+        element={
+          <ProtectedRoute>
+            <DeleteMyData />
           </ProtectedRoute>
         }
       />

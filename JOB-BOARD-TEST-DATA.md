@@ -793,6 +793,33 @@ Seeing it by hand would need a shortlisted application on an expired role,
 which is exactly the state nobody sets up by accident, so it is pinned in
 `scripts/stage8-candidate-test.mjs` instead.
 
+### Stage 8 — /profile was stripped back after the first look
+
+Rishi's instruction, 22 Nov 2026, and the reasoning is worth keeping: no red
+panel on a page the whole community opens every day.
+
+- **The resume block is a date and a button.** No explanatory paragraph, no
+  warning box. The one fact that could not simply be dropped — there is one
+  resume and replacing it reaches back into applications already sent — is
+  not standing page text; it appears once a file has been picked, beside the
+  button that would do it. Clean resting page, no silent replacement.
+- **An upload control had to be added**, because `/profile` previously had
+  none: uploading only ever happened inside an apply form. Same endpoint, same
+  2 MB and real-PDF checks.
+- **Everything destructive moved to `/profile/delete-data`**, reached by one
+  quiet grey text link at the bottom of `/profile`. The feature stays because
+  the privacy policy promises it; it just no longer greets people who came to
+  change their display name.
+- **"Delete my resume only" moved there too** rather than disappearing with
+  the stripped-back block, because the policy promises a resume can be deleted
+  on its own.
+
+Two policy sentences had to follow the controls, and both were approved: the
+resume paragraph now says replacing happens on the profile and deleting on its
+own happens on the delete page, with the clause that deleting a resume does not
+withdraw anything; and the policy and the button now share one name, **Delete
+my job board data**, instead of the policy saying "Delete my data".
+
 ### Stage 8 — the privacy policy was corrected, not the code
 
 Three paragraphs disagreed with the built system. `Privacy.jsx` is on the
@@ -813,6 +840,37 @@ why `candidate_id` is erased.
 `LAST_UPDATED` on the privacy policy moves to **22 November 2026**.
 `RecruiterTerms.jsx` still carries its own date and is unaffected — carried
 item 1 still applies to it.
+
+## Deferred — saved jobs, to stage 10
+
+A candidate bookmarking a recruiter-posted role on `/gcc-jobs`, the same idea
+as the existing Questions Saved counter. Not job drafts, and nothing to do
+with the external listings on `/jobs`.
+
+**Cut from stage 8, reinstated, then moved to stage 10 on 22 Nov 2026.** The
+reason it was reinstated — that "Explore GCC Jobs" is in the navigation — does
+not hold: that link goes to `/jobs`, the collated external page, and `/gcc-jobs`
+is still unreachable from anywhere a visitor would look. Building a bookmark
+button on a page nobody can navigate to would ship a feature to an empty room.
+Stage 10 is where the board becomes both indexable and linked, so that is where
+this belongs.
+
+**The design, recorded now so stage 10 does not redesign it:**
+
+| Piece | Decision |
+|---|---|
+| Table | `public.job_saves`, mirroring `question_saves` exactly, since that shape is already proven in production |
+| Columns | `job_id bigint`, `user_id uuid`, `created_at timestamptz` |
+| Primary key | `(job_id, user_id)` — one save per person per role, so saving twice is idempotent rather than an error |
+| Foreign keys | both `on delete cascade` |
+| Policies | three, all `auth.uid() = user_id`: select own, insert as self, delete own |
+| Grants | `select, insert, delete` to `authenticated`. **No update** — a save has nothing to change. |
+| Function | `my_saved_jobs()`, definer, for the same reason `my_applications()` exists: a saved role that has since closed is hidden by `private.job_is_public()`, and a list that silently loses rows is worse than one that marks them Closed |
+| Save control | the card on `/gcc-jobs` and the detail page. Signed out reuses `setPostLoginRedirect`, so the save completes after sign-in instead of being lost |
+| Profile | a **Jobs Saved** counter beside Questions Asked and Questions Saved — the existing two-up grid becomes three — linking to `/saved-jobs` |
+
+No new security surface: a save is the candidate's own row and nothing else
+ever reads it.
 
 ## Deferred — the wording pass (after all eleven stages)
 
@@ -929,6 +987,7 @@ should read 0 from now on.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 15 | **STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.** The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
 | 13 | **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
