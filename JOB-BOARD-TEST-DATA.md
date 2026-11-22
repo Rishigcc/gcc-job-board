@@ -828,6 +828,18 @@ panel on a page the whole community opens every day.
   the bucket and should refuse rather than trust that the write-time trigger
   held. Signed for 60 seconds, filename built from the row's own `updated_at`.
 
+- **The job detail page's back link now depends on how you got there.** From
+  `/my-applications` it offers both *My applications* and *All roles*; from
+  anywhere else it is unchanged. It keys off **router state, not a query
+  parameter**, and that is the whole design: state exists only for an in-app
+  navigation, so a refresh, a pasted link or a link shared with someone else
+  arrives with none and falls back to the public behaviour. A `?from=`
+  parameter would survive being copied and would then offer a stranger a route
+  to "My applications", which is not theirs. The state is read as a boolean
+  and the destination is hardcoded, so nothing navigates to a path that came
+  out of state. The canonical-slug redirect passes the state through, or an
+  older saved link would silently lose its way back.
+
 Two policy sentences had to follow the controls, and both were approved: the
 resume paragraph now says replacing happens on the profile and deleting on its
 own happens on the delete page, with the clause that deleting a resume does not

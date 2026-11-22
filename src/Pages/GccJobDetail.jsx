@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader";
 import Footer from "../components/Footer";
 import Seo from "../components/Seo";
@@ -43,14 +43,53 @@ function Fact({ label, children }) {
   );
 }
 
-function Shell({ children }) {
+// ===========================================================================
+// WHERE "BACK" GOES.
+//
+// A candidate who arrived from their own applications list wants to return to
+// it; someone who arrived from the public list, a shared link or a refresh
+// wants the list of roles. So both links are shown in the first case and the
+// original single link in every other, rather than guessing one.
+//
+// IT KEYS OFF ROUTER STATE, NOT A QUERY PARAMETER, AND THAT IS THE POINT.
+//   Router state exists only for an in-app navigation. A refresh, a pasted
+//   link or a link shared with someone else arrives with no state, so it
+//   falls back to exactly the behaviour that was here before -- which is what
+//   makes a shared link impossible to mislead with. A ?from= parameter would
+//   survive being copied and would then offer a stranger a route to "My
+//   applications", which is not theirs.
+//
+//   The state is read as a boolean and the destination is hardcoded. Nothing
+//   navigates to a path that came out of state.
+// ===========================================================================
+function BackLinks({ fromApplications }) {
+  if (!fromApplications) {
+    return (
+      <Link to="/gcc-jobs" className="text-sm font-semibold text-blue-700 hover:underline">
+        ← All roles
+      </Link>
+    );
+  }
+
+  return (
+    <p className="text-sm font-semibold">
+      <Link to="/my-applications" className="text-blue-700 hover:underline">
+        ← My applications
+      </Link>
+      <span className="px-2 font-normal text-slate-400">·</span>
+      <Link to="/gcc-jobs" className="text-blue-700 hover:underline">
+        All roles
+      </Link>
+    </p>
+  );
+}
+
+function Shell({ fromApplications, children }) {
   return (
     <div className="min-h-screen bg-slate-100">
       <SiteHeader />
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-        <Link to="/gcc-jobs" className="text-sm font-semibold text-blue-700 hover:underline">
-          ← All roles
-        </Link>
+        <BackLinks fromApplications={fromApplications} />
         {children}
       </main>
       <Footer />
@@ -61,6 +100,10 @@ function Shell({ children }) {
 function GccJobDetail() {
   const { slugId } = useParams();
   const [params] = useSearchParams();
+  const location = useLocation();
+
+  // Only ever a boolean, and only ever present on an in-app navigation.
+  const fromApplications = location.state?.fromApplications === true;
   const { id, slug } = parseJobParam(slugId);
 
   const [fetched, setFetched] = useState({ status: "loading" });
@@ -88,7 +131,7 @@ function GccJobDetail() {
 
   if (state.status === "loading") {
     return (
-      <Shell>
+      <Shell fromApplications={fromApplications}>
         <p className="mt-8 text-slate-500">Loading…</p>
       </Shell>
     );
@@ -101,7 +144,7 @@ function GccJobDetail() {
   // would turn the id into an oracle for which jobs exist.
   if (state.status === "missing") {
     return (
-      <Shell>
+      <Shell fromApplications={fromApplications}>
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-8">
           <h1 className="text-xl font-bold text-slate-900">
             This role is no longer open
@@ -123,7 +166,7 @@ function GccJobDetail() {
 
   if (state.status === "error") {
     return (
-      <Shell>
+      <Shell fromApplications={fromApplications}>
         <div role="alert" className="mt-6 rounded-2xl border border-red-300 bg-red-50 p-8">
           <h1 className="text-xl font-bold text-red-900">This role could not be loaded.</h1>
           <p className="mt-2 font-mono text-xs text-red-700">{state.message}</p>
@@ -136,7 +179,7 @@ function GccJobDetail() {
 
   // Canonical URL. The slug in the link may be stale after a title edit.
   if (slug !== job.slug) {
-    return <Navigate to={jobPath(job)} replace />;
+    return <Navigate to={jobPath(job)} replace state={location.state} />;
   }
 
   const salary = formatSalary(job);
@@ -155,9 +198,7 @@ function GccJobDetail() {
       <SiteHeader />
 
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-        <Link to="/gcc-jobs" className="text-sm font-semibold text-blue-700 hover:underline">
-          ← All roles
-        </Link>
+        <BackLinks fromApplications={fromApplications} />
 
         {/* THE SIDEBAR RUNS THE FULL HEIGHT OF THE CARD.
             The earlier attempt made the grey panel match the DESCRIPTION

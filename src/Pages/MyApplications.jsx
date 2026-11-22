@@ -172,6 +172,12 @@ function MyApplications() {
                     {!row.job_has_ended ? (
                       <Link
                         to={`/gcc-jobs/${row.job_slug}-${row.job_id}`}
+                        /* So the role page can offer a way back here as well
+                           as a way to browse on. Router state, so a refresh
+                           or a shared link falls back to the public
+                           behaviour instead of offering a stranger a route
+                           into someone else's applications. */
+                        state={{ fromApplications: true }}
                         className="shrink-0 rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                       >
                         View the role
