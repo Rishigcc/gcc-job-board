@@ -77,8 +77,12 @@ function BackLinks({ fromApplications }) {
         ← My applications
       </Link>
       <span className="px-2 font-normal text-slate-400">·</span>
+      {/* "other" only has a referent once the first link is beside it. The
+          fallback below deliberately keeps "All roles", because to someone
+          arriving on a direct link there is nothing for "other" to be other
+          than. */}
       <Link to="/gcc-jobs" className="text-blue-700 hover:underline">
-        All roles
+        Explore other roles
       </Link>
     </p>
   );
