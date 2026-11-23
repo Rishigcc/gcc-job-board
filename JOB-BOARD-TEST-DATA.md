@@ -1323,6 +1323,142 @@ is the advisor confirming the grant split:
 granted to `service_role` only.
 `private.audit()` is absent too, because the `private` schema is not exposed.
 
+## Stage 9b — admin reporting (SCOPED 23 Nov 2026, not started)
+
+Its own stage, **before stage 10**, because verification decisions are being
+made weekly with no numbers and the latency baseline has to exist before real
+recruiters arrive. Read-only and additive, so it cannot destabilise stage 9's
+action queue — which is why it is not folded into it.
+
+### What it covers
+
+| Section | Figures |
+|---|---|
+| **Overview** | Headline and reconciliation numbers, from one function so nothing is computed twice |
+| **Roles** | applications, unactioned, shortlisted, not selected, anonymised, time to first application, last application, **plus the zero-application view** |
+| **Recruiters** | posted / live / closed / hidden / expired, applications received, shortlisted, not selected, last posted, **verification latency**, **cap pressure** |
+| **Candidates** | name, roles applied to, first and last applied. **No email in the list** — see below |
+| **Data health** | candidates with applications but no resume, orphaned files |
+
+One **Reports** tab with a sub-selector (Overview / Roles / Recruiters /
+Candidates). Rishi's decision: five top-level tabs is too many.
+
+### Four functions, and why functions at all
+
+`admin reads all applications` and `admin reads all jobs` **already permit
+every one of these reads.** The functions unlock nothing. They exist because an
+aggregate returns counts, whereas a client-side group-by ships every
+candidate's name and email to a browser in order to count them — the same
+principle as stage 7, made even though the policy does not require it.
+
+```
+admin_report_totals()      one row  -- every headline and reconciliation figure
+admin_role_stats()         per role
+admin_recruiter_stats()    per recruiter, including latency
+admin_candidate_stats()    per identifiable candidate, no email
+admin_candidate_detail()   one candidate, with email -- opened deliberately
+```
+
+Zero-application roles and cap pressure are **filters over those**, not new
+functions: the page narrows, the surface does not grow.
+
+**One rule the stage rests on: every number has exactly one source.** If the
+Roles page sums per-role counts and Overview sums its own, they will eventually
+disagree. That is the only reason `admin_report_totals()` exists.
+
+### The reconciliation rule — W3 applied consistently
+
+Rishi's decision, 23 Nov 2026: **a number nobody can act on should not sit in a
+count of work waiting.**
+
+| Figure | Anonymised rows |
+|---|---|
+| Totals, per role and per recruiter | **Included** — they must agree with what the recruiter sees |
+| **Unactioned** | **Excluded** |
+| Shortlisted / not selected | **Included** — `status` survives anonymising |
+| Candidates list | **Absent** — no id, no name, no email to list |
+| Anonymised | **Its own figure, beside the totals** |
+
+So the candidates view shows a number **deliberately smaller** than the total,
+and the page must state the difference, or the per-candidate figures will not
+sum and someone will lose an afternoon to it.
+
+### Verification latency — decision A
+
+**Source: the audit log, not `recruiter_profiles.verified_at`.** That column is
+overwritten on re-verification and nulled on unverify, so it is not a
+historical record. Latency is `recruiter_profiles.created_at` to the **first**
+`recruiter_verified` audit row — first, not latest, because a re-verification
+after an unverify is not the original wait.
+
+**The baseline starts the day migration 014 shipped.** Verifications done in
+SQL before that have no audit row and must display as **"not measured"**, never
+as a null treated as zero, which would drag the average into looking good.
+
+**Rishi's decision: A — weekends excluded, public holidays not modelled.** His
+reasoning: *"I'd rather under-report my own performance than model state
+holidays."* A holiday therefore counts as a working day, which makes the figure
+**pessimistic — it will never flatter.** That is the right direction for a
+published promise.
+
+A signup at Friday 18:00 is due end of Tuesday: two working days, **4.2
+calendar days**. Measuring calendar time would report a breach that never
+happened, which is the whole reason this needed deciding rather than assuming.
+
+### The candidates list — Rishi's shape, and the two details it needs
+
+**Decided: name, roles applied to, first and last applied in the list. Email
+only on opening one candidate**, the same shape as the anonymise panel. Not
+harder than either option originally proposed — one extra function, and the
+email never crosses the wire for the list view at all, which is better than the
+full-list option.
+
+**Two details that need stating because they are not obvious:**
+
+- **`full_name` is per application, not per candidate.** Someone who applied
+  three times may have three spellings. The list shows **the name on their most
+  recent application**, and the same applies to the email on the detail view.
+- **A candidate who deleted their data and then applied again** appears with a
+  count covering only the applications made since. The earlier ones are
+  unlinkable by design, and the reconciliation figure is where they show up.
+
+### The four additions Rishi accepted
+
+1. **Verification latency** against the published two-working-day promise.
+2. **Time to first application** per role, and **roles with zero applications
+   by age** — the second being the actionable one, since those are the
+   recruiters who quietly leave.
+3. **Cap pressure** — unverified recruiters at or near ten live roles, a
+   verification-queue signal currently invisible.
+4. **Resume-less candidates** — `candidate_resumes` against distinct
+   candidates with applications. Should be equal; a gap means something broke.
+
+**One sequencing fact:** all of these come from existing tables plus the audit
+log. Nothing needs new collection **except "did anyone look at the role", which
+needs stage 11.** So the honest funnel in 9b is applications → shortlisted →
+not selected, and views can only be added afterwards.
+
+### 9b TOUCHES A SIGNED-OFF STAGE
+
+**W3 moves into 9b** (Rishi's decision: not into stage 9's current round, which
+is mid-retest of the hide/unhide bug and should not gain a second moving part).
+
+The change is **`summariseStatuses()` in `src/lib/applicationDisplay.js` plus
+its tests — no migration.** `recruiter_applications()` already returns
+`is_anonymised` and the function already receives it and ignores it. Anonymised
+rows stop counting toward "1 new" and get their own figure.
+
+`recruiter_application_counts()` — the "1 application" on My jobs — **stays
+exactly as it is**, because that is a total, and totals include anonymised.
+
+> **9b's checklist must retest stage 7's applications panel.** It is a
+> signed-off stage and this changes one line of what it displays.
+
+### What 9b needs before it starts
+
+One migration (**017**). No new environment variables. Nothing from Rishi
+beyond stage 9 being signed off first.
+
 ## Launch checklist — production-dependent verification
 
 **This is the list, so it does not live only in a conversation.** Each item
