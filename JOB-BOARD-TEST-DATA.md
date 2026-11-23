@@ -1631,6 +1631,41 @@ mysteriously instead of saying why.
 `true` makes it transaction-local, so it cannot leak into the session. Nothing
 is granted; it supplies a session the editor does not have.
 
+### Stage 9b — W3, and why the figures deliberately do not sum
+
+`summariseStatuses()` now excludes anonymised applications from **"new"** and
+shows **"N anonymised"** as its own part. `recruiter_applications()` already
+returned `is_anonymised`; the function received it and ignored it. **No
+migration.**
+
+`recruiter_application_counts()` — the "1 application" on My jobs — is
+unchanged, because that is a **total**, and totals include anonymised.
+
+**The anonymised figure is a separate axis, not a fifth bucket**, which is why
+the parts need not add up to the number of cards:
+
+- *new / shortlisted / not selected* answer **what did you decide**
+- *anonymised* answers **who can no longer be contacted**
+
+An application you shortlisted whose candidate then deleted their data is
+counted in **both**, and the card itself already shows the same two facts: a
+Shortlisted chip and "Details removed". Forcing them into one partition would
+mean either losing a decision you made or inventing a sum nobody asked for.
+
+### Stage 9b — a silent no-op in my own tooling, worth recording
+
+While adding the report-formatting tests, a Python `s.replace()` that inserted
+an import **matched nothing and failed silently**, because the anchor string I
+used belonged to a different test file. The tests then ran and died on
+`notMeasured is not defined`.
+
+Harmless here because it failed loudly at runtime. Worth recording because the
+same edit a line later — into a *source* file rather than a test — would have
+produced a file that still compiled and silently lacked the change. **Every
+edit in this project's tooling should assert its anchor matched**, and the
+ones that do are the reason several of these edits have failed fast instead of
+quietly.
+
 ### Stage 9b — the test data is in an unusual state, on purpose
 
 After stage 9's testing, **all 10 applications are anonymised.** So when 9b is

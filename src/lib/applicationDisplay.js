@@ -66,9 +66,21 @@ export function applicationCountLabel(count) {
 // reshuffle itself as statuses change.
 export function summariseStatuses(rows) {
   const counts = { applied: 0, shortlisted: 0, not_selected: 0, withdrawn: 0 };
+  let anonymised = 0;
 
   for (const row of rows || []) {
-    if (counts[row.status] === undefined) counts.applied += 1;
+    if (row?.is_anonymised) anonymised += 1;
+
+    // "new" means needs your attention, and an anonymised application needs
+    // none -- the candidate asked us to erase their details and nobody can act
+    // on it. Counting it as new put work in a queue that could never be
+    // cleared, which is the W3 decision: a number nobody can act on should not
+    // sit in a count of work waiting.
+    if (row?.is_anonymised && (row.status === "applied" || counts[row?.status] === undefined)) {
+      continue;
+    }
+
+    if (counts[row?.status] === undefined) counts.applied += 1;
     else counts[row.status] += 1;
   }
 
@@ -77,6 +89,14 @@ export function summariseStatuses(rows) {
   if (counts.shortlisted) parts.push(`${counts.shortlisted} shortlisted`);
   if (counts.not_selected) parts.push(`${counts.not_selected} not selected`);
   if (counts.withdrawn) parts.push(`${counts.withdrawn} withdrawn`);
+
+  // Its own figure rather than a fifth bucket, because it answers a different
+  // question. The others say what you decided; this says who can no longer be
+  // contacted. So an application you shortlisted and who then deleted their
+  // data is counted in BOTH, and the parts deliberately need not sum to the
+  // number of cards -- two axes, not one partition. The card itself shows the
+  // same two facts: a Shortlisted chip and "Details removed".
+  if (anonymised) parts.push(`${anonymised} anonymised`);
 
   return parts.join(" · ");
 }

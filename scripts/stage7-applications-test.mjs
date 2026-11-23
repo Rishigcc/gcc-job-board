@@ -114,6 +114,25 @@ t("withdrawn comes last",
   summariseStatuses(rows("withdrawn", "applied")), "1 new · 1 withdrawn");
 t("an unknown status is counted, not dropped",
   summariseStatuses(rows("under_review", "applied")), "2 new");
+console.log("\nanonymised applications -- W3");
+const anon = (status) => ({ status, is_anonymised: true });
+t("an anonymised application is not 'new'",
+  summariseStatuses([anon("applied")]), "1 anonymised");
+t("it does not inflate a queue that cannot be cleared",
+  summariseStatuses([...rows("applied", "applied"), anon("applied")]),
+  "2 new · 1 anonymised");
+t("a decision you made is still counted, on its own axis",
+  summariseStatuses([anon("shortlisted")]), "1 shortlisted · 1 anonymised");
+t("so the parts need not sum to the card count, deliberately",
+  summariseStatuses([anon("not_selected")]), "1 not selected · 1 anonymised");
+t("a normal list is unchanged by the new rule",
+  summariseStatuses(rows("applied", "shortlisted")), "1 new · 1 shortlisted");
+t("an all-anonymised list reads as such and shows no work",
+  summariseStatuses([anon("applied"), anon("applied"), anon("applied")]),
+  "3 anonymised");
+t("a missing is_anonymised behaves exactly as before",
+  summariseStatuses(rows("applied")), "1 new");
+
 t("the total always matches the list length",
   summariseStatuses(rows("applied", "shortlisted", "not_selected", "withdrawn")),
   "1 new · 1 shortlisted · 1 not selected · 1 withdrawn");

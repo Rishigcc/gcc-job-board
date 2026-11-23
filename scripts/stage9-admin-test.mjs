@@ -34,6 +34,14 @@ import {
   auditActionLabel,
   shortDate,
 } from "../src/lib/adminFormat.js";
+import {
+  workingDaysLabel,
+  hoursLabel,
+  promiseLabel,
+  promiseTone,
+  reconciliationLine,
+  notMeasured,
+} from "../src/lib/reportFormat.js";
 
 let pass = 0, fail = 0;
 
@@ -147,6 +155,59 @@ t("a superstring is not enough", confirmed("ANONYMISE NOW", CONFIRM_ANONYMISE), 
 console.log("\nthe three words are distinct, so no form can confirm another's action");
 t("all distinct",
   new Set([CONFIRM_DELETE_MY_DATA, CONFIRM_ORPHAN_DELETE, CONFIRM_ANONYMISE]).size, 3);
+
+// ---------------------------------------------------------------------------
+// Report formatting.
+//
+// The rule that matters: NULL means "not measured" and must never read as
+// zero. An unmeasured verification showing "0 days" would make a published
+// two-working-day promise look perfect in exactly the place where there is no
+// evidence either way -- a number that flatters by accident is worse than a
+// blank.
+// ---------------------------------------------------------------------------
+console.log("\nnot measured is never zero");
+t("null is not measured",      notMeasured(null), true);
+t("undefined is not measured", notMeasured(undefined), true);
+t("zero IS measured",          notMeasured(0), false);
+t("false IS measured",         notMeasured(false), false);
+
+t("null working days reads as not measured", workingDaysLabel(null), "not measured");
+t("zero working days reads as same day",     workingDaysLabel(0), "same day");
+t("one is singular",                         workingDaysLabel(1), "1 working day");
+t("two is plural",                           workingDaysLabel(2), "2 working days");
+t("a breach still reads plainly",            workingDaysLabel(5), "5 working days");
+
+t("null hours render as a dash", hoursLabel(null), "—");
+t("nonsense renders as a dash",  hoursLabel("not a number"), "—");
+t("under an hour says so",       hoursLabel(0.4), "under an hour");
+t("hours up to two days",        hoursLabel(30), "30 hours");
+t("then days",                   hoursLabel(100), "4.2 days");
+
+console.log("\nthe promise has three states, not two");
+t("kept",          promiseLabel(true), "within 2 working days");
+t("missed",        promiseLabel(false), "over 2 working days");
+t("unmeasurable",  promiseLabel(null), "not measured");
+t("kept is good",       promiseTone(true), "good");
+t("missed is a risk",   promiseTone(false), "risk");
+t("unmeasurable is neither, NOT a breach", promiseTone(null), "muted");
+
+console.log("\nthe reconciliation line explains a deliberately smaller number");
+t("no applications at all",
+  reconciliationLine({ applications_total: 0, candidates_identifiable: 0, applications_anonymised: 0 }),
+  "0 applications from 0 candidates.");
+t("nothing anonymised means no explanation is needed",
+  reconciliationLine({ applications_total: 5, candidates_identifiable: 3, applications_anonymised: 0 }),
+  "5 applications from 3 candidates.");
+t("one application reads singular",
+  reconciliationLine({ applications_total: 1, candidates_identifiable: 1, applications_anonymised: 0 }),
+  "1 application from 1 candidate.");
+t("anonymised applications are explained rather than left to look like a bug",
+  reconciliationLine({ applications_total: 10, candidates_identifiable: 0, applications_anonymised: 10 })
+    .includes("no candidate left to attribute them to"), true);
+t("and the figures appear in it",
+  reconciliationLine({ applications_total: 10, candidates_identifiable: 0, applications_anonymised: 10 })
+    .startsWith("10 applications from 0 candidates"), true);
+t("a missing totals object does not throw", reconciliationLine(null), "");
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

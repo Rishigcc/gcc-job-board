@@ -9,6 +9,7 @@ import AdminRecruiters from "../components/AdminRecruiters";
 import AdminJobs from "../components/AdminJobs";
 import AdminData from "../components/AdminData";
 import AdminAudit from "../components/AdminAudit";
+import AdminReports from "../components/AdminReports";
 
 // ===========================================================================
 // /admin
@@ -34,6 +35,7 @@ const TABS = [
   { key: "queue", label: "Recruiters" },
   { key: "jobs", label: "Roles" },
   { key: "data", label: "Data" },
+  { key: "reports", label: "Reports" },
   { key: "audit", label: "Audit log" },
 ];
 
@@ -169,6 +171,7 @@ function Admin() {
       {tab === "queue" ? <AdminRecruiters /> : null}
       {tab === "jobs" ? <AdminJobs /> : null}
       {tab === "data" ? <AdminData /> : null}
+      {tab === "reports" ? <AdminReports /> : null}
       {tab === "audit" ? <AdminAudit userId={state.userId} /> : null}
     </Shell>
   );
