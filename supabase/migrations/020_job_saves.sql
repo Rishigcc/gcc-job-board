@@ -217,298 +217,321 @@ grant execute on function public.my_saved_jobs() to authenticated;
 
 
 -- ===========================================================================
--- CHECKS. Run the whole file; every check prints PASS or raises.
+-- CHECKS -- and why they return a table instead of raising notices.
 --
--- c5 and c7 are the pair that matters. c5 proves the function is tied to the
--- session, by calling it from the SQL editor where there is no session at
--- all. c7 proves it actually works when there IS one, using the
--- transaction-local claim trick from migration 017 -- because a check that
--- can only ever return zero rows cannot fail, and migration 017's c5 was
--- exactly that mistake.
+-- THE FIRST VERSION OF THIS FILE REPORTED ALL EIGHT CHECKS WITH `raise
+-- notice`. Supabase's SQL editor does not display notice output at all, so a
+-- completely clean run printed "Success. No rows returned" and every single
+-- PASS was invisible. The checks were sound and the figures were real; there
+-- was simply no way for the person running the file to see either.
+--
+-- Rishi, 23 Nov 2026: "From here, migration checks should return a result row
+-- like 017/018/019 did, not notices."
+--
+-- THIS IS THE SAME LESSON FOR THE THIRD TIME, IN ITS THIRD FORM:
+--   015's c3   a check that could not FAIL.
+--   017's c5   a check that could not PASS.
+--   020 v1     eight checks that could not be READ.
+-- A check is only a check if its outcome reaches the person running it.
+--
+-- WHY A TEMPORARY TABLE AND NOT ONE WIDE SELECT, WHICH IS WHAT 019 DID
+--   Two reasons. The editor shows the result of the LAST statement only, and
+--   c7 has to WRITE rows before it can read them back through the function,
+--   so it cannot be a column in a single select. And one row per check reads
+--   better than eight columns on one row once there are more than about five.
+--
+-- EVERY CHECK CARRIES ITS FIGURES IN `detail`, PASS OR FAIL. A check that
+-- only shows its numbers when it fails is a check whose numbers nobody ever
+-- sees, which is most of how this file went wrong the first time.
+--
+-- The whole file is re-runnable: the table, index, policies, grants and
+-- function are all idempotent, and the checks clear their own results first.
 -- ===========================================================================
 
+create temporary table if not exists stage10_checks (
+  seq    integer primary key,
+  label  text,
+  result text,
+  detail text
+);
+
+delete from stage10_checks;
+
+
 -- --- c1: the table, its key and its cascades -------------------------------
-do $$
-declare
-  v_pk    text;
-  v_casc  integer;
-begin
-  select string_agg(a.attname, ',' order by k.ord)
-    into v_pk
+insert into stage10_checks (seq, label, result, detail)
+with pk as (
+  select string_agg(a.attname, ',' order by k.ord) as cols
   from pg_constraint con
   join pg_class c on c.oid = con.conrelid
   cross join lateral unnest(con.conkey) with ordinality as k(attnum, ord)
   join pg_attribute a on a.attrelid = c.oid and a.attnum = k.attnum
-  where c.relname = 'job_saves' and con.contype = 'p';
-
-  select count(*) into v_casc
+  where c.relname = 'job_saves' and con.contype = 'p'
+),
+fk as (
+  select count(*)::integer as cascades
   from pg_constraint con
   join pg_class c on c.oid = con.conrelid
-  where c.relname = 'job_saves' and con.contype = 'f' and con.confdeltype = 'c';
+  where c.relname = 'job_saves' and con.contype = 'f' and con.confdeltype = 'c'
+)
+select 1,
+  'c1  table, composite key, both cascades',
+  case when pk.cols = 'job_id,user_id' and fk.cascades = 2
+       then 'PASS' else 'FAIL' end,
+  'primary key: ' || coalesce(pk.cols, '(none)')
+    || '  ·  cascading foreign keys: ' || fk.cascades || ' of 2'
+from pk, fk;
 
-  if v_pk is distinct from 'job_id,user_id' then
-    raise exception 'c1 FAIL: primary key is %, expected job_id,user_id', v_pk;
-  end if;
 
-  if v_casc <> 2 then
-    raise exception 'c1 FAIL: % cascading foreign keys, expected 2', v_casc;
-  end if;
-
-  raise notice 'c1 PASS  table, composite key and both cascades in place';
-end $$;
-
--- --- c2: three policies, every one of them scoped to the caller ------------
-do $$
-declare
-  v_total integer;
-  v_scoped integer;
-  v_rls boolean;
-begin
-  select relrowsecurity into v_rls
-  from pg_class where relname = 'job_saves' and relnamespace = 'public'::regnamespace;
-
-  select count(*) into v_total
-  from pg_policies where schemaname = 'public' and tablename = 'job_saves';
-
-  -- Every policy's expression must contain the ownership clause. Checking the
-  -- text is crude, but the alternative is checking nothing.
-  select count(*) into v_scoped
+-- --- c2: RLS on, three policies, every one scoped to the caller ------------
+-- Checking the policy TEXT for the ownership clause is crude. The alternative
+-- is checking nothing.
+insert into stage10_checks (seq, label, result, detail)
+with p as (
+  select
+    count(*)::integer as total,
+    count(*) filter (
+      where coalesce(qual,'') || coalesce(with_check,'') like '%auth.uid()%'
+        and coalesce(qual,'') || coalesce(with_check,'') like '%user_id%'
+    )::integer as scoped
   from pg_policies
   where schemaname = 'public' and tablename = 'job_saves'
-    and coalesce(qual, '') || coalesce(with_check, '') like '%auth.uid()%'
-    and coalesce(qual, '') || coalesce(with_check, '') like '%user_id%';
+),
+r as (
+  select coalesce(relrowsecurity, false) as rls
+  from pg_class
+  where relname = 'job_saves' and relnamespace = 'public'::regnamespace
+)
+select 2,
+  'c2  RLS on, 3 policies, all scoped to caller',
+  case when r.rls and p.total = 3 and p.scoped = 3 then 'PASS' else 'FAIL' end,
+  'row level security: ' || case when r.rls then 'enabled' else 'OFF' end
+    || '  ·  policies: ' || p.total || ' of 3'
+    || '  ·  naming auth.uid() and user_id: ' || p.scoped || ' of 3'
+from p, r;
 
-  if not coalesce(v_rls, false) then
-    raise exception 'c2 FAIL: row level security is not enabled';
-  end if;
 
-  if v_total <> 3 then
-    raise exception 'c2 FAIL: % policies, expected exactly 3', v_total;
-  end if;
+-- --- c3: grants are exactly what was intended, in BOTH directions ----------
+-- service_role having nothing is as much a requirement as authenticated
+-- having something: no server endpoint touches this table, and a grant that
+-- exists without a caller is surface nobody is watching.
+insert into stage10_checks (seq, label, result, detail)
+with g as (
+  select
+    has_table_privilege('authenticated','public.job_saves','select') as a_sel,
+    has_table_privilege('authenticated','public.job_saves','insert') as a_ins,
+    has_table_privilege('authenticated','public.job_saves','delete') as a_del,
+    has_table_privilege('authenticated','public.job_saves','update') as a_upd,
+    has_table_privilege('anon','public.job_saves','select')
+      or has_table_privilege('anon','public.job_saves','insert')
+      or has_table_privilege('anon','public.job_saves','delete') as anon_any,
+    has_table_privilege('service_role','public.job_saves','select')
+      or has_table_privilege('service_role','public.job_saves','insert')
+      or has_table_privilege('service_role','public.job_saves','delete') as svc_any
+)
+select 3,
+  'c3  grants, in both directions',
+  case when g.a_sel and g.a_ins and g.a_del
+            and not g.a_upd and not g.anon_any and not g.svc_any
+       then 'PASS' else 'FAIL' end,
+  'authenticated select/insert/delete: ' || g.a_sel || '/' || g.a_ins || '/' || g.a_del
+    || '  ·  authenticated update (must be false): ' || g.a_upd
+    || '  ·  anon has anything: ' || g.anon_any
+    || '  ·  service_role has anything: ' || g.svc_any
+from g;
 
-  if v_scoped <> 3 then
-    raise exception 'c2 FAIL: only % of 3 policies name auth.uid() and user_id', v_scoped;
-  end if;
-
-  raise notice 'c2 PASS  RLS on, 3 policies, all three scoped to the caller';
-end $$;
-
--- --- c3: grants are exactly what was intended, in both directions ----------
-do $$
-declare
-  v_auth_sel boolean;
-  v_auth_ins boolean;
-  v_auth_del boolean;
-  v_auth_upd boolean;
-  v_anon      boolean;
-  v_service   boolean;
-begin
-  v_auth_sel := has_table_privilege('authenticated', 'public.job_saves', 'select');
-  v_auth_ins := has_table_privilege('authenticated', 'public.job_saves', 'insert');
-  v_auth_del := has_table_privilege('authenticated', 'public.job_saves', 'delete');
-  v_auth_upd := has_table_privilege('authenticated', 'public.job_saves', 'update');
-
-  v_anon := has_table_privilege('anon', 'public.job_saves', 'select')
-         or has_table_privilege('anon', 'public.job_saves', 'insert')
-         or has_table_privilege('anon', 'public.job_saves', 'delete');
-
-  v_service := has_table_privilege('service_role', 'public.job_saves', 'select')
-            or has_table_privilege('service_role', 'public.job_saves', 'insert')
-            or has_table_privilege('service_role', 'public.job_saves', 'delete');
-
-  if not (v_auth_sel and v_auth_ins and v_auth_del) then
-    raise exception 'c3 FAIL: authenticated is missing select/insert/delete (% % %)',
-      v_auth_sel, v_auth_ins, v_auth_del;
-  end if;
-
-  if v_auth_upd then
-    raise exception 'c3 FAIL: authenticated can update job_saves; there is nothing to update';
-  end if;
-
-  if v_anon then
-    raise exception 'c3 FAIL: anon has access to job_saves';
-  end if;
-
-  if v_service then
-    raise exception 'c3 FAIL: service_role has access to job_saves, but no server code uses it';
-  end if;
-
-  raise notice 'c3 PASS  authenticated select/insert/delete only; anon and service_role have nothing';
-end $$;
 
 -- --- c4: the function is a pinned definer, granted to authenticated only ---
-do $$
-declare
-  v_definer boolean;
-  v_path    text;
-  v_anon    boolean;
-  v_auth    boolean;
-begin
-  select p.prosecdef, array_to_string(p.proconfig, ' ')
-    into v_definer, v_path
+insert into stage10_checks (seq, label, result, detail)
+with f as (
+  select
+    p.prosecdef as definer,
+    coalesce(array_to_string(p.proconfig, ' '), '(none)') as cfg,
+    has_function_privilege('authenticated','public.my_saved_jobs()','execute') as auth_x,
+    has_function_privilege('anon','public.my_saved_jobs()','execute') as anon_x
   from pg_proc p
-  where p.oid = 'public.my_saved_jobs()'::regprocedure;
+  where p.oid = 'public.my_saved_jobs()'::regprocedure
+)
+select 4,
+  'c4  definer, search_path pinned, authenticated only',
+  case when f.definer
+            and f.cfg like '%search_path=public, pg_catalog%'
+            and f.auth_x and not f.anon_x
+       then 'PASS' else 'FAIL' end,
+  'security definer: ' || f.definer
+    || '  ·  proconfig: ' || f.cfg
+    || '  ·  authenticated can execute: ' || f.auth_x
+    || '  ·  anon can execute (must be false): ' || f.anon_x
+from f;
 
-  v_auth := has_function_privilege('authenticated', 'public.my_saved_jobs()', 'execute');
-  v_anon := has_function_privilege('anon', 'public.my_saved_jobs()', 'execute');
 
-  if not v_definer then
-    raise exception 'c4 FAIL: my_saved_jobs is not SECURITY DEFINER';
-  end if;
+-- --- c5: with no session, no rows ------------------------------------------
+-- THE GATE. The SQL editor carries no JWT, so auth.uid() is null here. If
+-- this ever returned rows, the function would be handing somebody's saved
+-- roles to a caller with no identity. Its partner is c7: a check that can
+-- only ever return zero rows cannot fail, which was 017's c5 mistake.
+insert into stage10_checks (seq, label, result, detail)
+select 5,
+  'c5  no session, no rows (the gate)',
+  case when count(*) = 0 then 'PASS' else 'FAIL' end,
+  'rows returned with no session: ' || count(*) || ' (must be 0)'
+from public.my_saved_jobs();
 
-  if coalesce(v_path, '') not like '%search_path=public, pg_catalog%' then
-    raise exception 'c4 FAIL: search_path is not pinned (%)', v_path;
-  end if;
-
-  if not v_auth then
-    raise exception 'c4 FAIL: authenticated cannot execute my_saved_jobs';
-  end if;
-
-  if v_anon then
-    raise exception 'c4 FAIL: anon can execute my_saved_jobs';
-  end if;
-
-  raise notice 'c4 PASS  definer, search_path pinned, authenticated only';
-end $$;
-
--- --- c5: with no session it returns nothing --------------------------------
--- The SQL editor carries no JWT, so auth.uid() is null here. This is the
--- gate: if the function ever returned rows from this statement it would be
--- returning somebody's saved roles to a caller with no identity.
-do $$
-declare
-  v_rows integer;
-begin
-  select count(*) into v_rows from public.my_saved_jobs();
-
-  if v_rows <> 0 then
-    raise exception 'c5 FAIL: % rows returned with no session', v_rows;
-  end if;
-
-  raise notice 'c5 PASS  no session, no rows';
-end $$;
 
 -- --- c6: the three states are total and mutually exclusive -----------------
--- Run over every row in public.jobs, not over saved ones, so it tests the
+-- Run over EVERY row in public.jobs, not over saved ones, so it tests the
 -- classification itself rather than whatever happens to be bookmarked.
-do $$
-declare
-  v_jobs   integer;
-  v_open   integer;
-  v_closed integer;
-  v_gone   integer;
-begin
-  select count(*) into v_jobs from public.jobs;
-
+insert into stage10_checks (seq, label, result, detail)
+with cls as (
+  select case
+    when private.job_is_public(j.status, j.expires_at, j.posted_by) then 'open'
+    when j.status = 'hidden' or exists (
+      select 1 from public.recruiter_profiles r
+      where r.user_id = j.posted_by and r.is_suspended
+    ) then 'withdrawn'
+    else 'closed'
+  end as s
+  from public.jobs j
+),
+t as (
   select
-    count(*) filter (where s = 'open'),
-    count(*) filter (where s = 'closed'),
-    count(*) filter (where s = 'withdrawn')
-    into v_open, v_closed, v_gone
-  from (
-    select case
-      when private.job_is_public(j.status, j.expires_at, j.posted_by) then 'open'
-      when j.status = 'hidden' or exists (
-        select 1 from public.recruiter_profiles r
-        where r.user_id = j.posted_by and r.is_suspended
-      ) then 'withdrawn'
-      else 'closed'
-    end as s
-    from public.jobs j
-  ) t;
+    count(*)::integer as jobs,
+    count(*) filter (where s = 'open')::integer as o,
+    count(*) filter (where s = 'closed')::integer as c,
+    count(*) filter (where s = 'withdrawn')::integer as w
+  from cls
+)
+select 6,
+  'c6  every role classified, exactly once',
+  case when t.o + t.c + t.w = t.jobs then 'PASS' else 'FAIL' end,
+  t.jobs || ' roles  ·  ' || t.o || ' open, ' || t.c || ' closed, ' || t.w
+    || ' withdrawn  ·  sum ' || (t.o + t.c + t.w)
+    || case when t.o + t.c + t.w = t.jobs then ' reconciles' else ' DOES NOT RECONCILE' end
+from t;
 
-  if v_open + v_closed + v_gone <> v_jobs then
-    raise exception 'c6 FAIL: % jobs but % classified', v_jobs, v_open + v_closed + v_gone;
-  end if;
 
-  raise notice 'c6 PASS  % jobs: % open, % closed, % withdrawn (totals reconcile)',
-    v_jobs, v_open, v_closed, v_gone;
-end $$;
-
--- --- c7: with a session it returns that person's saves, and only theirs ----
--- Inserts two saves for a real account, reads them back through the function
--- under that account's claim, then removes them again. Nothing is left
--- behind: the deletes run before the result is judged, so a failure cleans up
--- after itself as well as a pass does.
+-- --- c7: with a session, that person's saves and only theirs ---------------
+-- Inserts three saves -- two for a subject account, one for a different
+-- account -- reads them back through the function under the subject's claim,
+-- then removes all three. THE THIRD SAVE IS THE POINT: without it the check
+-- would prove the function returns rows, not that it filters them.
+--
+-- Nothing is left behind. The deletes run BEFORE the result is judged, so a
+-- failing run cleans up after itself exactly as a passing one does, and a DO
+-- block is atomic so an unexpected error rolls the inserts back anyway.
 do $$
 declare
   v_user     uuid;
   v_other    uuid;
-  v_live     bigint;
+  v_open     bigint;
   v_closed   bigint;
   v_rows     integer;
-  v_live_av  text;
-  v_live_ttl text;
+  v_open_av  text;
+  v_open_ttl text;
   v_clo_av   text;
-  v_err      text := null;
+  v_clo_ttl  text;
+  v_result   text;
+  v_detail   text;
 begin
-  select id into v_user from auth.users order by created_at limit 1;
+  select id into v_user  from auth.users order by created_at limit 1;
   select id into v_other from auth.users where id <> v_user order by created_at limit 1;
 
-  select id into v_live from public.jobs
-   where private.job_is_public(status, expires_at, posted_by) order by id limit 1;
+  select id into v_open from public.jobs
+   where private.job_is_public(status, expires_at, posted_by)
+   order by id limit 1;
 
   select id into v_closed from public.jobs
    where not private.job_is_public(status, expires_at, posted_by)
-     and status <> 'hidden' order by id limit 1;
+     and status <> 'hidden'
+   order by id limit 1;
 
-  -- A check that quietly skips is a check that cannot fail.
+  -- A check that quietly skips is a check that cannot fail, so missing
+  -- fixtures are a FAIL and say which one is missing.
   if v_user is null or v_other is null then
-    raise exception 'c7 FAIL: needs two accounts to test with';
-  end if;
-  if v_live is null or v_closed is null then
-    raise exception 'c7 FAIL: needs one open and one closed role to test with (open=%, closed=%)',
-      v_live, v_closed;
+    insert into stage10_checks (seq, label, result, detail)
+    values (7, 'c7  with a session, only the caller''s saves', 'FAIL',
+            'needs two accounts to test with; found '
+              || (select count(*) from auth.users));
+    return;
   end if;
 
-  -- Two saves for our subject, one for somebody else. The third is what
-  -- proves the function filters rather than simply returning job_saves.
-  insert into public.job_saves (job_id, user_id) values (v_live, v_user)   on conflict do nothing;
-  insert into public.job_saves (job_id, user_id) values (v_closed, v_user) on conflict do nothing;
-  insert into public.job_saves (job_id, user_id) values (v_live, v_other)  on conflict do nothing;
+  if v_open is null or v_closed is null then
+    insert into stage10_checks (seq, label, result, detail)
+    values (7, 'c7  with a session, only the caller''s saves', 'FAIL',
+            'needs one open and one closed role as fixtures; open='
+              || coalesce(v_open::text,'(none)')
+              || ', closed=' || coalesce(v_closed::text,'(none)'));
+    return;
+  end if;
 
+  insert into public.job_saves (job_id, user_id) values (v_open,   v_user)  on conflict do nothing;
+  insert into public.job_saves (job_id, user_id) values (v_closed, v_user)  on conflict do nothing;
+  insert into public.job_saves (job_id, user_id) values (v_open,   v_other) on conflict do nothing;
+
+  -- Transaction-local, the way migration 017 established. The SQL editor has
+  -- no JWT of its own, so this is the only way to exercise auth.uid().
   perform set_config('request.jwt.claims',
     json_build_object('sub', v_user::text)::text, true);
 
-  select count(*) into v_rows from public.my_saved_jobs();
+  select count(*)::integer into v_rows from public.my_saved_jobs();
 
-  select availability, title into v_live_av, v_live_ttl
-  from public.my_saved_jobs() where job_id = v_live;
+  select availability, title into v_open_av, v_open_ttl
+  from public.my_saved_jobs() where job_id = v_open;
 
-  select availability into v_clo_av
+  select availability, title into v_clo_av, v_clo_ttl
   from public.my_saved_jobs() where job_id = v_closed;
 
-  -- Judge after cleaning up, never before.
+  -- Clean up, then judge. Never the other way round.
   delete from public.job_saves
-   where user_id in (v_user, v_other) and job_id in (v_live, v_closed);
+   where user_id in (v_user, v_other) and job_id in (v_open, v_closed);
 
-  if v_rows <> 2 then
-    v_err := format('returned %s rows, expected exactly 2 (the third save belongs to another account)', v_rows);
-  elsif v_live_av is distinct from 'open' then
-    v_err := format('open role came back as %s', v_live_av);
-  elsif v_live_ttl is null then
-    v_err := 'open role came back with no title';
-  elsif v_clo_av is distinct from 'closed' then
-    v_err := format('closed role came back as %s', v_clo_av);
-  end if;
+  perform set_config('request.jwt.claims', '', true);
 
-  if v_err is not null then
-    raise exception 'c7 FAIL: %', v_err;
-  end if;
+  v_detail :=
+    'subject saw ' || v_rows || ' of 3 saves (must be 2)'
+    || '  ·  open role ' || v_open || ': ' || coalesce(v_open_av,'(missing)')
+    || ', title ' || case when v_open_ttl is null then 'NULL' else 'present' end
+    || '  ·  closed role ' || v_closed || ': ' || coalesce(v_clo_av,'(missing)')
+    || ', title ' || case when v_clo_ttl is null then 'NULL' else 'present' end
+    || '  ·  3 test rows inserted and deleted';
 
-  raise notice 'c7 PASS  2 of 3 saves returned, open and closed classified correctly, test rows removed';
+  v_result := case
+    when v_rows <> 2                        then 'FAIL'
+    when v_open_av is distinct from 'open'   then 'FAIL'
+    when v_open_ttl is null                  then 'FAIL'
+    when v_clo_av  is distinct from 'closed' then 'FAIL'
+    when v_clo_ttl is null                   then 'FAIL'
+    else 'PASS'
+  end;
+
+  insert into stage10_checks (seq, label, result, detail)
+  values (7, 'c7  with a session, only the caller''s saves', v_result, v_detail);
 end $$;
 
--- --- c8: nothing was left behind by c7 -------------------------------------
-do $$
-declare
-  v_rows integer;
-begin
-  select count(*) into v_rows from public.job_saves;
 
-  if v_rows <> 0 then
-    raise exception 'c8 FAIL: job_saves holds % rows; c7 should have left it empty', v_rows;
-  end if;
+-- --- c8: c7 left nothing behind -------------------------------------------
+insert into stage10_checks (seq, label, result, detail)
+select 8,
+  'c8  job_saves is empty again',
+  case when count(*) = 0 then 'PASS' else 'FAIL' end,
+  'rows in job_saves: ' || count(*) || ' (must be 0 on a fresh install)'
+from public.job_saves;
 
-  raise notice 'c8 PASS  job_saves is empty';
-end $$;
+
+-- --- the verdict, so a clean run is one word and not eight ----------------
+insert into stage10_checks (seq, label, result, detail)
+select 99,
+  'ALL CHECKS',
+  case when count(*) filter (where result <> 'PASS') = 0 then 'PASS' else 'FAIL' end,
+  count(*) || ' checks ran  ·  '
+    || count(*) filter (where result = 'PASS') || ' passed  ·  '
+    || count(*) filter (where result <> 'PASS') || ' failed'
+from stage10_checks
+where seq < 99;
+
+
+-- THE LAST STATEMENT IN THE FILE, because the editor shows this one and no
+-- other. Everything above is invisible by design now, rather than by accident.
+select label, result, detail
+from stage10_checks
+order by seq;

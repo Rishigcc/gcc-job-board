@@ -1919,6 +1919,44 @@ exercise. Asserted in the test script across nine bad values.
   it."* **The CHECK constraint on `jobs.description` is still `>= 50` and must
   be raised in the same migration, or the form and the database disagree.**
 
+### Stage 10 — eight checks that could not be read (the same lesson, third form)
+
+Migration 020 as first shipped reported all eight checks with `raise notice`.
+**Supabase's SQL editor does not display notice output at all**, so a
+completely clean run printed "Success. No rows returned" and every PASS was
+invisible. The checks were sound and their figures were real; there was simply
+no way for the person running the file to see either.
+
+Rishi, 23 Nov 2026: *"That's the third time a check has been written in a form
+I can't read — c3 that couldn't fail, c5 that couldn't pass, and now eight
+that are invisible. Same lesson each time. From here, migration checks should
+return a result row like 017/018/019 did, not notices."*
+
+| Migration | The fault | The form of it |
+|---|---|---|
+| 015 c3 | queried `information_schema.columns` for a *function* name | a check that could not **fail** |
+| 017 c5 | `is_admin()` returned zero rows, so the scalar subquery was NULL | a check that could not **pass** |
+| 020 v1 | eight `raise notice` calls in an editor that shows none of them | eight checks that could not be **read** |
+
+**THE RULE, now in force for every migration from 020 onwards: a migration's
+checks end in a `select` that returns one row per check, with the figures in a
+`detail` column whether it passed or failed.** A check is only a check if its
+outcome reaches the person running it — and a check that shows its numbers
+only on failure is a check whose numbers nobody ever sees, which is most of
+how this went wrong.
+
+020 was rewritten to that form, 23 Nov 2026. The results collect in a
+temporary table rather than one wide select — which is what 019 used — for two
+reasons: the editor shows the result of the **last** statement only, and `c7`
+has to write rows before it can read them back through the function, so it
+cannot be a column in a single select.
+
+**The original run did pass.** Every check raised on failure, so a run with no
+exception plus `job_saves` holding zero rows afterwards is direct evidence:
+`c7` cannot reach its end without having inserted three rows, read exactly two
+back, classified both correctly, and deleted them. What was lost was the
+figures, not the verdict.
+
 ### Stage 10 cleanup — created while testing in production
 
 | What | Where | Removed? |
