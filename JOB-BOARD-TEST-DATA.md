@@ -1726,6 +1726,52 @@ goes through `admin_set_recruiter_verified()`, so the first audit row *is* the
 first verification. This only ever mattered for accounts predating migration
 014.
 
+### Stage 9b — a moving denominator in the promise statistic (migration 019)
+
+**R7 failed, and not for the reason the step gave.** I wrote that unverifying a
+recruiter should not wipe their measurement, since 018 keys off an unverify
+*preceding* the first verify. It did wipe it, and that rule was not the cause.
+
+`admin_report_totals()` computed latency from
+`from public.recruiter_profiles r where r.is_verified`, so unverifying someone
+removed them from the statistic altogether. Rishi named the cause exactly in
+his second hypothesis.
+
+**The fault is a moving denominator.** "Currently verified" and "has ever been
+verified" are different populations, and the promise is about the second. A
+recruiter who waited five working days waited five working days; unverifying
+them later does not unmake it. Under the old filter a **published-promise
+statistic changed retroactively** — and it moved in the **flattering**
+direction, because the breach simply left the sample.
+
+His follow-up was the right instinct too: *"Not measured should arguably be 2."*
+Neither was right. The recruiter was not unmeasured, it was **excluded** — and
+that is the tell for a moving denominator.
+
+**It also broke a rule this stage was built on, in a way the rule did not
+cover.** Migration 017 says every number has exactly one source, so the
+Overview must not add up what another view returned. It does not. But the
+Overview and `admin_recruiter_stats()` defined their **population**
+differently — the latter has no `is_verified` filter and was right all along —
+so the two views disagreed about the same recruiter:
+
+| | `iworkatgcc`, measured at 5 working days |
+|---|---|
+| Recruiters view | showed it as over two working days |
+| Overview | reported **0 breaches** |
+
+Same bug class, different axis. **"One source per number" was not enough; it
+needed to be "one source per number AND one population per question."**
+
+**The checks are now the cross-view assertions that would have caught it:** c1
+and c2 assert the Overview's measured and breached counts equal what the
+Recruiters view reports, and c3 asserts measured + unmeasured equals everyone
+ever verified — so nobody can be silently excluded again.
+
+Rehearsed against live data before shipping: measured **1**, unmeasured **1**,
+within **0**, breached **1**, median **5** — with `iworkatgcc` counted at 5
+working days despite not being verified right now, which is the whole point.
+
 ### Stage 9b — the test data is in an unusual state, on purpose
 
 After stage 9's testing, **all 10 applications are anonymised.** So when 9b is
