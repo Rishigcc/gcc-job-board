@@ -1077,7 +1077,7 @@ should read 0 from now on.
 
 | What | Where | How to remove | Status |
 |---|---|---|---|
-| Audit rows from testing | `public.admin_audit` | `delete from public.admin_audit;` — or keep them, they are a real record | PLANNED |
+| Audit rows from testing | `public.admin_audit` | **`truncate public.admin_audit;`** — Rishi's decision 23 Nov 2026: all 67 rows are test actions on test accounts, so truncate at merge rather than deleting entries selectively now. Deleting selectively would leave a log with holes in it, which is worse than a log that starts at launch. | PLANNED |
 | Verification and suspension states changed while testing | `public.recruiter_profiles` | Set back from `/admin` itself, which is the point of the stage | PLANNED |
 | A test company rename | `public.companies` | Rename back from `/admin`; the audit row carries the old name | PLANNED |
 | `admin_audit`, 7 `public` functions, 1 `private` function | database | `supabase/migrations/014_admin_audit_rollback.sql` — **it drops the audit log**, so export first | LIVE after migration 014 |
@@ -1342,6 +1342,63 @@ object with a `toString` returning the right word refused.
 > did not happen. It now runs only against multi-word confirmations. A test
 > that cannot fail is worth less than no test, because it looks like coverage.
 
+### Stage 9 — SIGNED OFF 23 Nov 2026
+
+Three rounds, **three bugs, and all three were the same kind of mistake in
+different clothes: a thing that was claimed rather than checked.**
+
+| Bug | What it actually was |
+|---|---|
+| Both admin endpoints returned 502 to **everyone, admin included** | A server-side read of `user_roles`, on a project that grants `service_role` nothing. The third appearance of that trap. It also silently broke the orphan verification in two further ways nobody had reached. |
+| Unhiding a closed role **reopened it** and wiped `closed_at` | The inverse assumed `'live'` instead of reading the previous status, which the audit row already held |
+| The confirmation comparison **folded case on the server** for both admin endpoints | A deviation from stage 8's correct pattern, in the admin pair only. My specification of that endpoint had been wrong. |
+
+**Results at sign-off, in Rishi's own tests.** `/admin` gives *Page not found*
+to a candidate and redirects when signed out; direct function calls return
+`P0001 "Only an administrator can do that."`; the orphan report and audit log
+both return `[]`. After migration 015 every endpoint failure path returns an
+identical 404 — no token, bad token, GET, non-admin. `is_admin_user` and
+`is_orphaned_resume` both 403.
+
+**The hidden path, which had never run anywhere, works end to end**: the public
+page, the `/gcc-jobs` listing, search, the poster's My jobs panel, the edit page
+refusing to load, and a direct `PATCH` changing zero rows. Unhiding restores
+`closed` with `closed_at` intact.
+
+**The audit log paged correctly** — "Showing 50 of 67", Load more, 67 of 67, and
+SQL agreed.
+
+**Advisor as predicted:** +5 entries, all `admin_*`, under the signed-in
+definer-function lint. `admin_audit` absent from `rls_enabled_no_policy`. The
+three `service_role`-only functions absent everywhere.
+
+### Stage 9 — two things recorded rather than re-tested
+
+**A6, the audit-log page boundary, is reasoned rather than observed.** Rishi
+could not eyeball a gap at the 50/51 boundary from the UI, and he is right that
+asserting it from the screen would be theatre. The argument stands on its own:
+the cursor is `id`, a generated identity, so it is unique and monotonic with
+insertion, and `.lt("id", last)` therefore cannot skip or repeat. **Recorded as
+reasoned.** The thing that would make it observable is a test against a fake
+client, as `clearResumeFolder` has — worth doing if this ever paginates
+something that matters more than a log.
+
+**Reloading a job page reached from `/admin` keeps the `← Admin` link; it does
+not fall back.** Rishi found this and correctly judged it harmless. **My
+checklist predicted a fallback and my code comment asserted one, and both were
+wrong** — the browser preserves `history.state` across a reload by design.
+
+The accurate statement, now in the comment: the fallback triggers on a **new
+navigation**, which is every way a URL reaches someone else — a pasted link, a
+shared link, a new tab. Rishi confirmed that half directly: a copied URL shows
+only `← All roles`. A reload is the same person on the same history entry they
+just navigated, so keeping the link is correct, and the link does nothing for a
+non-admin anyway. **Nothing to fix; a comment to correct, which is worse than a
+bug if left, because the next person reasons from it.**
+
+The same is true of `/my-applications`, for the same reason and with the same
+lack of consequence.
+
 ### Stage 9 — expected Security Advisor state
 
 Checked directly after migration 014 rather than predicted, so a real finding
@@ -1502,6 +1559,44 @@ exactly as it is**, because that is a total, and totals include anonymised.
 
 > **9b's checklist must retest stage 7's applications panel.** It is a
 > signed-off stage and this changes one line of what it displays.
+
+### Stage 9b — migration 017, and two faults caught by dry-running it
+
+**The migration would have failed outright when run.** `percentile_cont`
+returns `double precision`, and `round(double precision, integer)` does not
+exist in Postgres — only `round(numeric, integer)`. Found by executing the
+query body against the live database before shipping it, not by reading it.
+Fixed with an explicit `::numeric` and a comment saying why, since it looks
+like a redundant cast.
+
+A second fault in my own check queries: `c3` tested
+`information_schema.columns` for a *function* name, which is always zero, so
+half of it could never fail. It now compares `pg_get_function_result` for both
+candidate functions — the list must not mention email, the detail must.
+
+**The working-day arithmetic was verified as data**, five cases including the
+one that justified the whole decision:
+
+| | Working days |
+|---|---|
+| Friday 18:00 → Tuesday 17:00 | **2** — within the promise |
+| Friday 18:00 → Wednesday | **3** — a breach |
+| Monday → Tuesday | 1 |
+| Monday → same day | 0 |
+| Saturday → Monday | 1 |
+
+### Stage 9b — the test data is in an unusual state, on purpose
+
+After stage 9's testing, **all 10 applications are anonymised.** So when 9b is
+first opened:
+
+- the candidates report is **empty**
+- `applications_unactioned` is **0**
+- `applications_anonymised` equals `applications_total`
+
+**That is the reconciliation rule working, not a bug.** It also means check
+`c5` exercises the interesting path from the first run: `0 + 10 = 10`. Applying
+again from the test Gmail is what populates the candidate side.
 
 ### What 9b needs before it starts
 

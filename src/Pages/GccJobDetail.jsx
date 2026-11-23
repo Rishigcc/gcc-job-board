@@ -53,12 +53,20 @@ function Fact({ label, children }) {
 // browse on, and everything else gets the single original link.
 //
 // IT KEYS OFF ROUTER STATE, NOT A QUERY PARAMETER, AND THAT IS THE POINT.
-//   Router state exists only for an in-app navigation. A refresh, a pasted
-//   link or a link shared with someone else arrives with no state, so it
-//   falls back to exactly the behaviour that was here before -- which is what
-//   makes a shared link impossible to mislead with. A ?from= parameter would
-//   survive being copied and would then offer a stranger a route to "My
-//   applications" or to /admin, neither of which is theirs.
+//   Router state belongs to a history entry, so it travels with an in-app
+//   navigation and never with a URL. A pasted link, a link shared with someone
+//   else, or a new tab is a fresh history entry with no state, so it falls
+//   back to exactly the behaviour that was here before -- which is what makes
+//   a shared link impossible to mislead with. A ?from= parameter would survive
+//   being copied and would then offer a stranger a route to "My applications"
+//   or to /admin, neither of which is theirs.
+//
+//   A RELOAD IS NOT ONE OF THOSE CASES, and an earlier version of this comment
+//   said it was. The browser preserves history.state across a reload by
+//   design, so reloading keeps the origin link. That is harmless -- it is the
+//   same person on the same history entry they just navigated -- and the
+//   property that matters is unaffected: the fallback triggers on a NEW
+//   navigation, which is every way a URL reaches someone else.
 //
 // THE STATE IS AN ENUM MATCHED AGAINST A FIXED LIST, NOT A PATH.
 //   ORIGINS below is the whole vocabulary. An unrecognised value falls through
