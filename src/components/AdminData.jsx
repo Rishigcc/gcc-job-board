@@ -8,6 +8,7 @@ import {
   anonymiseCandidate,
 } from "../lib/adminData";
 import { companySlug } from "../lib/jobOptions";
+import { confirmed, CONFIRM_ORPHAN_DELETE, CONFIRM_ANONYMISE } from "../lib/confirmations";
 import { Panel, Button, Notice } from "./AdminShared";
 import { input, shortDate } from "../lib/adminFormat";
 
@@ -245,7 +246,7 @@ function Orphans() {
               {confirming === row.resume_path ? (
                 <div className="mt-3 rounded-xl border border-red-300 bg-red-50 p-3">
                   <label className="block text-xs font-semibold text-red-900" htmlFor="orphan-confirm">
-                    Type DELETE to confirm. This cannot be undone.
+                    Type {CONFIRM_ORPHAN_DELETE} to confirm. This cannot be undone.
                   </label>
                   <input
                     id="orphan-confirm"
@@ -258,7 +259,7 @@ function Orphans() {
                     <Button
                       tone="danger"
                       busy={busy}
-                      disabled={typed.trim().toUpperCase() !== "DELETE"}
+                      disabled={!confirmed(typed, CONFIRM_ORPHAN_DELETE)}
                       onClick={() => remove(row.resume_path)}
                     >
                       {busy ? "Deleting…" : "Delete permanently"}
@@ -394,8 +395,9 @@ function Anonymise() {
               {confirming === row.candidate_id ? (
                 <div className="mt-3 rounded-xl border border-red-300 bg-red-50 p-3">
                   <label className="block text-xs font-semibold text-red-900" htmlFor="anon-confirm">
-                    Type ANONYMISE to confirm. This cannot be undone, and it
-                    will disappear from their own list of applications too.
+                    Type {CONFIRM_ANONYMISE} to confirm. This cannot be undone,
+                    and it will disappear from their own list of applications
+                    too.
                   </label>
                   <input
                     id="anon-confirm"
@@ -408,7 +410,7 @@ function Anonymise() {
                     <Button
                       tone="danger"
                       busy={busy}
-                      disabled={typed.trim().toUpperCase() !== "ANONYMISE"}
+                      disabled={!confirmed(typed, CONFIRM_ANONYMISE)}
                       onClick={() => run(row.candidate_id)}
                     >
                       {busy ? "Working…" : "Anonymise permanently"}

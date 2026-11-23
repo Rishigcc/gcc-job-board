@@ -7,6 +7,7 @@ import Seo from "../components/Seo";
 import { fetchMyResume } from "../lib/applications";
 import { deleteMyResume, deleteMyJobData } from "../lib/candidateData";
 import { formatApplicationDate } from "../lib/applicationDisplay";
+import { confirmed, CONFIRM_DELETE_MY_DATA } from "../lib/confirmations";
 
 // ===========================================================================
 // /profile/delete-data
@@ -29,7 +30,7 @@ import { formatApplicationDate } from "../lib/applicationDisplay";
 //   was signed off. The only thing this page changes is where they live.
 // ===========================================================================
 
-const CONFIRMATION = "DELETE MY DATA";
+const CONFIRMATION = CONFIRM_DELETE_MY_DATA;
 
 function Shell({ children }) {
   return (
@@ -255,7 +256,7 @@ function DeleteMyData() {
           <button
             type="button"
             onClick={handleDeleteAll}
-            disabled={busy === "all" || typed.trim() !== CONFIRMATION}
+            disabled={busy === "all" || !confirmed(typed, CONFIRMATION)}
             className="mt-3 rounded-lg bg-red-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {busy === "all" ? "Deleting…" : "Delete permanently"}

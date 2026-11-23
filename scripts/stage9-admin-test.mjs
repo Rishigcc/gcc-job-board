@@ -24,6 +24,12 @@
 // ===========================================================================
 
 import {
+  confirmed,
+  CONFIRM_DELETE_MY_DATA,
+  CONFIRM_ORPHAN_DELETE,
+  CONFIRM_ANONYMISE,
+} from "../src/lib/confirmations.js";
+import {
   AUDIT_ACTION_LABELS,
   auditActionLabel,
   shortDate,
@@ -93,6 +99,54 @@ t("a real timestamp renders",
   shortDate("2026-11-23T06:09:30Z").includes("Nov"), true);
 t("and carries a time, because two actions a minute apart are different events",
   /\d{1,2}:\d{2}/.test(shortDate("2026-11-23T06:09:30Z")), true);
+
+// ---------------------------------------------------------------------------
+// Typed confirmations.
+//
+// This exists because the comparison was duplicated six times and three copies
+// had .toUpperCase() added to them, so typing lower-case `delete` deleted a
+// file -- on a form whose own label said to type DELETE. Case-sensitivity is
+// the whole mechanism: a confirmation that accepts a different string than the
+// one it asked for is not a confirmation.
+// ---------------------------------------------------------------------------
+console.log("\ntyped confirmations are exact");
+for (const word of [CONFIRM_DELETE_MY_DATA, CONFIRM_ORPHAN_DELETE, CONFIRM_ANONYMISE]) {
+  t(`${word} -- exact match passes`, confirmed(word, word), true);
+  t(`${word} -- lower case is refused`, confirmed(word.toLowerCase(), word), false);
+  t(`${word} -- mixed case is refused`,
+    confirmed(word[0] + word.slice(1).toLowerCase(), word), false);
+  t(`${word} -- surrounding whitespace is forgiven`, confirmed(`  ${word}\n`, word), true);
+  // Only meaningful for a multi-word confirmation. A single word has no inner
+  // whitespace to double, so asserting it here would be asserting nothing --
+  // which is what the first version of this test did.
+  if (word.includes(" ")) {
+    t(`${word} -- inner whitespace is not forgiven`,
+      confirmed(word.replace(/ /g, "  "), word), false);
+  }
+}
+
+console.log("\nand nothing else counts as a confirmation");
+t("empty string",        confirmed("", CONFIRM_ORPHAN_DELETE), false);
+t("whitespace only",     confirmed("   ", CONFIRM_ORPHAN_DELETE), false);
+t("null",                confirmed(null, CONFIRM_ORPHAN_DELETE), false);
+t("undefined",           confirmed(undefined, CONFIRM_ORPHAN_DELETE), false);
+t("a number",            confirmed(1, CONFIRM_ORPHAN_DELETE), false);
+t("an object",           confirmed({}, CONFIRM_ORPHAN_DELETE), false);
+t("a true-ish object with a toString", confirmed({ toString: () => "DELETE" }, "DELETE"), false);
+t("an empty expectation never passes", confirmed("", ""), false);
+t("an empty expectation never passes, whatever is typed", confirmed("anything", ""), false);
+
+console.log("\none word is never a confirmation for another");
+t("DELETE does not confirm DELETE MY DATA",
+  confirmed(CONFIRM_ORPHAN_DELETE, CONFIRM_DELETE_MY_DATA), false);
+t("DELETE MY DATA does not confirm DELETE",
+  confirmed(CONFIRM_DELETE_MY_DATA, CONFIRM_ORPHAN_DELETE), false);
+t("a prefix is not enough", confirmed("ANON", CONFIRM_ANONYMISE), false);
+t("a superstring is not enough", confirmed("ANONYMISE NOW", CONFIRM_ANONYMISE), false);
+
+console.log("\nthe three words are distinct, so no form can confirm another's action");
+t("all distinct",
+  new Set([CONFIRM_DELETE_MY_DATA, CONFIRM_ORPHAN_DELETE, CONFIRM_ANONYMISE]).size, 3);
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

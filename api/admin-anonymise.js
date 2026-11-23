@@ -1,5 +1,6 @@
 import { clearResumeFolder } from "./_lib/resumeStorage.js";
 import { notFound, requireAdmin, serviceClient } from "./_lib/adminGuard.js";
+import { confirmed, CONFIRM_ANONYMISE } from "../src/lib/confirmations.js";
 
 // ===========================================================================
 // POST /api/admin-anonymise   ->   { applications_anonymised }
@@ -19,7 +20,7 @@ import { notFound, requireAdmin, serviceClient } from "./_lib/adminGuard.js";
 // ===========================================================================
 
 const BUCKET = "resumes";
-const CONFIRMATION = "ANONYMISE";
+const CONFIRMATION = CONFIRM_ANONYMISE;
 
 export default async function handler(req, res) {
   // A 405 with an Allow header is itself a disclosure: a path that does not
@@ -53,7 +54,7 @@ export default async function handler(req, res) {
     }
   }
 
-  if ((body?.confirmation || "").trim().toUpperCase() !== CONFIRMATION) {
+  if (!confirmed(body?.confirmation, CONFIRMATION)) {
     return res.status(400).json({
       error: `Type ${CONFIRMATION} exactly to confirm. Nothing has been changed.`,
     });

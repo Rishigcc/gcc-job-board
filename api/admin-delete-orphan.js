@@ -1,4 +1,5 @@
 import { notFound, requireAdmin, serviceClient } from "./_lib/adminGuard.js";
+import { confirmed, CONFIRM_ORPHAN_DELETE } from "../src/lib/confirmations.js";
 
 // ===========================================================================
 // POST /api/admin-delete-orphan   ->   { deleted: true }
@@ -30,7 +31,7 @@ import { notFound, requireAdmin, serviceClient } from "./_lib/adminGuard.js";
 // ===========================================================================
 
 const BUCKET = "resumes";
-const CONFIRMATION = "DELETE";
+const CONFIRMATION = CONFIRM_ORPHAN_DELETE;
 
 export default async function handler(req, res) {
   // A 405 with an Allow header is itself a disclosure: a path that does not
@@ -64,7 +65,7 @@ export default async function handler(req, res) {
     }
   }
 
-  if ((body?.confirmation || "").trim().toUpperCase() !== CONFIRMATION) {
+  if (!confirmed(body?.confirmation, CONFIRMATION)) {
     return res.status(400).json({
       error: `Type ${CONFIRMATION} exactly to confirm. Nothing has been deleted.`,
     });

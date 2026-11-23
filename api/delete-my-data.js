@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { clearResumeFolder } from "./_lib/resumeStorage.js";
+import { confirmed, CONFIRM_DELETE_MY_DATA } from "../src/lib/confirmations.js";
 
 // ===========================================================================
 // POST /api/delete-my-data   ->   { applications_anonymised, resume_deleted }
@@ -36,7 +37,7 @@ import { clearResumeFolder } from "./_lib/resumeStorage.js";
 // ===========================================================================
 
 const BUCKET = "resumes";
-const CONFIRMATION = "DELETE MY DATA";
+const CONFIRMATION = CONFIRM_DELETE_MY_DATA;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -68,7 +69,7 @@ export default async function handler(req, res) {
     }
   }
 
-  if ((body?.confirmation || "").trim() !== CONFIRMATION) {
+  if (!confirmed(body?.confirmation, CONFIRMATION)) {
     return res.status(400).json({
       error: `Type ${CONFIRMATION} exactly to confirm. Nothing has been deleted.`,
     });

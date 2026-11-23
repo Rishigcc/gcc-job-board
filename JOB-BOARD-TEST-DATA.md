@@ -1293,6 +1293,55 @@ If a future action logs per-record — an orphan sweep writing a row per file,
 say — volume could jump by orders of magnitude, and the answer even then would
 be partitioning or archiving to cold storage, never deletion.
 
+### Stage 9 — the typed confirmations were case-insensitive
+
+Found by Rishi: typing lower-case `delete` on the orphan panel enabled the
+button **and the deletion succeeded**, on a form whose own label said to type
+`DELETE`.
+
+**Both halves were broken independently, and the earlier specification of this
+endpoint was wrong.** I had said it "returns 400 unless the confirmation is
+exactly DELETE". It did not:
+
+| Site | What it did |
+|---|---|
+| `AdminData.jsx` orphan panel | client `.toUpperCase()` before comparing |
+| `AdminData.jsx` anonymise panel | the same, on the action that erases a person's data |
+| `api/admin-delete-orphan.js` | **server `.toUpperCase()`** |
+| `api/admin-anonymise.js` | **server `.toUpperCase()`** |
+
+The client sent `typed.trim()` unmodified, so **it was the server that accepted
+it.** Stage 8's `delete-my-data` was correct all along — the defect was a
+deviation from a pattern that already existed, in the admin pair only.
+
+**The fix is one comparison instead of six.** `src/lib/confirmations.js` holds
+the three words and `confirmed(typed, expected)`, and all six call sites use
+it, including stage 8's two — which was a no-behaviour-change refactor, because
+leaving two patterns in place is precisely how a transformation gets added to
+one of them.
+
+`api/` importing from `src/lib/` is unusual and deliberate: the module is plain
+ESM with no browser dependency, and the alternative is two copies of the one
+thing that must not vary.
+
+**The rule, written at the function: trim, never fold case.** A typed
+confirmation is a deliberate-effort check, and accepting `delete` for `DELETE`
+halves the effort while making the label untrue. Surrounding whitespace is
+forgiven because it is an artefact of selecting and pasting, not a reduction in
+deliberateness.
+
+**22 cases cover it**, including the ones that would have caught this: lower
+case refused, mixed case refused, `DELETE` not accepted for `DELETE MY DATA` in
+either direction, a prefix insufficient, a superstring insufficient, and an
+object with a `toString` returning the right word refused.
+
+> **One of those tests was initially wrong in a way worth recording**: it
+> asserted that doubling the inner spaces of a confirmation fails, applied to
+> all three words. `DELETE` and `ANONYMISE` contain no spaces, so the
+> assertion tested nothing and "passed" by accident on a transformation that
+> did not happen. It now runs only against multi-word confirmations. A test
+> that cannot fail is worth less than no test, because it looks like coverage.
+
 ### Stage 9 — expected Security Advisor state
 
 Checked directly after migration 014 rather than predicted, so a real finding
