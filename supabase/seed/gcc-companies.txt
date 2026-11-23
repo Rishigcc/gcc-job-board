@@ -182,7 +182,6 @@ Axcelinno
 Axionet
 Axtria-Ingenious Insights
 Azul Systems, Inc
-Back office shared services
 Backbase
 Bain & Company
 Baker Hughes
@@ -581,7 +580,6 @@ eRevMax
 ERGO
 Ericsson
 Ernst & Young
-ERP and ERP corp
 Esko Graphics
 ESPN
 Espressif Systems
@@ -979,8 +977,7 @@ LogicMonitor
 LogiTech
 LogMeln Inc
 Lonza Group
-Loreal
-Loreal (L'Oréal)
+L'Oréal
 Lotte
 Louis Dreyfus Company
 Lowe's
@@ -1105,7 +1102,6 @@ Moog
 Morgan Stanley
 Morningstar
 Mosaic
-Motion Pictures and Film
 Motorola Solutions
 Mott MacDonald
 Mouser Electronics

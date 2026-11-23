@@ -1073,7 +1073,27 @@ unpinned function across `public` and `private`, so it proves nothing was
 missed and is the query to re-run after any later migration adds one. It
 should read 0 from now on.
 
-## Post-merge verification — things only production can prove
+## Launch checklist — production-dependent verification
+
+**This is the list, so it does not live only in a conversation.** Each item
+says what to check and *when it first becomes checkable*, because two of them
+cannot be done before the merge and two must be done before it.
+
+| # | What to check | When it becomes checkable | Done |
+|---|---|---|---|
+| **P1** | The 12-month retention sweep ran. `curl` the rebuild endpoint with `CRON_SECRET` and read `purged` out of the response body — never a log. | **After the merge deploy.** A cron cannot run on a preview at all. | ☐ |
+| **P2** | Analytics and Clarity actually fire: a `gtag` collect request in the network tab, the Clarity script loading, GA4 realtime showing the session. Plus **carried item 2**, Clarity's form-input masking. | **After the merge deploy.** Both guards are hostname-gated to the live host, so on a preview they only ever take the deny path. | ☐ |
+| **P3** | Crawlability: `robots.txt`, `sitemap.xml` and JSON-LD fetchable, via Search Console URL inspection. | **After the merge deploy.** Deployment protection serves an unauthenticated client Vercel's login page, so Googlebot cannot reach a preview. | ☐ |
+| **P4** | All six environment variables are ticked for **Production**, not only Preview. | **Now, and again immediately before the merge.** | ☐ |
+| **P5** | `DEPLOY_HOOK_URL` works from `api/rebuild.js` as this branch writes it. | **After the merge deploy** — P1's single `curl` proves both at once. | ☐ |
+
+**The rule these came from, worth keeping:** a check that ends in "look at the
+log tomorrow" is not a check. Hobby keeps runtime logs for about an hour, and
+crons only run against production.
+
+### Detail
+
+
 
 **Raised by Rishi on 23 Nov 2026, and it invalidated a check rather than
 delaying it.** The stage 8 checklist asked him to read the retention sweep's
