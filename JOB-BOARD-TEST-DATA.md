@@ -1151,6 +1151,57 @@ read the admin row with the service key — not through the caller's session,
 which would be reading a permission from the thing being permitted. Whether
 this component renders changes nothing about what a request can do.
 
+### Stage 9 — the 502 on both admin endpoints (migration 015)
+
+**Found by Rishi at step 7, and it broke for the admin too — not only for the
+non-admin the step was testing.** Worth recording in full, because it is the
+third appearance of the same root cause.
+
+`api/_lib/adminGuard.js` read `public.user_roles` with the service key to
+establish whether the caller was an admin. **This project grants
+`service_role` nothing by default**, so that read was `42501` and the guard
+reported it as "We could not confirm your account" with a 502. Proved from the
+database rather than from a log: `has_table_privilege('service_role',
+'public.user_roles','SELECT')` was **false**.
+
+**The same root cause had broken a second thing nobody had reached yet.**
+`/api/admin-delete-orphan` verified a path by calling
+`admin_orphaned_resumes()` with the service key, and that was wrong twice
+over:
+
+1. the function is granted to `authenticated` only, so the service key could
+   not execute it — `has_function_privilege` was **false**; and
+2. **even with a grant it would have returned nothing**, because its `WHERE`
+   clause contains `private.is_admin()` and `auth.uid()` is null for the
+   service key. Every path would have looked un-orphaned and every deletion
+   would have been refused with 409.
+
+So the orphan panel was broken in two independent ways, and the guard's 502
+on an earlier step hid both. **The lesson is the ordering of the checklist as
+much as the code:** the admin's own path (steps 31, 33) would have failed too,
+several steps after a non-admin check that looked like a minor wording issue.
+
+**The fix is two booleans, not a grant.** Granting `service_role` SELECT on
+`user_roles` would have worked and widened the one table whose entire design
+is that nothing writes it and almost nothing reads it. Instead, migration 015
+adds `public.is_admin_user(uuid)` and `public.is_orphaned_resume(text)`, both
+**service_role only**, and check `c3_user_roles_still_closed` asserts the
+table was not widened instead.
+
+`is_orphaned_resume()` is deliberately **factual, not authorising**: it says
+whether an object exists with no `candidate_resumes` row pointing at it, and
+nothing about who is asking. The authorisation is the guard plus
+`admin_log_orphan_deleted()`'s own actor check — a third copy of the same
+decision would be noise. What it still guarantees is the part that matters: a
+path with a live row returns false.
+
+**And every failure now looks like a missing route.** Not an admin, a broken
+lookup, a bad token: all **404 "Not found."** The old message told an
+anonymous caller both that the route was real and that it had tried to check
+them. The cost is that a genuine outage is indistinguishable from "not an
+admin" *in the response*, which is why the two cases log differently — the
+response is for the caller, the log is for us.
+
 ### Stage 9 — expected Security Advisor state
 
 Checked directly after migration 014 rather than predicted, so a real finding
@@ -1170,10 +1221,15 @@ The five new entries, all expected, all `is_admin()`-gated internally:
 `admin_orphaned_resumes`, `admin_rename_company`, `admin_set_job_hidden`,
 `admin_set_recruiter_suspended`, `admin_set_recruiter_verified`.
 
-**Three functions must NOT appear anywhere in the advisor**, and their absence
+**Migration 015 adds nothing to the advisor**, because both its functions are
+`service_role` only. If `is_admin_user` or `is_orphaned_resume` ever shows up
+under either definer-function lint, a grant has been widened.
+
+**Five functions must NOT appear anywhere in the advisor**, and their absence
 is the advisor confirming the grant split:
-`admin_anonymise_candidate_for`, `admin_log_orphan_deleted` and
-`purge_expired_applications` are all granted to `service_role` only.
+`admin_anonymise_candidate_for`, `admin_log_orphan_deleted`,
+`purge_expired_applications`, `is_admin_user` and `is_orphaned_resume` are all
+granted to `service_role` only.
 `private.audit()` is absent too, because the `private` schema is not exposed.
 
 ## Launch checklist — production-dependent verification

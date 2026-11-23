@@ -9,13 +9,21 @@ import { requireAdmin, serviceClient } from "./_lib/adminGuard.js";
 //
 // FINAL, so a typed confirmation is required and checked here.
 //
-// THE PATH COMES FROM THE CLIENT, SO IT IS CHECKED AGAINST THE REPORT.
+// THE PATH COMES FROM THE CLIENT, SO THE DATABASE IS ASKED ABOUT IT.
 //   This is the one admin action where the target is a string rather than a
 //   row id, and the service key can delete any object in the bucket. So the
-//   path is not taken on trust: it must still appear in
-//   admin_orphaned_resumes(), which by definition only lists objects with no
-//   row pointing at them. A live candidate's resume can therefore never be
-//   deleted here, even by a malformed or malicious request.
+//   path is not taken on trust: public.is_orphaned_resume() must agree that
+//   the object exists and that no candidate_resumes row points at it. A live
+//   candidate's resume can therefore never be deleted here, however the
+//   request is built.
+//
+//   This originally called admin_orphaned_resumes() and fetched the whole
+//   report, which was broken in two ways nobody had reached yet: that
+//   function is granted to `authenticated` only, so the service key could not
+//   execute it, and its WHERE clause contains private.is_admin(), which is
+//   false when auth.uid() is null -- so it would have returned nothing and
+//   every deletion would have been refused with 409. Migration 015 replaced it
+//   with a single boolean that does not depend on a session.
 //
 // ORDER: file, then the audit row. A crash between them loses the log entry
 // rather than the deletion, and the orphan report simply stops listing it.
@@ -61,19 +69,22 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "No file was named." });
   }
 
-  // The report is the authorisation. Anything not in it is not an orphan.
-  const { data: orphans, error: reportError } = await admin.rpc("admin_orphaned_resumes");
+  // The database decides whether this path is an orphan. Anything it does not
+  // confirm is not deleted.
+  const { data: isOrphan, error: checkError } = await admin.rpc("is_orphaned_resume", {
+    p_path: path,
+  });
 
-  if (reportError) {
-    console.error("admin-delete-orphan: report failed", reportError);
-    return res.status(502).json({ error: "We could not confirm that file is unreferenced. Try again." });
+  if (checkError) {
+    console.error("admin-delete-orphan: orphan check failed", path, checkError);
+    return res.status(502).json({ error: "We could not confirm that file is unreferenced. Nothing was deleted." });
   }
 
-  if (!(orphans || []).some((o) => o.resume_path === path)) {
+  if (!isOrphan) {
     return res.status(409).json({
       error:
-        "That file is not in the orphan report any more. It may now belong to a " +
-        "live application, or already be deleted. Reload the report.",
+        "That file is not an orphan. It either belongs to a resume on record, " +
+        "or it has already been deleted. Reload the report.",
     });
   }
 
