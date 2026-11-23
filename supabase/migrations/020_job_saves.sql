@@ -432,7 +432,15 @@ declare
   v_clo_ttl  text;
   v_result   text;
   v_detail   text;
+  v_before   integer;
+  v_after    integer;
 begin
+  -- How many saves exist BEFORE this check touches anything. c7 must leave
+  -- exactly this many behind. Counting rather than asserting the table is
+  -- empty is deliberate: an emptiness check is only true on a fresh install,
+  -- so the moment a real save exists it would fail for the wrong reason.
+  select count(*)::integer into v_before from public.job_saves;
+
   select id into v_user  from auth.users order by created_at limit 1;
   select id into v_other from auth.users where id <> v_user order by created_at limit 1;
 
@@ -452,6 +460,9 @@ begin
     values (7, 'c7  with a session, only the caller''s saves', 'FAIL',
             'needs two accounts to test with; found '
               || (select count(*) from auth.users));
+    insert into stage10_checks (seq, label, result, detail)
+    values (8, 'c8  c7 left nothing behind', 'PASS',
+            'c7 did not run, so nothing could be left behind');
     return;
   end if;
 
@@ -461,6 +472,31 @@ begin
             'needs one open and one closed role as fixtures; open='
               || coalesce(v_open::text,'(none)')
               || ', closed=' || coalesce(v_closed::text,'(none)'));
+    insert into stage10_checks (seq, label, result, detail)
+    values (8, 'c8  c7 left nothing behind', 'PASS',
+            'c7 did not run, so nothing could be left behind');
+    return;
+  end if;
+
+  -- BEFORE INSERTING ANYTHING: prove none of the three fixture rows already
+  -- exists. The cleanup below deletes by (job, user) pair, so if one of those
+  -- pairs were a REAL bookmark this check would delete somebody's save. It
+  -- cannot happen in practice -- v_user and v_other are the two oldest
+  -- accounts on the site and the newest feature on it is saving roles -- but
+  -- "cannot happen in practice" is not a property, and a check that can
+  -- destroy data is worse than no check.
+  if exists (
+    select 1 from public.job_saves
+    where (job_id, user_id) in ((v_open, v_user), (v_closed, v_user), (v_open, v_other))
+  ) then
+    insert into stage10_checks (seq, label, result, detail)
+    values (7, 'c7  with a session, only the caller''s saves', 'FAIL',
+            'a fixture row already exists, so c7 refused to run rather than '
+              || 'risk deleting a real save. Fixtures: roles ' || v_open || ' and '
+              || v_closed || ' for the two oldest accounts.');
+    insert into stage10_checks (seq, label, result, detail)
+    values (8, 'c8  c7 left nothing behind', 'PASS',
+            'c7 did not run, so nothing could be left behind');
     return;
   end if;
 
@@ -487,6 +523,8 @@ begin
 
   perform set_config('request.jwt.claims', '', true);
 
+  select count(*)::integer into v_after from public.job_saves;
+
   v_detail :=
     'subject saw ' || v_rows || ' of 3 saves (must be 2)'
     || '  ·  open role ' || v_open || ': ' || coalesce(v_open_av,'(missing)')
@@ -506,16 +544,18 @@ begin
 
   insert into stage10_checks (seq, label, result, detail)
   values (7, 'c7  with a session, only the caller''s saves', v_result, v_detail);
+
+  -- c8 is written here rather than as its own statement because only this
+  -- block knows what the count was beforehand.
+  insert into stage10_checks (seq, label, result, detail)
+  values (8, 'c8  c7 left nothing behind',
+          case when v_after = v_before then 'PASS' else 'FAIL' end,
+          'rows in job_saves before: ' || v_before
+            || '  ·  after: ' || v_after
+            || case when v_after = v_before
+                    then '  ·  unchanged'
+                    else '  ·  ' || (v_after - v_before) || ' LEFT BEHIND' end);
 end $$;
-
-
--- --- c8: c7 left nothing behind -------------------------------------------
-insert into stage10_checks (seq, label, result, detail)
-select 8,
-  'c8  job_saves is empty again',
-  case when count(*) = 0 then 'PASS' else 'FAIL' end,
-  'rows in job_saves: ' || count(*) || ' (must be 0 on a fresh install)'
-from public.job_saves;
 
 
 -- --- the verdict, so a clean run is one word and not eight ----------------
