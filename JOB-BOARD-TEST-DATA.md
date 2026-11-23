@@ -973,11 +973,11 @@ sign-off.
 | # | Item | Note |
 |---|---|---|
 | W1 | The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
+| W2 | Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
+| ~~W3~~ **DONE in 9b** | ~~The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** **Shipped 23 Nov 2026: anonymised applications no longer count toward "new" and appear as their own figure. Left here rather than deleted, because W6 is about how that same line now reads.** |
+| W4 | The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
 | W5 | **Two tabs called Roles on `/admin`** — the action queue's and the report's. Confusing on one screen. | Rishi, 23 Nov 2026. Renaming one is a word; deciding which is the question. The admin one acts on roles, the report one counts them, so "Moderate roles" / "Roles" or "Roles" / "Role performance" are both defensible. |
 | W6 | **The recruiter summary line's figures overlap** — `1 new · 1 not selected · 3 anonymised` sums to 5 against 4 applications, because the not-selected one is also anonymised. | Deliberate, and recorded as deliberate in the W3 note: the first three say what you decided, the last says who can no longer be contacted. But Rishi is right that **a reader will try to add them**, and a figure that invites a wrong sum is a wording problem even when every number is correct. Options: separate them visually, or label the last one so it reads as a qualifier rather than a fourth bucket. |
-| W3 | The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** |
-| W4 | The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
-| W2 | Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
 
 ## `public.question_authors` — settled 19 Nov 2026 (migration 010)
 
@@ -1789,6 +1789,46 @@ again from the test Gmail is what populates the candidate side.
 
 One migration (**017**). No new environment variables. Nothing from Rishi
 beyond stage 9 being signed off first.
+
+### Stage 9b — SIGNED OFF 23 Nov 2026
+
+Three rounds. **Two real bugs, both found by testing rather than review**, and
+both of a kind that reading the code would not have caught.
+
+| Bug | Why review would have missed it |
+|---|---|
+| Raw status values leaking into **two** new surfaces — the candidate panel and the Roles pill | Each one looks correct in isolation. The defect is only visible against the rest of the product, where every other surface capitalises. |
+| The verification population defined as **currently** verified rather than **ever** verified | The line `where r.is_verified` reads like "verified recruiters". It takes toggling a recruiter and watching a published statistic move to see that it means something else. |
+
+**The second was the serious one.** It moved a published-promise statistic
+**retroactively, in the flattering direction** — unverifying a recruiter
+removed their breach from the sample. And it made two views disagree about the
+same person while each was internally consistent.
+
+| Round | What came back |
+|---|---|
+| 1 | `c5` could not pass from the SQL editor — the check, not the code |
+| 2 | Raw status values in the candidate panel; and an observation about verification that turned out to be a defect |
+| 3 | R7 failed: the measurement vanished on unverify |
+| — | All passed. Signed off. |
+
+**What Rishi's testing contributed that the code review did not:** every one of
+the three rounds was a case where a stated behaviour did not hold, and in two
+of them my own explanation of the cause was wrong before his diagnosis
+corrected it. R7's step text said the unverify rule was the likely cause; it
+was not, and his second hypothesis was right.
+
+### Stage 9b — the rules this stage added, worth carrying forward
+
+- **A check that cannot pass is as useless as one that cannot fail.** Both
+  halves happened in the same file, one round apart.
+- **One source per number AND one population per question.** The first was
+  written down in 017 and honoured; the second was not stated and was broken.
+- **A label function per value type, imported rather than re-expressed.** The
+  only thing that has actually stopped raw column values reaching a screen
+  across stages 8, 9 and 9b.
+- **Null is not zero.** An unmeasured verification displayed as "0 days" would
+  make a published promise look perfect precisely where there is no evidence.
 
 ## Launch checklist — production-dependent verification
 
