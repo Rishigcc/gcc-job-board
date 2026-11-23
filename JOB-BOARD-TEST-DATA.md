@@ -1585,6 +1585,52 @@ one that justified the whole decision:
 | Monday → same day | 0 |
 | Saturday → Monday | 1 |
 
+### Stage 9b — c5 could not pass, which is the other half of the c3 lesson
+
+**Rishi's diagnosis was exactly right.** Every report function gates on
+`private.is_admin()`, which reads `auth.uid()`, which reads
+`request.jwt.claims` — and **the SQL editor has no JWT**. So all five returned
+zero rows, a scalar subquery over zero rows returned **NULL**, and
+`0 + NULL = NULL` failed against the total. Confirmed from the function
+definition rather than inferred: `auth.uid()` is
+`coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''),
+(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid`,
+and both settings are null in the editor.
+
+**It is the same trap as `admin_orphaned_resumes()` in stage 9** — a function
+whose `WHERE` contains `is_admin()` returns nothing rather than refusing — and
+I wrote a check that depended on it.
+
+Together with `c3` in the first draft of the same file, which queried
+`information_schema` for a *function* name and so could never fail, the pair is
+worth stating as a rule, and it is now in the file:
+
+> **A check that cannot pass is as useless as one that cannot fail. Both look
+> like coverage and neither is.**
+
+**The fix tests the rule, not the session**, in three statements whose order
+matters:
+
+| | |
+|---|---|
+| **9a** | With no session, assert **every** report returns zero rows. The gate, verified rather than assumed. |
+| **9b** | `set_config('request.jwt.claims', …, true)` — become the admin **for this transaction only**, reading the id from `user_roles` rather than hardcoding it |
+| **9c** | `c0` asserts the impersonation carried, then the arithmetic runs against the real functions |
+
+**Why impersonation rather than recomputing from base tables**, which was the
+other option: recomputing would assert an arithmetic identity about the table
+and never execute the functions at all, so a bug in one of them would pass.
+This way `c5` compares the numbers the application will actually display.
+
+Verified that it works before shipping it: `set_config(..., true)` in one
+statement and `auth.uid()` in the next returns the admin uuid, because the
+editor runs a script as a single transaction. **`c0` exists because that is an
+assumption** — if it ever stopped being true, the arithmetic would fail
+mysteriously instead of saying why.
+
+`true` makes it transaction-local, so it cannot leak into the session. Nothing
+is granted; it supplies a session the editor does not have.
+
 ### Stage 9b — the test data is in an unusual state, on purpose
 
 After stage 9's testing, **all 10 applications are anonymised.** So when 9b is

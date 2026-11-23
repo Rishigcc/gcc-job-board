@@ -474,13 +474,68 @@ grant execute on function public.admin_candidate_stats()      to authenticated;
 grant execute on function public.admin_candidate_detail(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
--- 9. CHECKS -- every column must read PASS.
+-- 9. CHECKS
+--
+-- IN THREE STATEMENTS, AND THE ORDER MATTERS.
+--
+-- The first version of c5 could not pass from the SQL editor no matter what
+-- the code did. Every function here gates on private.is_admin(), which reads
+-- auth.uid(), which reads request.jwt.claims -- and the SQL editor has no JWT.
+-- So they all returned zero rows, a scalar subquery over zero rows returned
+-- NULL, and `0 + NULL = NULL` failed against the total.
+--
+-- That is the same trap as admin_orphaned_resumes() in stage 9, written into
+-- a check this time. Together with c3 in the first draft of this file, which
+-- queried information_schema for a function name and so could never fail, it
+-- makes the pair worth stating as a rule:
+--
+--     A CHECK THAT CANNOT PASS IS AS USELESS AS ONE THAT CANNOT FAIL.
+--     Both look like coverage and neither is.
+--
+-- So: assert the gate with no session, then become the admin for the rest of
+-- this transaction, then assert the arithmetic.
+-- ---------------------------------------------------------------------------
+
+-- 9a. THE GATE, with no session. Every report must be empty.
+select
+  case when (select count(*) from public.admin_report_totals())    = 0
+        and (select count(*) from public.admin_role_stats())       = 0
+        and (select count(*) from public.admin_recruiter_stats())  = 0
+        and (select count(*) from public.admin_candidate_stats())  = 0
+        and (select count(*) from public.admin_candidate_detail(
+               (select user_id from public.user_roles limit 1)))   = 0
+       then 'PASS' else 'FAIL — a report returned rows with no admin session' end
+    as g1_gated_without_a_session;
+
+-- 9b. Become the admin, FOR THIS TRANSACTION ONLY.
+--
+-- This looks alarming in a migration file, so: the third argument `true` makes
+-- it transaction-local, it reads the id from user_roles rather than hardcoding
+-- one, and it is discarded when the script finishes. Nothing here grants
+-- anything; it supplies the session that the SQL editor does not have, so the
+-- checks below can exercise the functions instead of their absence.
+--
+-- If the editor ever stopped running a script as one transaction, this would
+-- not carry to the next statement -- which is why c0 below checks that it did
+-- rather than letting the arithmetic fail mysteriously.
+select set_config(
+         'request.jwt.claims',
+         json_build_object('sub', (select user_id from public.user_roles
+                                    where role = 'admin' limit 1))::text,
+         true
+       ) as impersonating_admin_for_this_transaction;
+
+-- 9c. Everything else. Every column must read PASS.
 --
 -- c5 is the reconciliation rule as arithmetic rather than as a claim: the
 -- per-candidate counts plus the anonymised figure must equal the total. If
 -- they ever disagree, one of the three is computing something different.
--- ---------------------------------------------------------------------------
 select
+  case when auth.uid() is not null
+        and (select count(*) from public.admin_report_totals()) = 1
+       then 'PASS' else 'FAIL — the impersonation above did not carry; every check below is meaningless' end
+    as c0_session_took_effect,
+
   case when (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
               where p.proname in ('admin_report_totals','admin_role_stats',
                                   'admin_recruiter_stats','admin_candidate_stats',
@@ -514,7 +569,10 @@ select
                '2026-11-24 17:00+05:30'::timestamptz))  -- the Tuesday
             = 2
         and (select private.working_days_between(
-               '2026-11-23 10:00+05:30'::timestamptz,   -- a Monday
+               '2026-11-20 18:00+05:30'::timestamptz,
+               '2026-11-25 10:00+05:30'::timestamptz)) = 3   -- Wednesday: a breach
+        and (select private.working_days_between(
+               '2026-11-23 10:00+05:30'::timestamptz,
                '2026-11-24 10:00+05:30'::timestamptz)) = 1
         and (select private.working_days_between(
                '2026-11-23 10:00+05:30'::timestamptz,
@@ -525,7 +583,10 @@ select
   case when (select coalesce(sum(roles_applied), 0) from public.admin_candidate_stats())
           + (select applications_anonymised from public.admin_report_totals())
           = (select applications_total from public.admin_report_totals())
-       then 'PASS' else 'FAIL — the candidate counts and the total disagree' end
+       then 'PASS'
+       else 'FAIL — candidates ' || (select coalesce(sum(roles_applied), 0) from public.admin_candidate_stats())
+            || ' + anonymised ' || coalesce((select applications_anonymised from public.admin_report_totals())::text, 'NULL')
+            || ' <> total ' || coalesce((select applications_total from public.admin_report_totals())::text, 'NULL') end
     as c5_reconciliation_adds_up,
 
   case when (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
