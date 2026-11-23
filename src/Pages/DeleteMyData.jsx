@@ -129,6 +129,7 @@ function DeleteMyData() {
     setDone({
       applications: result.data?.applications_anonymised ?? 0,
       resume: Boolean(result.data?.resume_deleted),
+      savedRoles: result.data?.saved_roles_removed ?? 0,
     });
     setTyped("");
     setBusy(null);
@@ -151,8 +152,19 @@ function DeleteMyData() {
               : `${done.applications} ${done.applications === 1 ? "application has" : "applications have"} been anonymised — your name, email, phone number, notice period and the link to your account are erased.`}
           </p>
 
+          {/* Reported even when it is zero. Someone who has just pressed an
+              irreversible button is entitled to a complete account of what
+              happened, and "nothing was there to remove" is information --
+              silence on the subject is not. */}
           <p className="mt-3 text-[15px] leading-relaxed text-emerald-900">
-            Your community account, questions and answers are untouched.
+            {done.savedRoles === 0
+              ? "You had no saved roles."
+              : `${done.savedRoles} ${done.savedRoles === 1 ? "saved role has" : "saved roles have"} been removed.`}
+          </p>
+
+          <p className="mt-3 text-[15px] leading-relaxed text-emerald-900">
+            Your community account, questions, answers and saved questions are
+            untouched.
           </p>
         </div>
 
@@ -215,14 +227,18 @@ function DeleteMyData() {
         </h2>
 
         <p className="mt-2 text-sm leading-relaxed text-slate-700">
-          Permanently deletes your resume file and strips your name, email,
-          phone number and notice period from every application you have sent.
+          Permanently deletes your resume file, removes every role you have
+          saved, and strips your name, email, phone number and notice period
+          from every application you have sent.
         </p>
 
+        {/* Saved questions are named explicitly rather than left to "your
+            community account". Both things are called saves, and someone
+            about to press this deserves to know which one it means. */}
         <p className="mt-3 text-sm leading-relaxed text-slate-700">
           <strong>This does not touch your community account.</strong> Your
-          questions, your answers and your display name all stay exactly as
-          they are.
+          questions, your answers, your saved questions and your display name
+          all stay exactly as they are.
         </p>
 
         <p className="mt-3 text-sm leading-relaxed text-slate-700">

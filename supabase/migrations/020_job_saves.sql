@@ -43,14 +43,23 @@
 --   migration as the table when server code needs it, and does not exist
 --   when nothing server-side touches it. c3 asserts that is still true.
 --
--- WHAT THIS MIGRATION DOES NOT DO
---   It does not change /api/delete-my-data. Whether "Delete my job board
---   data" should also forget saved roles is a decision, not an oversight:
---   saved QUESTIONS are deliberately untouched by it, the privacy policy
---   lists applications and the resume by name, and a saved role holds no
---   personal detail that an application does not already hold. It is raised
---   as a [DECIDE] in the stage 10 checklist. Deleting the ACCOUNT already
---   clears these rows, by the cascade below.
+-- WHAT THIS MIGRATION DOES NOT DO -- SUPERSEDED, SEE MIGRATION 021
+--   As shipped, this migration left /api/delete-my-data alone and raised the
+--   question as a decision. Rishi decided it on 23 Nov 2026: saved roles ARE
+--   included in "Delete my job board data", and migration 021 adds the delete
+--   to public.anonymise_job_data_for().
+--
+--   The argument this header originally made -- that a saved role holds no
+--   personal detail an application does not already hold -- was wrong, and
+--   his reason is the one this file should have reached. An application tells
+--   an employer something they already know. A saved role says "interested,
+--   and did not approach", which nobody knows at all.
+--
+--   Left here rather than deleted, because a migration is a record of what
+--   was run and what was believed at the time. 021 is the current state.
+--
+--   Deleting the ACCOUNT already cleared these rows either way, by the
+--   cascade below.
 -- ===========================================================================
 
 

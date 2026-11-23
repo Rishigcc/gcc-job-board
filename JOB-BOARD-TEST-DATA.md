@@ -977,6 +977,7 @@ sign-off.
 | ~~W3~~ **DONE in 9b** | ~~The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** **Shipped 23 Nov 2026: anonymised applications no longer count toward "new" and appear as their own figure. Left here rather than deleted, because W6 is about how that same line now reads.** |
 | W4 | The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
 | W5 | **Two tabs called Roles on `/admin`** — the action queue's and the report's. Confusing on one screen. | Rishi, 23 Nov 2026. Renaming one is a word; deciding which is the question. The admin one acts on roles, the report one counts them, so "Moderate roles" / "Roles" or "Roles" / "Role performance" are both defensible. |
+| W7 | **The navigation label "Apply Directly" does not contain the word "jobs".** | Raised by me, 23 Nov 2026; Rishi's decision the same day: *"Keep 'Apply Directly' for now. Your reservation is noted and I agree it's real, but the wording review covers the whole site and this is one line. Log it there rather than deciding it in isolation."* The concern: scanning *Explore GCC Jobs · Apply Directly*, a visitor may not realise both are job listings — and the item holding our own roles is the one that does not announce itself as roles. Candidates that keep the distinction and still say jobs: **Direct GCC Jobs**, **Jobs: Apply Directly**. Note the homepage card added the same day says "Apply Directly to GCC **Roles**", so the two surfaces currently word it differently — which the review should settle together. |
 | W6 | **The recruiter summary line's figures overlap** — `1 new · 1 not selected · 3 anonymised` sums to 5 against 4 applications, because the not-selected one is also anonymised. | Deliberate, and recorded as deliberate in the W3 note: the first three say what you decided, the last says who can no longer be contacted. But Rishi is right that **a reader will try to add them**, and a figure that invites a wrong sum is a wording problem even when every number is correct. Options: separate them visually, or label the last one so it reads as a qualifier rather than a fourth bucket. |
 
 ## `public.question_authors` — settled 19 Nov 2026 (migration 010)
@@ -1918,6 +1919,64 @@ exercise. Asserted in the test script across nine bad values.
   the role appearing in Google's job results, where most candidates will find
   it."* **The CHECK constraint on `jobs.description` is still `>= 50` and must
   be raised in the same migration, or the form and the database disagree.**
+
+### Stage 10 round one — SIGNED OFF 23 Nov 2026
+
+Rishi's result, verbatim: *"Round one signed off. Migration 020 re-run: 8
+checks, 8 PASS, with the figures readable. Nav works and recruiters don't see
+either link. Save works signed out → sign in → filter survives. Three saves
+persist across reload, list and detail agree, toggle works both ways. Tile and
+page counts match at every step. Closed role shows the grey panel with its
+title; hidden role shows 'A role you saved' with nothing of the posting;
+unhide restores; Remove drops both counts. Second account sees the empty state
+and job_saves has exactly one user's rows. No overflow at 375px."*
+
+The three decisions he returned with:
+
+| # | Decision | Outcome |
+|---|---|---|
+| D1 | **Keep "Apply Directly" for now.** *"Your reservation is noted and I agree it's real, but the wording review covers the whole site and this is one line. Log it there rather than deciding it in isolation — W7."* | Logged as **W7**. No code change. |
+| D2 | **Add the homepage card.** *"A nav item only reaches people already looking; the homepage reaches the 2,520 members who don't know the board exists. That's the findable half of the stage."* | Built 23 Nov. Fourth card in `ACTION_ITEMS`, second position, orange accent, paper-plane icon. Grid moved from `md:grid-cols-3` to `md:grid-cols-2 lg:grid-cols-4` — **a visible homepage layout change for every member**, because three columns plus a fourth card leaves one card alone on a second row. |
+| D3 | **Include saved roles in "Delete my job board data".** *"The button's name is a promise, and a saved role is plainly job board data. It also reveals something an application doesn't: which employers someone was interested in but never approached. Saved questions staying untouched doesn't argue against this — those aren't job board data."* | Migration 021. See below. |
+
+**D2 had a side effect worth recording as a result, not a footnote.** The
+homepage is prerendered, so `dist/index.html` now contains a real
+`<a href="/gcc-jobs">`. A crawler reaching the homepage finds the board
+**without running JavaScript** — which is part of what round two was for,
+delivered early by where the card happens to live.
+
+### Stage 10 — D3, and the argument I got wrong
+
+Migration 020's header argued *against* including saved roles, on the grounds
+that "a saved role holds no personal detail that an application does not
+already hold". **That was wrong, and Rishi's reason is the one the file should
+have reached:**
+
+> An application tells an employer something they already know. A saved role
+> says *interested, and did not approach* — which nobody knows at all.
+
+That is a disclosure with no counterpart anywhere else in the system, and it
+is exactly what a delete-my-data button exists for. 020's header is annotated
+as superseded rather than rewritten, because a migration is a record of what
+was run and what was believed when it ran.
+
+**It went INSIDE `anonymise_job_data_for()` rather than beside it, for two
+reasons.** Atomicity: a second RPC could half-succeed, and the endpoint would
+then have to describe a half-finished deletion to someone who had just typed
+`DELETE MY DATA`. And it keeps 020's `c3` true — no grant to `service_role` on
+`job_saves` was needed, because a definer function runs as its owner. 021's
+`c5` asserts that grant still does not exist.
+
+Two faults caught while writing 021's own checks, both of the same kind —
+**a check that can destroy real data is worse than no check**:
+
+- `c3` calls a destructive function on a real account. It now proves the
+  subject has zero applications, zero resume rows and zero saves *before*
+  calling, and reports FAIL without calling anything if not.
+- `c4` called the same function and did **not** repeat that proof. If `c3` had
+  bailed out because the subject was dirty, `c4` would have gone ahead and run
+  it on exactly the account `c3` had just refused to touch. The guard is now
+  duplicated on purpose.
 
 ### Stage 10 — eight checks that could not be read (the same lesson, third form)
 

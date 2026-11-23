@@ -6,9 +6,24 @@ import { confirmed, CONFIRM_DELETE_MY_DATA } from "../src/lib/confirmations.js";
 // POST /api/delete-my-data   ->   { applications_anonymised, resume_deleted }
 //
 // Delete my job board data. JOB BOARD ONLY: it does not touch
-// public.profiles, questions, answers, hearts, saves, or the auth account.
-// That is the decided scope, it is what the privacy policy says, and it is
-// printed on the button the caller pressed.
+// public.profiles, questions, answers, hearts, SAVED QUESTIONS, or the auth
+// account. That is the decided scope, it is what the privacy policy says, and
+// it is printed on the button the caller pressed.
+//
+// SAVED ROLES ARE IN SCOPE, AND THIS COMMENT USED TO SAY THEY WERE NOT.
+//   It said "saves", which covered both kinds, and that was the behaviour
+//   until 23 Nov 2026. Rishi's decision that day: "The button's name is a
+//   promise, and a saved role is plainly job board data. It also reveals
+//   something an application doesn't: which employers someone was interested
+//   in but never approached."
+//
+//   That second sentence is the reason it is not merely tidiness. An
+//   application tells an employer something they already know. A saved role
+//   says "interested, and did not approach" -- which nobody knows, and which
+//   is exactly what a delete-my-data button exists for.
+//
+//   Saved QUESTIONS stay untouched, and that is not an inconsistency: they
+//   are community data, like a liked post, and this button says job board.
 //
 // WHAT IT ACTUALLY DOES, AND WHY "ERASED" IS THE RIGHT WORD
 //   The policy says the name, email, phone, notice period and the reference
@@ -111,6 +126,11 @@ export default async function handler(req, res) {
     console.log(`delete-my-data: removed ${cleared.removed.length} objects for ${userId}`);
   }
 
+  // ONE RPC, NOT TWO. Anonymising the applications and deleting the saved
+  // roles happen inside the same function so that they happen in the same
+  // transaction -- see migration 021. Two calls could half-succeed, and then
+  // this endpoint would have to describe a half-finished deletion to someone
+  // who had just typed DELETE MY DATA.
   const { data: result, error: rpcError } = await admin.rpc("anonymise_job_data_for", {
     p_user: userId,
   });
@@ -129,6 +149,7 @@ export default async function handler(req, res) {
 
   console.log(
     `delete-my-data: user ${userId} anonymised ${row?.applications_anonymised ?? 0} application(s)` +
+      `, removed ${row?.saved_roles_removed ?? 0} saved role(s)` +
       `, removed ${cleared.removed.length} storage object(s)`
   );
 
@@ -138,5 +159,10 @@ export default async function handler(req, res) {
     // no row -- the case deleting by row name would have missed.
     resume_deleted: Boolean(resumeRow?.resume_path) || cleared.removed.length > 0,
     files_removed: cleared.removed.length,
+    // ?? 0 rather than a bare read: the migration can be applied before or
+    // after this deploy, and an older function simply does not return the
+    // column. Reporting 0 is then true -- nothing was removed, because
+    // nothing could be.
+    saved_roles_removed: row?.saved_roles_removed ?? 0,
   });
 }
