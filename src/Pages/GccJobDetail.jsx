@@ -4,8 +4,11 @@ import SiteHeader from "../components/SiteHeader";
 import Footer from "../components/Footer";
 import Seo from "../components/Seo";
 import ApplyPanel from "../components/ApplyPanel";
+import SaveJobButton from "../components/SaveJobButton";
 import { WORK_MODES, EMPLOYMENT_TYPES } from "../lib/jobOptions";
 import { fetchJob } from "../lib/publicJobs";
+import { supabase } from "../lib/supabase";
+import { useJobSaves } from "../lib/useJobSaves";
 import {
   jobPath,
   parseJobParam,
@@ -160,6 +163,28 @@ function GccJobDetail() {
     };
   }, [id]);
 
+  // Who is looking, for the Save control only. Nothing about the page waits
+  // on it: the role renders for a visitor and a signed-in candidate at the
+  // same moment, and the bookmark fills in when the session resolves.
+  //
+  // Both of these run before the early returns below, because a hook that is
+  // called on some renders and not others is not a hook.
+  const [userId, setUserId] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setUserId(data?.user?.id || null);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const saves = useJobSaves(userId, id === null ? [] : [id]);
+
   if (state.status === "loading") {
     return (
       <Shell from={from}>
@@ -262,9 +287,25 @@ function GccJobDetail() {
                 ) : null}
               </div>
 
-              <p className="mt-3 text-sm text-slate-500">
-                {formatPosted(job.published_at)} · {formatCloses(job.expires_at)}
-              </p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-slate-500">
+                  {formatPosted(job.published_at)} · {formatCloses(job.expires_at)}
+                </p>
+
+                {/* The redirect is the pathname without the query string on
+                    purpose. ?apply=1 is what the sign-in round trip adds when
+                    someone set out to APPLY, and carrying it here would open
+                    the application form for someone who only pressed Save. */}
+                <SaveJobButton
+                  jobId={job.id}
+                  saved={saves.savedIds.has(job.id)}
+                  justSaved={saves.justSavedId === job.id}
+                  showPopup={saves.popupFor === job.id}
+                  onToggle={saves.handleToggle}
+                  onClosePopup={() => saves.setPopupFor(null)}
+                  redirectPath={location.pathname}
+                />
+              </div>
 
               <h2 className="mt-7 text-base font-bold text-slate-900">About the role</h2>
 

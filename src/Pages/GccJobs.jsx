@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader";
 import Footer from "../components/Footer";
 import Seo from "../components/Seo";
 import GccJobCard from "../components/GccJobCard";
 import Pagination from "../components/Pagination";
 import { fetchFacets, fetchJobs, JOBS_PER_PAGE } from "../lib/publicJobs";
+import { supabase } from "../lib/supabase";
+import { useJobSaves } from "../lib/useJobSaves";
 
 // ===========================================================================
 // /gcc-jobs -- roles posted directly on iWorkAtGCC by recruiters.
@@ -28,6 +30,7 @@ const selectClass =
 
 function GccJobs() {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
 
   const search = params.get("q") || "";
   const city = params.get("city") || "";
@@ -96,6 +99,31 @@ function GccJobs() {
     setDraft("");
     setParams(new URLSearchParams());
   };
+
+  // Who is looking, for the Save control only. The list itself is public and
+  // identical either way -- nothing here waits on the session, so a signed-in
+  // candidate sees the roles at the same moment a visitor does and the
+  // bookmarks fill in when the session resolves.
+  const [userId, setUserId] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setUserId(data?.user?.id || null);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const jobIds = result.jobs.map((job) => job.id);
+  const saves = useJobSaves(userId, jobIds);
+
+  // The full path, so signing in from the Save button returns someone to the
+  // filtered list they were looking at rather than to an unfiltered /gcc-jobs.
+  const redirectPath = location.pathname + location.search;
 
   const filtered = Boolean(search || city || jobFunction || band);
   const totalPages = Math.max(1, Math.ceil(result.total / JOBS_PER_PAGE));
@@ -241,7 +269,18 @@ function GccJobs() {
 
         <div className="mt-4 space-y-4">
           {result.jobs.map((job) => (
-            <GccJobCard key={job.id} job={job} />
+            <GccJobCard
+              key={job.id}
+              job={job}
+              save={{
+                saved: saves.savedIds.has(job.id),
+                justSaved: saves.justSavedId === job.id,
+                showPopup: saves.popupFor === job.id,
+                onToggle: saves.handleToggle,
+                onClosePopup: () => saves.setPopupFor(null),
+                redirectPath,
+              }}
+            />
           ))}
         </div>
 

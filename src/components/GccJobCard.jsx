@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import SaveJobButton from "./SaveJobButton";
 import { WORK_MODES, EMPLOYMENT_TYPES } from "../lib/jobOptions";
 import {
   jobPath,
@@ -28,7 +29,11 @@ function Meta({ children }) {
   );
 }
 
-function GccJobCard({ job }) {
+// `save` is optional. When it is absent the card renders exactly as it did
+// before stage 10 -- which is what keeps the card usable anywhere a save
+// control would make no sense. Every piece of its state is owned by
+// useJobSaves so that the list and the detail page cannot disagree.
+function GccJobCard({ job, save }) {
   const salary = formatSalary(job);
   const experience = formatExperience(job.experience_min, job.experience_max);
   const company = job.companies?.name || "";
@@ -81,12 +86,26 @@ function GccJobCard({ job }) {
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-slate-500">{formatPosted(job.published_at)}</p>
 
-        <Link
-          to={jobPath(job)}
-          className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-        >
-          View role
-        </Link>
+        <div className="flex items-center gap-1">
+          {save ? (
+            <SaveJobButton
+              jobId={job.id}
+              saved={save.saved}
+              justSaved={save.justSaved}
+              showPopup={save.showPopup}
+              onToggle={save.onToggle}
+              onClosePopup={save.onClosePopup}
+              redirectPath={save.redirectPath}
+            />
+          ) : null}
+
+          <Link
+            to={jobPath(job)}
+            className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            View role
+          </Link>
+        </div>
       </div>
     </article>
   );

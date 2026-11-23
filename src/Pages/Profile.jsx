@@ -20,6 +20,7 @@ function Profile() {
 
   const [askedCount, setAskedCount] = useState(0);
   const [savedCount, setSavedCount] = useState(0);
+  const [savedJobsCount, setSavedJobsCount] = useState(0);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -53,7 +54,7 @@ function Profile() {
         setDisplayNameInput(data?.display_name || "");
       }
 
-      const [askedResult, savedResult] = await Promise.all([
+      const [askedResult, savedResult, savedJobsResult] = await Promise.all([
         supabase
           .from("questions")
           .select("id", { count: "exact", head: true })
@@ -61,6 +62,14 @@ function Profile() {
         supabase
           .from("question_saves")
           .select("question_id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+        // Counted straight off the table, like question_saves above, and not
+        // through my_saved_jobs(). The number has to be the number of rows,
+        // because /profile/saved-jobs accounts for every one of them --
+        // including the roles that have since closed.
+        supabase
+          .from("job_saves")
+          .select("job_id", { count: "exact", head: true })
           .eq("user_id", user.id),
       ]);
 
@@ -74,6 +83,12 @@ function Profile() {
         console.error("Error loading saved count:", savedResult.error);
       } else {
         setSavedCount(savedResult.count || 0);
+      }
+
+      if (savedJobsResult.error) {
+        console.error("Error loading saved roles count:", savedJobsResult.error);
+      } else {
+        setSavedJobsCount(savedJobsResult.count || 0);
       }
 
       setLoading(false);
@@ -201,7 +216,7 @@ function Profile() {
         </div>
 
         {!loading && (
-          <div className="mt-6 grid grid-cols-2 gap-4">
+          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
             <button
               type="button"
               onClick={() => navigate("/profile/asked")}
@@ -225,6 +240,23 @@ function Profile() {
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-600">
                 Questions Saved
+              </div>
+            </button>
+
+            {/* Third tile, so it spans the row on a phone rather than
+                sitting beside a gap. The number counts rows, which is why
+                the page it opens accounts for closed roles too instead of
+                quietly showing fewer cards than this says. */}
+            <button
+              type="button"
+              onClick={() => navigate("/profile/saved-jobs")}
+              className="col-span-2 rounded-2xl border border-slate-200 bg-white px-5 py-6 text-center shadow-sm transition hover:bg-slate-50 sm:col-span-1"
+            >
+              <div className="text-3xl font-bold text-slate-900">
+                {savedJobsCount}
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-600">
+                Roles Saved
               </div>
             </button>
           </div>

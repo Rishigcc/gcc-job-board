@@ -1830,6 +1830,105 @@ was not, and his second hypothesis was right.
 - **Null is not zero.** An unmeasured verification displayed as "0 days" would
   make a published promise look perfect precisely where there is no evidence.
 
+## Stage 10 — SEO, and making the board findable (ROUND ONE BUILT 23 Nov 2026)
+
+**One stage, two rounds, signed off separately — Rishi's decision, 23 Nov
+2026.** Round one is everything that is fully testable on a preview: the board
+becomes reachable, and a candidate can save a role. Round two is the SEO work,
+which is only partly testable before merge (see P3).
+
+### Round one — what was built
+
+| Piece | Where |
+|---|---|
+| `job_saves` table, three policies, `my_saved_jobs()` | `supabase/migrations/020_job_saves.sql` |
+| The saves hook (optimistic, sign-in popup) | `src/lib/useJobSaves.js` |
+| Pure display helpers for the three states | `src/lib/savedJobsDisplay.js` |
+| The RPC read and the delete | `src/lib/savedJobs.js` |
+| The Save control | `src/components/SaveJobButton.jsx` |
+| Save on the list and on the detail page | `src/Pages/GccJobs.jsx`, `src/Pages/GccJobDetail.jsx` |
+| `/profile/saved-jobs` | `src/Pages/SavedJobs.jsx` |
+| "Roles Saved" counter, third tile | `src/Pages/Profile.jsx` |
+| **"Apply Directly" in the header nav → `/gcc-jobs`** | `src/components/SiteHeader.jsx` |
+| 111 assertions on the helpers | `scripts/stage10-saves-test.mjs` |
+
+### A saved role has three states, and only one of them is the normal case
+
+`public.jobs` has a select policy built on `private.job_is_public()`, so a role
+that closed, expired, was hidden by an admin, or whose recruiter was suspended
+**stops being returned to the browser entirely**. A plain join from `job_saves`
+would therefore drop exactly the rows the page exists to explain — and the
+counter on `/profile` counts *rows in `job_saves`*, so the number and the page
+it opens would disagree. A page showing four cards under a counter reading six
+is a bug report.
+
+So `my_saved_jobs()` returns **every** save with an availability:
+
+| State | Means | What is shown |
+|---|---|---|
+| `open` | still accepting applications | the ordinary job card |
+| `closed` | filled, closed by the recruiter, or past its closing date | a flattened card: which role it was, and that it has closed |
+| `withdrawn` | hidden by an admin, or its recruiter is suspended | **no title, no company, no link** |
+
+**The difference between the last two is not cosmetic.** A closed role was a
+real posting that ran its course, and someone who bookmarked it is entitled to
+know which role it was. A withdrawn role was taken down *by us*, which is the
+one case where continuing to print the recruiter's words would undo the
+removal. The function nulls every display column for those, so the page cannot
+render one by accident.
+
+**An unrecognised availability is treated as withdrawn, not as open.** That is
+the fail-closed direction, and it is the one a future `jobs.status` value will
+exercise. Asserted in the test script across nine bad values.
+
+### Round one — open decisions for Rishi
+
+| # | Decision |
+|---|---|
+| D1 | **The nav label.** Built as "Apply Directly", as instructed. My one reservation, recorded: it does not contain the word "jobs", so a visitor scanning *Explore GCC Jobs · Apply Directly* may not realise both are job listings — and the item holding our own roles is the one that does not announce itself as roles. "Direct GCC Jobs" or "Jobs: Apply Directly" keep the distinction and still say jobs. One-line change either way. |
+| D2 | **A homepage hero card for the board.** `src/components/Header.jsx` carries the homepage cards and one already says "Explore GCC Jobs". A card there would be seen by far more people than a nav item. Not added, because it was not asked for. |
+| D3 | **Does "Delete my job board data" also forget saved roles?** Not changed, deliberately. Saved *questions* are explicitly untouched by that endpoint; the privacy policy names applications and the resume and nothing else; and a saved role holds no personal detail an application does not already hold. But the button says "job board data", and a saved role plainly is. If the answer is yes, the privacy policy needs a line and `api/delete-my-data.js`'s header comment is currently wrong. Deleting the **account** already clears these rows, by the cascade. |
+
+### Round two — scope, recorded before it starts
+
+- Per-request job detail pages with `JobPosting` JSON-LD; `noindex` removed.
+- 404 for a job that is not public, so Google drops it (spec allows 404, 410,
+  a past `validThrough`, or removing the markup; no stated preference).
+- **No markup on `/gcc-jobs`** — "Don't add structured data to pages intended
+  to present a list of jobs", and exactly one job per page.
+- `jobLocation` as `Place` + `PostalAddress` with `addressCountry: "IN"` plus
+  the city; `jobLocationType: TELECOMMUTE` only for "Anywhere in India".
+- `directApply` **omitted** — our flow has a sign-in in the middle, so the
+  claim would be false. Rishi, 23 Nov 2026.
+- Indexing API **out of v1**. Rishi, 23 Nov 2026.
+- `employmentType` values are case-sensitive: `FULL_TIME`, `PART_TIME`,
+  `CONTRACTOR`, `TEMPORARY`, `INTERN`, `VOLUNTEER`, `PER_DIEM`, `OTHER`.
+- **India is in Google's listed countries.** Confirmed against the live spec
+  page, 23 Nov 2026, before building: the Asia list is Bangladesh, Hong Kong,
+  **India**, Indonesia, Japan, Kazakhstan, Kyrgyzstan, Malaysia, Pakistan,
+  Philippines, Singapore, Sri Lanka, Taiwan, Thailand, Uzbekistan, Vietnam.
+  No date marker on that section.
+- **Raise the description minimum from 50 to 400 characters.** Google's only
+  stated rule is the negative one — "We don't allow job postings with
+  incomplete job descriptions" — and there is no number in the spec, so a
+  counter cannot enforce completeness; it can only catch the one-liner. 400 is
+  roughly 60–70 words. Stage 9's admin hide is the backstop for a post that
+  clears 400 and is still junk. The message names the consequence: *"Describe
+  the role in at least 400 characters — you have N. A thin description stops
+  the role appearing in Google's job results, where most candidates will find
+  it."* **The CHECK constraint on `jobs.description` is still `>= 50` and must
+  be raised in the same migration, or the form and the database disagree.**
+
+### Stage 10 cleanup — created while testing in production
+
+| What | Where | Removed? |
+|---|---|---|
+| `job_saves` rows made while testing the Save button | `public.job_saves` | Add to the pre-merge clearout. Harmless if missed — they are bookmarks on test jobs that are themselves being deleted, and the FK cascades. |
+
+Migration 020's own check `c7` inserts three saves, reads them back and deletes
+them **before** judging the result, so a failed check cleans up after itself as
+well as a passing one does. `c8` then asserts the table is empty.
+
 ## Launch checklist — production-dependent verification
 
 **This is the list, so it does not live only in a conversation.** Each item
@@ -1972,9 +2071,11 @@ hook and then sweeps. P1's curl covers both in one request.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 19 | **STAGE 4 CHANGE, TO BE DECIDED SEPARATELY: tell recruiters that a 100% remote role must say so in the description.** Google requires `jobLocationType: TELECOMMUTE` *and* that the description clearly states the role is remote. v1 does not ask recruiters for that, so a "remote" role whose description never says the word gets markup Google may disregard. Logged rather than built, because it changes a signed-off form. | Rishi, 23 Nov 2026 | **Stage 4 change** |
+| 18 | **THE POSTING FORM NEEDS RETESTING AS PART OF STAGE 10.** Raising the description minimum from 50 to 400 characters touches signed-off stage 4: `src/lib/jobFormModel.js`, the field hint, and the CHECK constraint on `jobs.description`. Rishi, 23 Nov 2026: "Raising it touches signed-off stage 4, so record that the posting form needs retesting as part of stage 10." | Rishi, 23 Nov 2026 | **Stage 10 round two** |
 | 17 | **STAGE 9 SCOPE: `purge_expired_applications()` writes an audit row.** A nightly retention purge is an administrative action, and on Hobby a log line is unreadable an hour later. An audit row turns "did the sweep run" into a SQL query that is answerable forever rather than within the hour after 02:00 UTC. | Rishi, 23 Nov 2026 | **Stage 9** |
 | 16 | **STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.** Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
-| 15 | **STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.** The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
+| 15 | **BUILT IN STAGE 10 ROUND ONE, 23 Nov 2026** — shipped as "Apply Directly" in the header nav; awaiting Rishi's sign-off and decision D1 on the label. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
 | 13 | **Partly done by stage 8's own testing, 22 Nov 2026: `candidate_resumes` is empty and the `resumes` bucket is completely empty, so those two lines are closed.** What remains: the anonymised `applications` rows, the 24 `[T5]` jobs, `Test Co A` and `Test Co B`, the two recruiter accounts, and `iworkatgcctest3@gmail.com`. Order still matters — jobs before companies, because of the foreign key. **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |

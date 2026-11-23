@@ -21,6 +21,7 @@ import QuestionDetail from "./Pages/QuestionDetail.jsx";
 import Profile from "./Pages/Profile.jsx";
 import AskedQuestions from "./Pages/AskedQuestions.jsx";
 import SavedQuestions from "./Pages/SavedQuestions.jsx";
+import SavedJobs from "./Pages/SavedJobs.jsx";
 import Privacy from "./Pages/Privacy.jsx";
 import RecruiterTerms from "./Pages/RecruiterTerms.jsx";
 import PostAJob from "./Pages/PostAJob.jsx";
@@ -364,6 +365,18 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SavedQuestions />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Saved roles. ProtectedRoute without blockRecruiters, for the same
+          reason /my-applications is: one person may be both a recruiter and
+          a candidate, and the candidate half is theirs. */}
+      <Route
+        path="/profile/saved-jobs"
+        element={
+          <ProtectedRoute>
+            <SavedJobs />
           </ProtectedRoute>
         }
       />

@@ -2,7 +2,11 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { setPostLoginRedirect } from "../lib/postLoginRedirect";
 
-function SignInPopup({ onClose, redirectState }) {
+// `path` is optional and defaults to the current pathname, which is what
+// every existing caller relies on. It exists for /gcc-jobs, which holds its
+// search and filters in the query string: sending someone back to the
+// pathname alone would return them to an unfiltered list after signing in.
+function SignInPopup({ onClose, redirectState, path }) {
   const navigate = useNavigate();
   const location = useLocation();
   const popupRef = useRef(null);
@@ -22,7 +26,7 @@ function SignInPopup({ onClose, redirectState }) {
   const handleSignIn = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setPostLoginRedirect(location.pathname, redirectState);
+    setPostLoginRedirect(path || location.pathname, redirectState);
     navigate("/signup", { state: { mode: "signin" } });
   };
 
