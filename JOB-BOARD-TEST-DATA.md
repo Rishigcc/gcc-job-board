@@ -760,6 +760,10 @@ own retention and there is one per candidate, not one per application — so it
 is a single SQL statement in `public.purge_expired_applications()`, called once
 a day from `api/rebuild.js`.
 
+**It cannot be verified before the merge, and that is now recorded as P1 in the
+post-merge section rather than as an open stage 8 test.** Vercel runs crons
+only against the production deployment, and production builds from `main`.
+
 `rebuild.js` hosts it rather than `send-digest.js` deliberately: the digest
 reaches ~2,500 people and a crash part-way through risks double-sending, while
 `rebuild.js` sends nothing. The sweep runs **after** the deploy hook has fired
@@ -1069,6 +1073,119 @@ unpinned function across `public` and `private`, so it proves nothing was
 missed and is the query to re-run after any later migration adds one. It
 should read 0 from now on.
 
+## Post-merge verification — things only production can prove
+
+**Raised by Rishi on 23 Nov 2026, and it invalidated a check rather than
+delaying it.** The stage 8 checklist asked him to read the retention sweep's
+log line after the 02:00 cron. That could never have printed: **Vercel runs
+cron jobs only against the production deployment, and production builds from
+`main`.** The sweep lives in `api/rebuild.js` on the branch, which does not
+merge until stage 11, so the 02:00 run executed the old rebuild code.
+
+**Two separate constraints, both worth remembering when writing any future
+check:**
+
+1. A cron cannot be tested on a preview deployment at all. Not slowly — not at
+   all.
+2. **Hobby retains runtime logs for about an hour**, so even after the merge a
+   02:00 UTC run cannot be read the following morning. Any check that ends in
+   "look at the log tomorrow" is not a check.
+
+### P1 — the 12-month retention sweep
+
+**Status: not verified, and not verifiable before the merge.** Moved here out
+of stage 8, where it was wrongly listed as an open test.
+
+**How to verify it without depending on logs — do this straight after the
+merge deploy:**
+
+```bash
+# CRON_SECRET is in Vercel's environment variables.
+curl -s -X POST https://www.iworkatgcc.com/api/rebuild \
+  -H "Authorization: Bearer $CRON_SECRET" | jq
+```
+
+Expect `{"triggered": true, "purged": 0}`. That is the whole check: the
+response body carries the sweep's own return value, so nothing depends on log
+retention and it can be run at any hour. The one side effect is that it fires
+the deploy hook and production rebuilds — which is exactly what happens every
+night anyway, so it costs one build and nothing else.
+
+**And make it permanently checkable.** Stage 9 builds an audit table, and a
+nightly retention purge is an administrative action by any reasonable
+definition. If `purge_expired_applications()` writes an audit row, the nightly
+run becomes a SQL query rather than a log hunt — verifiable forever instead of
+within an hour. Added to stage 9 scope.
+
+### P2 — analytics and Clarity will fire for the first time at merge
+
+Both guards are **new on this branch** and both key off the hostname:
+
+| Guard | Where |
+|---|---|
+| `trackEvent()` returns early unless the host matches | `src/analytics.js` |
+| Clarity's loader only runs if the host matches | `index.html` |
+
+On every preview deployment they take the **deny** path. So "zero analytics
+requests", tested in every stage since 2, only ever proved the guard blocks.
+**The allow path has never run once.**
+
+The failure mode is the quiet kind: if the hostname were wrong, analytics would
+simply stop at merge and look like a run of quiet days.
+
+**The hostname itself is verified correct**, checked 23 Nov 2026: `iworkatgcc.com`
+returns **308** to `https://www.iworkatgcc.com/`, which answers with 200. So the
+constant matches what production serves, and every other canonical host in the
+repo agrees — `src/lib/seo.js`, `scripts/prerender.mjs`, `public/robots.txt`.
+
+**Still to do at merge**, two minutes: load the live site, confirm a `gtag`
+collect request fires in the network tab and a Clarity script loads, and that
+GA4 realtime shows the session. **Carried item 2 — verifying Clarity's
+form-input masking — belongs here too**, because Clarity cannot load on a
+preview by construction, so that item was never completable before merge.
+
+### P3 — crawlability cannot be tested on a preview
+
+The preview deployment sits behind Vercel's deployment protection: an
+unauthenticated client gets Vercel's sign-in page, not the app. Confirmed on
+22 Nov when a scripted fetch of the preview returned the login screen.
+
+So nothing about Googlebot, `robots.txt`, `sitemap.xml` or JSON-LD being
+*fetchable* can be proved on the branch. **Stage 10 has to be planned knowing
+its central claim is only testable after merge**, via Search Console's URL
+inspection on the live site.
+
+### P4 — environment variables are scoped per environment
+
+Every function added by this branch reads `SUPABASE_SERVICE_ROLE_KEY`, and
+`/api/resume-url` also reads `VITE_SUPABASE_PUBLISHABLE_KEY`. A variable set
+for Preview only would work throughout testing and fail the moment production
+served it.
+
+**Pre-merge check:** in Vercel → Settings → Environment Variables, confirm all
+six are ticked for **Production** as well as Preview: `SUPABASE_SERVICE_ROLE_KEY`,
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `BREVO_API_KEY`,
+`CRON_SECRET`, `DEPLOY_HOOK_URL`.
+
+### P5 — `DEPLOY_HOOK_URL` has never been fired from this branch's code
+
+The rebuild cron's only job before stage 8 was to hit that hook, and it has
+been doing so nightly from `main`, so the hook works. What has not been
+exercised is `api/rebuild.js` **as the branch now writes it**, which fires the
+hook and then sweeps. P1's curl covers both in one request.
+
+### Checked and found to be a non-issue
+
+- **`api/send-digest.js`** shows 24 added lines on this branch and runs only
+  against production at 03:30 — so on the face of it, the same problem. **It
+  is comment-only.** Every added line is a `//` comment explaining invariant
+  I1 at the line that depends on it. No behaviour changed, so there is nothing
+  to verify. Worth recording that it was checked rather than assumed.
+- **`scripts/prerender.mjs`** also changed, but it runs at build time on every
+  deployment including previews, so it has been exercised on every stage.
+- **`vercel.json` is unchanged on this branch**, so neither cron's schedule nor
+  the rewrite rules differ from what production already runs.
+
 ## Carried-forward items (must be done before the final merge)
 
 | # | Item | Raised in | Due |
@@ -1078,6 +1195,7 @@ should read 0 from now on.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 17 | **STAGE 9 SCOPE: `purge_expired_applications()` writes an audit row.** A nightly retention purge is an administrative action, and on Hobby a log line is unreadable an hour later. An audit row turns "did the sweep run" into a SQL query that is answerable forever rather than within the hour after 02:00 UTC. | Rishi, 23 Nov 2026 | **Stage 9** |
 | 16 | **STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.** Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
 | 15 | **STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.** The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
