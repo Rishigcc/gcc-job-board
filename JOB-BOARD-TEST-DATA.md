@@ -1202,6 +1202,43 @@ them. The cost is that a genuine outage is indistinguishable from "not an
 admin" *in the response*, which is why the two cases log differently — the
 response is for the caller, the log is for us.
 
+### Stage 9 — "every failure looks like a missing route" took three passes
+
+Worth recording because the rule is only worth anything if it has no
+exceptions, and it acquired one twice.
+
+| Pass | What leaked | How |
+|---|---|---|
+| 1 | 502 *"We could not confirm your account"* | Announced that the route was real **and** that it had tried to check the caller |
+| 2 | **401 *"Sign in again and retry."*** on the missing-token path | Announced exactly the same thing to exactly the same anonymous caller. Found by Rishi at R2. |
+| 3 | **405 with an `Allow: POST` header** on a non-POST | A path that does not exist answers 404 to a `GET`; this one answered 405. Nobody had tried it. |
+
+Also closed in pass 3: a missing `SUPABASE_SERVICE_ROLE_KEY` returned **500
+"Server not configured"**, which confirms the route to anyone who asks.
+
+**All five paths now return an identical 404 `{"error":"Not found."}`** — no
+token, malformed token, expired token, broken lookup, real non-admin — through
+one `notFound()` helper, so a later edit cannot reintroduce a distinguishable
+response on one path and not the others.
+
+**The structural invariant, which is checkable by reading rather than
+testing:** in both admin endpoints, every `res.status(...)` that is not 404
+appears *after* the `requireAdmin` gate. So nothing but a proven admin can
+ever see a 400, 409, 502 or 200. If a status appears above that line in a
+future edit, it is a disclosure.
+
+**The other endpoints keep their 405 and 500.** `upload-resume`, `resume-url`,
+`my-resume-url`, `delete-my-resume` and `delete-my-data` are not hidden
+routes — they are linked from pages, and pretending they do not exist would
+cost real diagnosability for no gain. **Only the admin pair pretends not to be
+there.**
+
+**And the honest cost:** a genuine outage is now indistinguishable from "not an
+admin" in the response. The cases log differently, and the common case — an
+admin whose session has gone — is caught earlier and more usefully by
+`postAsAdmin()` in `src/lib/adminData.js`, which checks for a session before
+sending anything.
+
 ### Stage 9 — expected Security Advisor state
 
 Checked directly after migration 014 rather than predicted, so a real finding

@@ -1,4 +1,4 @@
-import { requireAdmin, serviceClient } from "./_lib/adminGuard.js";
+import { notFound, requireAdmin, serviceClient } from "./_lib/adminGuard.js";
 
 // ===========================================================================
 // POST /api/admin-delete-orphan   ->   { deleted: true }
@@ -33,16 +33,23 @@ const BUCKET = "resumes";
 const CONFIRMATION = "DELETE";
 
 export default async function handler(req, res) {
+  // A 405 with an Allow header is itself a disclosure: a path that does not
+  // exist answers 404 to a GET, so this one must too. The other endpoints in
+  // this project are not hidden and keep their 405 -- only the admin pair
+  // pretends not to be there.
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "Method not allowed" });
+    const miss = notFound();
+    return res.status(miss.status).json({ error: miss.error });
   }
 
   const admin = serviceClient();
 
+  // Even a misconfigured server says nothing. A 500 here would confirm the
+  // route to anyone who asked.
   if (!admin) {
     console.error("admin-delete-orphan: missing Supabase configuration");
-    return res.status(500).json({ error: "Server not configured" });
+    const miss = notFound();
+    return res.status(miss.status).json({ error: miss.error });
   }
 
   const gate = await requireAdmin(req, admin);
