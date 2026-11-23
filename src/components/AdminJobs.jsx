@@ -19,7 +19,13 @@ import { input, shortDate } from "../lib/adminFormat";
 //   and it takes something away from someone who is not told why. The button
 //   says so.
 //
-// UNHIDING DOES NOT REVIVE AN EXPIRED ROLE. Expiry is derived from
+// UNHIDING RESTORES WHAT THE ROLE WAS, NOT 'live'. The first version assumed
+// live, so unhiding a role its recruiter had deliberately closed put it back
+// on the public board taking applications, with no notification to them. The
+// previous status comes from the audit row now -- migration 016. A role that
+// was closed comes back closed, and the recruiter can reopen it themselves.
+//
+// UNHIDING ALSO DOES NOT REVIVE AN EXPIRED ROLE. Expiry is derived from
 // expires_at at read time, so a role past its date stays invisible whatever
 // its status column says -- unhiding must not silently extend a posting.
 // ===========================================================================
@@ -69,7 +75,7 @@ function AdminJobs() {
   return (
     <Panel
       title="Roles"
-      note="Hiding takes a role off the public board and also stops its poster editing, closing or reopening it — only this page can put it back. Unhiding does not extend an expired role."
+      note="Hiding takes a role off the public board and also stops its poster editing, closing or reopening it — only this page can put it back. Unhiding restores whatever the role was before, live or closed, and never extends an expired one."
     >
       <form
         className="mt-4 flex flex-wrap gap-2"
@@ -160,7 +166,7 @@ function AdminJobs() {
                       onClick={() => toggle(job.id, !hidden)}
                       title={
                         hidden
-                          ? "Returns the role to live, unless it has passed its closing date."
+                          ? "Restores whatever the role was before it was hidden — live or closed. It does not reopen a role the recruiter had closed."
                           : "Removes it from the public board and locks its poster out of editing it."
                       }
                     >
