@@ -60,3 +60,24 @@ export function reconciliationLine(totals) {
     `candidate list.`
   );
 }
+
+// ---------------------------------------------------------------------------
+// Role status, as a person reads it.
+//
+// admin_role_stats() returns 'live' / 'closed' / 'expired' / 'hidden', derived
+// from jobs.status -- so 'closed' and 'hidden' ARE column values, and rendering
+// them unchanged puts a database token in a pill while every other surface in
+// the product says Live, Closed, Expired, Hidden. Same defect as the candidate
+// panel showing not_selected; found in the same pass.
+// ---------------------------------------------------------------------------
+const ROLE_STATUS_LABELS = {
+  live: "Live",
+  closed: "Closed",
+  expired: "Expired",
+  hidden: "Hidden",
+};
+
+export function roleStatusLabel(status) {
+  if (typeof status !== "string") return "Unknown";
+  return Object.hasOwn(ROLE_STATUS_LABELS, status) ? ROLE_STATUS_LABELS[status] : "Unknown";
+}

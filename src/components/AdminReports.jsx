@@ -9,7 +9,9 @@ import {
 } from "../lib/adminReports";
 import { Panel, Pill, Button, Notice } from "./AdminShared";
 import { shortDate } from "../lib/adminFormat";
+import { statusLabel } from "../lib/applicationDisplay";
 import {
+  roleStatusLabel,
   workingDaysLabel,
   hoursLabel,
   promiseLabel,
@@ -219,7 +221,7 @@ function Roles({ rows }) {
               </td>
               <td className="px-2 py-2">
                 <Pill tone={r.display_status === "live" ? "good" : r.display_status === "hidden" ? "risk" : "muted"}>
-                  {r.display_status}
+                  {roleStatusLabel(r.display_status)}
                 </Pill>
               </td>
               <td className="px-2 py-2 font-semibold">{r.applications_total}</td>
@@ -394,7 +396,7 @@ function Candidates({ rows, totals }) {
                 {detail.map((d) => (
                   <li key={d.application_id} className="text-sm text-slate-700">
                     <strong>{d.job_title}</strong> · {d.company_name || "—"} ·{" "}
-                    {shortDate(d.applied_at)} · {d.status}
+                    {shortDate(d.applied_at)} · {statusLabel(d.status)}
                   </li>
                 ))}
               </ul>

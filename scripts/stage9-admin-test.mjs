@@ -35,6 +35,7 @@ import {
   shortDate,
 } from "../src/lib/adminFormat.js";
 import {
+  roleStatusLabel,
   workingDaysLabel,
   hoursLabel,
   promiseLabel,
@@ -190,6 +191,19 @@ t("unmeasurable",  promiseLabel(null), "not measured");
 t("kept is good",       promiseTone(true), "good");
 t("missed is a risk",   promiseTone(false), "risk");
 t("unmeasurable is neither, NOT a breach", promiseTone(null), "muted");
+
+console.log("\nrole status never reaches the page as a column value");
+t("live",    roleStatusLabel("live"), "Live");
+t("closed",  roleStatusLabel("closed"), "Closed");
+t("expired", roleStatusLabel("expired"), "Expired");
+t("hidden",  roleStatusLabel("hidden"), "Hidden");
+t("no label is lower case",
+  ["live","closed","expired","hidden"].every((x) => roleStatusLabel(x) !== x), true);
+t("an unknown value does not leak",   roleStatusLabel("archived"), "Unknown");
+t("null does not leak",               roleStatusLabel(null), "Unknown");
+t("an inherited key does not leak",   roleStatusLabel("constructor"), "Unknown");
+t("no label contains an underscore",
+  Object.values(["live","closed","expired","hidden"].map(roleStatusLabel)).join(" ").includes("_"), false);
 
 console.log("\nthe reconciliation line explains a deliberately smaller number");
 t("no applications at all",

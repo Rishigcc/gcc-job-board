@@ -973,6 +973,8 @@ sign-off.
 | # | Item | Note |
 |---|---|---|
 | W1 | The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
+| W5 | **Two tabs called Roles on `/admin`** — the action queue's and the report's. Confusing on one screen. | Rishi, 23 Nov 2026. Renaming one is a word; deciding which is the question. The admin one acts on roles, the report one counts them, so "Moderate roles" / "Roles" or "Roles" / "Role performance" are both defensible. |
+| W6 | **The recruiter summary line's figures overlap** — `1 new · 1 not selected · 3 anonymised` sums to 5 against 4 applications, because the not-selected one is also anonymised. | Deliberate, and recorded as deliberate in the W3 note: the first three say what you decided, the last says who can no longer be contacted. But Rishi is right that **a reader will try to add them**, and a figure that invites a wrong sum is a wording problem even when every number is correct. Options: separate them visually, or label the last one so it reads as a qualifier rather than a fourth bucket. |
 | W3 | The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** |
 | W4 | The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
 | W2 | Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
@@ -1665,6 +1667,64 @@ produced a file that still compiled and silently lacked the change. **Every
 edit in this project's tooling should assert its anchor matched**, and the
 ones that do are the reason several of these edits have failed fast instead of
 quietly.
+
+### Stage 9b — two raw database values on screen, one found and one not
+
+Rishi found the candidate detail panel listing applications as `applied`,
+`shortlisted`, `not_selected` — lower case, with an underscore, on the one
+surface that had not been routed through `statusLabel()`.
+
+**The same defect was one view over and he had not hit it yet.** The Roles
+table's status pill rendered `admin_role_stats().display_status` unchanged:
+`live`, `closed`, `expired`, `hidden`. Two of those — `closed` and `hidden` —
+**are** `jobs.status` column values, and every other surface in the product
+says Live, Closed, Expired, Hidden.
+
+Both fixed: the panel uses `statusLabel()`, and the pill uses a new
+`roleStatusLabel()` in `src/lib/reportFormat.js` so it is testable rather than
+inline. Nine cases, including that no label is lower case, none contains an
+underscore, and an inherited key like `constructor` returns "Unknown" rather
+than a function.
+
+**The pattern worth noticing:** every time a new surface renders an existing
+value, it is a fresh opportunity to leak a token, and the rule has now been
+broken in stages 8, 9 and 9b. A label function per value type, imported rather
+than re-expressed, is the only thing that has actually held.
+
+### Stage 9b — the "not measured" safeguard did not catch its own case
+(migration 018)
+
+**Rishi's observation, and it was more than a note.** Reports → Recruiters
+showed `iworkatgcctest1` as a **5-working-day breach** of the two-working-day
+promise, with "Not measured" reading **0**.
+
+That recruiter was really verified by hand in SQL on 16–19 Nov, before the
+audit log existed. The only recorded verification is a test one from 23 Nov. So
+`first_verified_at()` found an audit row, called it the first verification, and
+measured signup to a re-verification seven days later.
+
+**The safeguard was built to report "not measured" in exactly this case and
+failed to, because it tested whether an audit row EXISTS rather than whether
+the row it found is the ORIGINAL event.**
+
+**The inference that fixes it:** an account cannot be *unverified* unless it was
+verified first. So a `recruiter_unverified` row preceding the earliest
+`recruiter_verified` row proves the original verification predates the log.
+Confirmed against the data before writing it — **audit row id 1 for that
+recruiter is `recruiter_unverified`.**
+
+This is not a workaround for test data. **It is the correct general rule:** any
+account verified outside the log and later re-verified through `/admin`
+produces exactly this pattern, and its original wait is genuinely unmeasurable.
+Saying "not measured" is honest; inventing 5 working days is not.
+
+**What it cannot fix**, stated so it is not mistaken for complete: a SQL
+verification never re-verified through `/admin` leaves no trace at all. It
+already reads as not measured, correctly, but for the weaker reason that there
+is nothing to find. And from here the question disappears — every verification
+goes through `admin_set_recruiter_verified()`, so the first audit row *is* the
+first verification. This only ever mattered for accounts predating migration
+014.
 
 ### Stage 9b — the test data is in an unusual state, on purpose
 
