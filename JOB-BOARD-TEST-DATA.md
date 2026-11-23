@@ -1073,6 +1073,109 @@ unpinned function across `public` and `private`, so it proves nothing was
 missed and is the query to re-run after any later migration adds one. It
 should read 0 from now on.
 
+## Stage 9 — admin
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Audit rows from testing | `public.admin_audit` | `delete from public.admin_audit;` — or keep them, they are a real record | PLANNED |
+| Verification and suspension states changed while testing | `public.recruiter_profiles` | Set back from `/admin` itself, which is the point of the stage | PLANNED |
+| A test company rename | `public.companies` | Rename back from `/admin`; the audit row carries the old name | PLANNED |
+| `admin_audit`, 7 `public` functions, 1 `private` function | database | `supabase/migrations/014_admin_audit_rollback.sql` — **it drops the audit log**, so export first | LIVE after migration 014 |
+
+### Stage 9 — what changed the shape of this stage
+
+Before designing it, I checked what an admin could actually do **through the
+app**. The answer was nothing:
+
+| Table | Admin write path before stage 9 |
+|---|---|
+| `recruiter_profiles` | None. Own-row INSERT/UPDATE and an admin SELECT only. |
+| `companies` | **None at all** — no UPDATE policy, no DELETE policy, for anyone. |
+| `jobs` | Recruiter-only, and the update policy excludes `hidden` on both sides. |
+
+So every verification and suspension to date has been raw SQL in the
+dashboard. **This is the first time these actions exist outside the SQL
+editor**, which is why the audit row is written by the same function that
+performs the change rather than by the page that calls it. A page can forget;
+a function cannot.
+
+**No new policies on the tables being acted on.** `companies` and
+`recruiter_profiles` still carry no admin write policy afterwards, and check
+`c5_no_new_admin_policies` in migration 014 asserts exactly that, so a later
+migration cannot quietly take the easier route.
+
+### Stage 9 — reversible and final, split honestly
+
+Rishi's decision was that admin actions should be reversible. **Three cannot
+be**, and the split is recorded rather than approximated:
+
+| Action | | Why |
+|---|---|---|
+| verify ↔ unverify | Reversible | The inverse is the other button |
+| suspend ↔ unsuspend | Reversible | Same |
+| hide ↔ unhide | Reversible | Same, and only `/admin` can unhide |
+| rename a company | Reversible | The audit row carries the old name and slug |
+| delete an orphaned file | **Final** | The bytes are gone |
+| anonymise on request | **Final** | The columns are erased, which is the feature |
+| the nightly retention purge | **Final** | Rows are deleted |
+
+"Reversible" here means **an inverse action exists and the audit row records
+the previous value** — not a generic undo engine. The four reversible actions
+are toggles, so there is nothing to build for the undo; the audit row supplies
+the old value where a toggle is not enough.
+
+**Company merge is out of version 1.** With 1,814 companies seeded, recruiters
+pick rather than add, so the realistic repair is a misspelling. If a rename
+collides with an existing slug the function refuses and says a merge is what is
+needed, rather than doing something else silently.
+
+### Stage 9 — the orphan report is its own authorisation
+
+`/api/admin-delete-orphan` is the only admin action whose target is a
+client-supplied string rather than a row id, and the service key can delete
+any object in the bucket. So the path is not taken on trust: it must still
+appear in `admin_orphaned_resumes()`, which by definition only lists objects
+no `candidate_resumes` row points at. **A live candidate's resume therefore
+cannot be deleted from that panel at all**, however the request is
+constructed.
+
+### Stage 9 — `/admin` is hidden, and hiding is not the security
+
+URL-only, linked from nowhere, and a non-admin sees **"Page not found"**
+rather than a refusal — a refusal confirms the route exists.
+
+**That is presentation, not protection, and must never be mistaken for it.**
+Every action is a definer function checking `private.is_admin()` in the
+database, and both endpoints verify the bearer token with the service key and
+read the admin row with the service key — not through the caller's session,
+which would be reading a permission from the thing being permitted. Whether
+this component renders changes nothing about what a request can do.
+
+### Stage 9 — expected Security Advisor state
+
+Checked directly after migration 014 rather than predicted, so a real finding
+can be told from a designed absence. **Compare by category, not by the
+dashboard's headline total** — the dashboard groups differently from the raw
+lint output.
+
+| Lint | Before 014 | After 014 |
+|---|---|---|
+| `security_definer_view` (**ERROR**) | 1 | **1** — `question_authors`, dropped after merge |
+| `rls_enabled_no_policy` (INFO) | 1 | **1** — `user_activity` only. **`admin_audit` must NOT appear**: it has a SELECT policy. |
+| `anon_security_definer_function_executable` | 4 | **4 — unchanged.** No admin function is anon-callable. |
+| `authenticated_security_definer_function_executable` | 9 | **14**, +5 |
+| `auth_leaked_password_protection` | 1 | 1 |
+
+The five new entries, all expected, all `is_admin()`-gated internally:
+`admin_orphaned_resumes`, `admin_rename_company`, `admin_set_job_hidden`,
+`admin_set_recruiter_suspended`, `admin_set_recruiter_verified`.
+
+**Three functions must NOT appear anywhere in the advisor**, and their absence
+is the advisor confirming the grant split:
+`admin_anonymise_candidate_for`, `admin_log_orphan_deleted` and
+`purge_expired_applications` are all granted to `service_role` only.
+`private.audit()` is absent too, because the `private` schema is not exposed.
+
 ## Launch checklist — production-dependent verification
 
 **This is the list, so it does not live only in a conversation.** Each item

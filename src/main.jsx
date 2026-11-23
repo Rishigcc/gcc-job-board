@@ -31,6 +31,7 @@ import RecruiterJobEdit from "./Pages/RecruiterJobEdit.jsx";
 import RecruiterApplications from "./Pages/RecruiterApplications.jsx";
 import MyApplications from "./Pages/MyApplications.jsx";
 import DeleteMyData from "./Pages/DeleteMyData.jsx";
+import Admin from "./Pages/Admin.jsx";
 import RecruiterRoute from "./components/RecruiterRoute.jsx";
 import ActivityTracker from "./components/ActivityTracker.jsx";
 import { isRecruiterUser } from "./lib/accountType";
@@ -327,6 +328,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <DeleteMyData />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* /admin is URL-only and not linked from anywhere. A non-admin who
+          reaches it sees "Page not found" rather than a refusal, because a
+          refusal confirms the route exists. The hiding is NOT the security:
+          every action is a definer function that checks is_admin() in the
+          database, and the endpoints verify the admin row with the service
+          key. This route rendering changes nothing about what a request can
+          do. */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <Admin />
           </ProtectedRoute>
         }
       />
