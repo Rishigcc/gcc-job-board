@@ -143,6 +143,11 @@ function AdminJobs() {
                     {display.key === "live" ? (
                       <Link
                         to={`/gcc-jobs/${job.slug}-${job.id}`}
+                        /* So the job page offers a way back to the Roles tab.
+                           Router state, so a reload or a shared link shows the
+                           public behaviour and never offers a stranger a route
+                           to /admin. */
+                        state={{ from: "admin" }}
                         className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                       >
                         View

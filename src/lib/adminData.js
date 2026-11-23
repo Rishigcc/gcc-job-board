@@ -265,16 +265,56 @@ export async function findCandidateByEmail(email) {
 // ---------------------------------------------------------------------------
 // The audit log. Read-only by construction: an admin SELECT policy, a
 // select-only grant, no insert policy and no insert grant anywhere.
+//
+// PAGED, AND IT HAS TO BE. The log is never pruned -- an audit log that
+// expires stops being evidence, and the Final rows are exactly what would be
+// needed to show a deletion request was honoured. So it only grows, and a
+// single capped read would silently stop showing history the day it passed the
+// cap. One row per page beyond the first is a worse bug than no paging,
+// because it looks like the whole truth.
+//
+// THE CURSOR IS `id`, NOT `created_at`, DELIBERATELY. Two rows can share a
+// timestamp, and a keyset cursor on a non-unique column skips rows at the page
+// boundary -- the kind of bug that loses one entry out of a thousand and is
+// never noticed. `id` is a generated identity, so its order IS insertion
+// order, which for this table is chronological order.
+//
+// admin_audit_recent_idx on created_at is kept even though this query uses the
+// primary key, because the realistic future question is "what happened last
+// March", and that is the index that answers it.
 // ---------------------------------------------------------------------------
-export async function fetchAuditLog(limit = 100) {
-  const { data, error } = await supabase
+export const AUDIT_PAGE_SIZE = 50;
+
+export async function fetchAuditLog({ before = null, limit = AUDIT_PAGE_SIZE } = {}) {
+  let query = supabase
     .from("admin_audit")
     .select("id, actor_id, action, target_type, target_id, summary, before, after, reversible, created_at")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("id", { ascending: false })
+    // One more than asked for, so "is there another page" is answered by the
+    // same request rather than by a second one that might disagree with it.
+    .limit(limit + 1);
+
+  if (before !== null) query = query.lt("id", before);
+
+  const { data, error } = await query;
 
   if (error) return { error: describe(error, "The audit log could not be loaded.") };
-  return { rows: data || [] };
+
+  const rows = data || [];
+  const hasMore = rows.length > limit;
+
+  return { rows: hasMore ? rows.slice(0, limit) : rows, hasMore };
+}
+
+// The total, so the page can say how much of the log it is showing. A count
+// with head: true transfers no rows.
+export async function fetchAuditCount() {
+  const { count, error } = await supabase
+    .from("admin_audit")
+    .select("id", { count: "exact", head: true });
+
+  if (error) return { error: describe(error, "The audit log size could not be read.") };
+  return { count: count ?? null };
 }
 
 // ---------------------------------------------------------------------------

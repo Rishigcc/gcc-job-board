@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchAuditLog } from "../lib/adminData";
+import { fetchAuditLog, fetchAuditCount, AUDIT_PAGE_SIZE } from "../lib/adminData";
 import { Panel, Pill, Button, Notice } from "./AdminShared";
 import { shortDate, auditActionLabel } from "../lib/adminFormat";
 
@@ -20,27 +20,59 @@ import { shortDate, auditActionLabel } from "../lib/adminFormat";
 // EVERY ROW SAYS WHETHER IT CAN BE UNDONE, because "reversible" was a
 // decision and three of the actions cannot honour it. A row marked Final is
 // telling you not to go looking for a way back.
+//
+// NOTHING IS EVER PRUNED, so this pages instead. Rishi's position, and the
+// right one: an audit log that expires stops being evidence, and the Final
+// rows -- anonymise, orphan delete -- are exactly what would be needed to show
+// a deletion request was honoured a year later. The first version read a flat
+// 100 rows, which would have silently stopped showing history on the day the
+// log passed 100 and looked like the whole truth while doing it.
 // ===========================================================================
 
 
 
 function AdminAudit({ userId }) {
   const [state, setState] = useState({ status: "loading" });
+  const [total, setTotal] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
 
-    fetchAuditLog(100).then((result) => {
+    Promise.all([fetchAuditLog(), fetchAuditCount()]).then(([page, counted]) => {
       if (!active) return;
-      if (result.error) setState({ status: "error", error: result.error });
-      else setState({ status: "ready", rows: result.rows });
+      if (page.error) setState({ status: "error", error: page.error });
+      else setState({ status: "ready", rows: page.rows, hasMore: page.hasMore });
+      setTotal(counted.count ?? null);
     });
 
     return () => {
       active = false;
     };
   }, [reloadKey]);
+
+  const loadMore = async () => {
+    if (state.status !== "ready" || state.rows.length === 0) return;
+
+    setLoadingMore(true);
+
+    const last = state.rows[state.rows.length - 1];
+    const page = await fetchAuditLog({ before: last.id });
+
+    if (page.error) {
+      setState((prev) => ({ ...prev, error: page.error }));
+      setLoadingMore(false);
+      return;
+    }
+
+    setState((prev) => ({
+      ...prev,
+      rows: [...prev.rows, ...page.rows],
+      hasMore: page.hasMore,
+    }));
+    setLoadingMore(false);
+  };
 
   const actor = (row) => {
     if (!row.actor_id) return "System (scheduled)";
@@ -55,8 +87,15 @@ function AdminAudit({ userId }) {
       title="Audit log"
       note="Every admin action, newest first. Written by the same database function that performs the change, so nothing here can be skipped by a page that forgot to log it. Read-only — there is no write path to this table for any role."
     >
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button onClick={() => setReloadKey((k) => k + 1)}>Refresh</Button>
+
+        {state.status === "ready" && total !== null ? (
+          <span className="text-xs text-slate-500">
+            Showing {state.rows.length} of {total}
+            {total === 1 ? " entry" : " entries"}
+          </span>
+        ) : null}
       </div>
 
       {state.status === "loading" ? (
@@ -101,6 +140,22 @@ function AdminAudit({ userId }) {
           ))}
         </ul>
       )}
+
+      {state.status === "ready" && state.error ? <Notice error={state.error} /> : null}
+
+      {state.status === "ready" && state.hasMore ? (
+        <div className="mt-4">
+          <Button busy={loadingMore} onClick={loadMore}>
+            {loadingMore ? "Loading…" : `Load ${AUDIT_PAGE_SIZE} more`}
+          </Button>
+        </div>
+      ) : null}
+
+      {state.status === "ready" && !state.hasMore && state.rows.length > AUDIT_PAGE_SIZE ? (
+        <p className="mt-4 text-xs text-slate-500">
+          That is the whole log. Nothing here is ever deleted.
+        </p>
+      ) : null}
     </Panel>
   );
 }

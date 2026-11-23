@@ -177,7 +177,7 @@ function MyApplications() {
                            or a shared link falls back to the public
                            behaviour instead of offering a stranger a route
                            into someone else's applications. */
-                        state={{ fromApplications: true }}
+                        state={{ from: "applications" }}
                         className="shrink-0 rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                       >
                         View the role

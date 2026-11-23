@@ -46,10 +46,11 @@ function Fact({ label, children }) {
 // ===========================================================================
 // WHERE "BACK" GOES.
 //
-// A candidate who arrived from their own applications list wants to return to
-// it; someone who arrived from the public list, a shared link or a refresh
-// wants the list of roles. So both links are shown in the first case and the
-// original single link in every other, rather than guessing one.
+// Three cases now. A candidate who arrived from their own applications list
+// wants to return to it; an admin who arrived from the Roles tab wants to
+// return to that; anyone else -- the public list, a shared link, a refresh --
+// wants the list of roles. So the first two show their origin AND a way to
+// browse on, and everything else gets the single original link.
 //
 // IT KEYS OFF ROUTER STATE, NOT A QUERY PARAMETER, AND THAT IS THE POINT.
 //   Router state exists only for an in-app navigation. A refresh, a pasted
@@ -57,13 +58,29 @@ function Fact({ label, children }) {
 //   falls back to exactly the behaviour that was here before -- which is what
 //   makes a shared link impossible to mislead with. A ?from= parameter would
 //   survive being copied and would then offer a stranger a route to "My
-//   applications", which is not theirs.
+//   applications" or to /admin, neither of which is theirs.
 //
-//   The state is read as a boolean and the destination is hardcoded. Nothing
-//   navigates to a path that came out of state.
+// THE STATE IS AN ENUM MATCHED AGAINST A FIXED LIST, NOT A PATH.
+//   ORIGINS below is the whole vocabulary. An unrecognised value falls through
+//   to the default, and no destination ever comes out of state -- otherwise
+//   state would be a way to make this page link anywhere.
 // ===========================================================================
-function BackLinks({ fromApplications }) {
-  if (!fromApplications) {
+const ORIGINS = {
+  applications: { to: "/my-applications", label: "My applications", onward: "Explore other roles" },
+  admin: { to: "/admin?tab=jobs", label: "Admin", onward: "All roles" },
+};
+
+function BackLinks({ from }) {
+  // Object.hasOwn, not a bare lookup. Router state comes from history.state,
+  // which any same-origin script can write, and ORIGINS["constructor"] would
+  // return an inherited function -- truthy, with no `to`, rendering a Link to
+  // undefined. An own-property check is the difference between "matched
+  // against a fixed list" being true and sounding true.
+  const origin = typeof from === "string" && Object.hasOwn(ORIGINS, from)
+    ? ORIGINS[from]
+    : null;
+
+  if (!origin) {
     return (
       <Link to="/gcc-jobs" className="text-sm font-semibold text-blue-700 hover:underline">
         ← All roles
@@ -73,27 +90,28 @@ function BackLinks({ fromApplications }) {
 
   return (
     <p className="text-sm font-semibold">
-      <Link to="/my-applications" className="text-blue-700 hover:underline">
-        ← My applications
+      <Link to={origin.to} className="text-blue-700 hover:underline">
+        ← {origin.label}
       </Link>
       <span className="px-2 font-normal text-slate-400">·</span>
-      {/* "other" only has a referent once the first link is beside it. The
-          fallback below deliberately keeps "All roles", because to someone
-          arriving on a direct link there is nothing for "other" to be other
-          than. */}
+      {/* "other" only has a referent when the first link is a candidate's own
+          applications. An admin is not browsing for themselves, so from there
+          it stays "All roles" -- the same words the fallback uses, because to
+          someone arriving on a direct link there is nothing for "other" to be
+          other than. */}
       <Link to="/gcc-jobs" className="text-blue-700 hover:underline">
-        Explore other roles
+        {origin.onward}
       </Link>
     </p>
   );
 }
 
-function Shell({ fromApplications, children }) {
+function Shell({ from, children }) {
   return (
     <div className="min-h-screen bg-slate-100">
       <SiteHeader />
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-        <BackLinks fromApplications={fromApplications} />
+        <BackLinks from={from} />
         {children}
       </main>
       <Footer />
@@ -106,8 +124,9 @@ function GccJobDetail() {
   const [params] = useSearchParams();
   const location = useLocation();
 
-  // Only ever a boolean, and only ever present on an in-app navigation.
-  const fromApplications = location.state?.fromApplications === true;
+  // Only ever present on an in-app navigation, and only ever matched against
+  // the fixed list above.
+  const from = location.state?.from;
   const { id, slug } = parseJobParam(slugId);
 
   const [fetched, setFetched] = useState({ status: "loading" });
@@ -135,7 +154,7 @@ function GccJobDetail() {
 
   if (state.status === "loading") {
     return (
-      <Shell fromApplications={fromApplications}>
+      <Shell from={from}>
         <p className="mt-8 text-slate-500">Loading…</p>
       </Shell>
     );
@@ -148,7 +167,7 @@ function GccJobDetail() {
   // would turn the id into an oracle for which jobs exist.
   if (state.status === "missing") {
     return (
-      <Shell fromApplications={fromApplications}>
+      <Shell from={from}>
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-8">
           <h1 className="text-xl font-bold text-slate-900">
             This role is no longer open
@@ -170,7 +189,7 @@ function GccJobDetail() {
 
   if (state.status === "error") {
     return (
-      <Shell fromApplications={fromApplications}>
+      <Shell from={from}>
         <div role="alert" className="mt-6 rounded-2xl border border-red-300 bg-red-50 p-8">
           <h1 className="text-xl font-bold text-red-900">This role could not be loaded.</h1>
           <p className="mt-2 font-mono text-xs text-red-700">{state.message}</p>
@@ -202,7 +221,7 @@ function GccJobDetail() {
       <SiteHeader />
 
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-        <BackLinks fromApplications={fromApplications} />
+        <BackLinks from={from} />
 
         {/* THE SIDEBAR RUNS THE FULL HEIGHT OF THE CARD.
             The earlier attempt made the grey panel match the DESCRIPTION

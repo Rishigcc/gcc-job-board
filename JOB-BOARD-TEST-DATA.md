@@ -1239,6 +1239,60 @@ admin whose session has gone — is caught earlier and more usefully by
 `postAsAdmin()` in `src/lib/adminData.js`, which checks for a session before
 sending anything.
 
+### Stage 9 — the audit log's growth, answered with measurements
+
+Three questions asked at the first test round, answered from the live database
+rather than estimated.
+
+**1. Is there an index supporting newest-first reads?** Yes —
+`admin_audit_recent_idx on (created_at desc)`, created by migration 014. And
+the planner is already using it rather than table-scanning, at five rows:
+
+```
+Limit  (cost=0.15..5.77 rows=100)
+  ->  Index Scan using admin_audit_recent_idx on admin_audit
+Execution Time: 0.119 ms
+```
+
+**2. Did the page load every row?** It was capped at a flat 100 with no way
+past it — which is worse than no paging, because **it would have silently
+stopped showing history the day the log passed 100 and looked like the whole
+truth while doing it.** Now paged at 50 with a Load more, and it shows
+"Showing N of M" so a truncated view is visibly truncated.
+
+The cursor is **`id`, not `created_at`**, deliberately: two rows can share a
+timestamp, and a keyset cursor on a non-unique column skips rows at the page
+boundary — the kind of bug that loses one entry in a thousand and is never
+noticed. `id` is a generated identity, so its order *is* insertion order,
+which here is chronological order. `admin_audit_recent_idx` is kept anyway,
+because the realistic future question is "what happened last March" and that
+is the index which answers it.
+
+**3. How many rows a year?** Measured: **282 bytes per row**, 64 kB total for
+the table and both indexes at five rows.
+
+| Source | Rows per year |
+|---|---|
+| Verifications, at five recruiters a week | ~260 |
+| Suspensions, hides, renames, anonymisations | tens |
+| The nightly purge | **at most 365, usually far fewer** — it writes a row only when it actually deleted something |
+| **Total, order of magnitude** | **a few hundred to ~700** |
+
+At 700 rows a year that is **about 200 kB a year**. The Supabase free tier
+allows 500 MB. **Deleting old entries would never be the thing that saves you.**
+
+**So: agreed, do not prune, and the reasoning should be recorded rather than
+assumed.** An audit log that expires stops being evidence, and the Final rows
+are precisely what would be needed to show a deletion request was honoured.
+
+**Is there a size at which that changes? Not realistically — but there is a
+shape that would.** The number to protect is not rows per year, it is
+**one row per decision, not per affected record.** `purge_expired_applications`
+already follows it: one row saying "deleted 40 applications", not forty rows.
+If a future action logs per-record — an orphan sweep writing a row per file,
+say — volume could jump by orders of magnitude, and the answer even then would
+be partitioning or archiving to cold storage, never deletion.
+
 ### Stage 9 — expected Security Advisor state
 
 Checked directly after migration 014 rather than predicted, so a real finding
