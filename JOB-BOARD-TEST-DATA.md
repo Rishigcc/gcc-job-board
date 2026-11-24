@@ -2284,6 +2284,209 @@ Migration 020's own check `c7` inserts three saves, reads them back and deletes
 them **before** judging the result, so a failed check cleans up after itself as
 well as a passing one does. `c8` then asserts the table is empty.
 
+## Stage 12 — recruiter password reset (SCOPED 24 Nov 2026, NOT BUILT)
+
+Found by Rishi while testing stage 10: **there is no "forgot password" on
+recruiter sign-in.** A recruiter who forgets their password has no way back
+into their account. Today that means emailing `jobs@iworkatgcc.com` and Rishi
+fixing it by hand — *"which works at two recruiters and doesn't at twenty."*
+
+### THE ONE-EMAIL RULE IS RESTATED, NOT BROKEN
+
+The old rule: *"Brevo sends exactly ONE email in this entire project: the
+recruiter signup email. Nothing else."*
+
+The new rule, Rishi's decision 24 Nov 2026: **"transactional account-access
+emails only, both user-initiated."**
+
+**ANYONE READING THE OLD WORDING LATER SHOULD NOT CONCLUDE THE RESET BROKE
+IT.** The rule was never about a count. Its purpose is to stop this project
+growing an email notification system — digests, application alerts,
+saved-search pings. A password reset is not that: it is user-initiated, one
+per request, carries no content but a link, and goes to an address that
+already received the signup email. It creates no channel; it answers a
+request.
+
+The sharper form of the argument, and the one Rishi accepted: **the signup
+email and the reset email are the same mechanism doing the same job** —
+proving control of an email address. One proves it at the start, the other
+proves it again later. And `/post-a-job` already re-sends the signup email
+through `supabase.auth.resend`, so the project has always sent that one email
+more than once. The rule is about **kinds** of email, not sends.
+
+Permitted, exhaustively: the recruiter signup confirmation, and the recruiter
+password reset. Nothing else, ever, without a new decision.
+
+### WHY IT IS A LAUNCH BLOCKER
+
+Rishi's instinct, and I agreed. But the reason is stronger than "an account
+people can be locked out of":
+
+**A locked-out recruiter still has live roles, and candidates keep applying to
+them.** Those applications pile up unread, for the role's full 30 days, and
+the candidates have no way of knowing. So the cost of this gap does not land
+on the recruiter who forgot their password — **it lands on candidates who
+applied in good faith and are waiting on someone who cannot get in.** That
+argument survives "we only have two recruiters, I'll handle it by hand."
+
+It is not a stage 10 item, and it does not belong on the launch checklist
+below either: those are things that can only be *verified* in production, and
+this is code to write. So: **its own stage, after stage 11, before the
+merge.**
+
+### SCOPE
+
+- The reset request page and the reset landing page.
+- **The change-password box** for a signed-in recruiter — Rishi's decision,
+  *"since it's the same code"*. The last step of a reset is
+  `updateUser({ password })`, so the dashboard box reuses it.
+  `@supabase/supabase-js` is **2.112.3**, past the 2.102.0 that added
+  `current_password` verification, so the box can require the old password.
+- **The admin-set-password tool is LOGGED, NOT BUILT** — carried item 22.
+  Rishi: *"Revisit when a recruiter actually loses their mailbox."*
+
+### THE CONSTRAINTS, AND HOW THEY WILL BE ENFORCED
+
+Rishi's conditions, 24 Nov 2026:
+
+1. Send a reset **only if the email belongs to an account with the recruiter
+   role**. Explicitly NOT "only if the account has a password" — he plans to
+   let community members join by email later, at which point the password test
+   stops distinguishing anything. **Role is the condition that stays true.**
+2. Everything else — a community member's email, an unknown address, no
+   account at all — gets **no email and the same reply**. No "email not
+   found". *"I don't want this page to become a way of discovering which
+   emails are registered here."*
+3. The deeper reason: a community member who received a reset link could **set
+   a password on a Google account**, giving it a second sign-in method nobody
+   asked for — the identity-linking risk investigated in stage 3.
+4. **Role-aware, not hardcoded to recruiters**, so community email sign-up is
+   a case to add rather than a flow to rewrite.
+
+#### Supabase's own client call cannot be used
+
+`supabase.auth.resetPasswordForEmail()` runs in the browser with the
+publishable key and sends to **any** existing account. It has no notion of a
+role. So the gate has to sit in front of it, server-side.
+
+#### public.user_roles is the right gate, and it fails closed
+
+Checked against the live database, 24 Nov 2026:
+
+| role | rows | with a password | Google |
+|---|---|---|---|
+| recruiter | 2 | 2 | 0 |
+| admin | 1 | 0 | 1 |
+| candidate | 1 | 0 | 1 |
+| *(no user_roles row)* | **2,622** | 0 | 0 |
+
+`user_roles` is `PRIMARY KEY (user_id)` with `role in ('candidate',
+'recruiter', 'admin')`, and it is **sparse** — 2,622 of 2,626 accounts have no
+row at all. That sparseness is the feature: **absence means ineligible**, so
+every community member is refused by default rather than by a rule someone
+has to remember to write.
+
+Recruiters reliably have a row: `private.handle_new_recruiter()` fires on
+`recruiter_profiles` insert and writes it, and `recruiter_profiles` is created
+by `RecruiterRoute` on the recruiter's first signed-in visit — which is where
+the confirmation email lands (`emailRedirectTo` is `/recruiter`).
+
+#### TWO gates, not one — and this is where Rishi's framing needs a correction
+
+He is right that role is the policy test. But role alone does not prevent the
+outcome he named in point 3. Once community email sign-up exists and
+`candidate` joins the eligible list, **the one existing Google-only account
+that already has a `candidate` row would become eligible** — and handing it a
+reset link is exactly the identity-linking risk.
+
+So the predicate is two conditions from the start, with two different jobs:
+
+| Gate | Question | Why |
+|---|---|---|
+| **role** | is this role allowed to reset? | the policy, extended by adding a case |
+| **identity** | does this account have an email/password identity at all? | stops a password being created on an OAuth-only account |
+
+Today both gates agree for all 2,626 accounts, so the second costs nothing
+now and is the one that still holds when the first is widened.
+
+#### A USABILITY TRAP THE ENUMERATION-SAFE DESIGN CREATES
+
+A recruiter who signed up but **never confirmed** has no `recruiter_profiles`
+row, so no `user_roles` row, so no reset email — correct, because their real
+problem is confirmation, not the password. But the identical-reply rule means
+they are told "if that email has a recruiter account, we've sent a reset
+link", and then nothing arrives, with no hint of why.
+
+Fix, which gives nothing away: the success message also names the other path
+— *"If you signed up but never confirmed your email, use Resend confirmation
+instead."* One sentence, no information disclosure.
+
+#### THE GATE IS NOT AIRTIGHT, AND THAT IS A DELIBERATE CHOICE
+
+Supabase's `/auth/v1/recover` endpoint is open to anyone holding the
+publishable key, which is in our JavaScript bundle. **So a direct call to
+Supabase bypasses our endpoint entirely.** The honest accounting:
+
+- **No enumeration is gained.** Supabase's own endpoint already returns the
+  same response whether or not the account exists.
+- **No privilege is gained.** To use a reset link sent to a community member,
+  an attacker needs that person's mailbox — and with their mailbox they could
+  already take the Google account directly.
+- **What is actually risked is confusion**, not compromise: a community member
+  receiving an unexpected password email from our domain.
+
+The only true closure is a **Send Email Hook**, which the docs confirm is
+available on the **Free** plan, can see `email_action_type` (`recovery` is one
+of its values), and sits in the Auth server's own send path. **Rejected, and
+the reason matters:** the docs also say *"The Send Email Hook replaces
+Supabase's built-in email sending"* — with it enabled, *"SMTP not used"*. So
+turning it on makes us responsible for delivering **every** auth email,
+including the signup confirmation that already works and is signed off. That
+trades a confusion risk for rewriting the one email path in the project that
+is finished. Not worth it.
+
+Mitigation instead, on our side of the line: **the landing page is ours**, and
+it refuses to set a password for an ineligible account — telling a confused
+community member "this account signs in with Google, no password is needed"
+rather than silently giving them one. That protects the realistic case; the
+adversarial case stays Supabase's surface, documented here rather than
+pretended away.
+
+#### A timing side channel, and the floor that mitigates it
+
+The eligible path does a lookup and sends an email (hundreds of milliseconds);
+the ineligible path can return at once. **That difference is itself an
+enumeration oracle**, regardless of the identical response body. The endpoint
+will do the same lookup on every path and pad every response to a fixed floor.
+Mitigation, not elimination — stated as such.
+
+### HOW IT WILL BE PROVED
+
+**Migration checks** (result-table form, per the standing rule):
+
+| | Check |
+|---|---|
+| c1 | the eligibility function is `security definer`, `search_path` pinned, and granted to **service_role only** — not anon, not authenticated. *If anon can call it, the function IS the enumeration oracle the design exists to prevent.* |
+| c2 | a recruiter's address returns eligible |
+| c3 | a community member's address returns ineligible — a real Google account, read-only |
+| c4 | an address with no account returns "none", distinctly from "ineligible" |
+| c5 | `  Recruiter@Example.COM  ` behaves identically to the stored address (case and whitespace normalised) |
+| c6 | the **admin's** address returns ineligible, proving the eligible set is a list rather than "any account that exists" |
+| c7 | exactly one role is eligible today, read from the single list, so widening it later is one line in one place |
+
+**Node test** (pure, enumerated): the response is byte-identical across
+eligible / ineligible / unknown / malformed / empty input, and the eligibility
+decision enumerated over every role × identity combination.
+
+**On the preview**: a real end-to-end reset for a test recruiter; a community
+address returning the same message with **nothing arriving**; an unknown
+address the same; the landing page refusing an ineligible account; mixed-case
+addresses; and the change-password box refusing a wrong current password.
+
+**The one proof no code can give him: Brevo's transactional log.** The claim
+under test is an absence — that nothing was sent — and absence is proved at
+the sender, not at an inbox that may simply be slow.
+
 ## Launch checklist — production-dependent verification
 
 **This is the list, so it does not live only in a conversation.** Each item
@@ -2426,6 +2629,9 @@ hook and then sweeps. P1's curl covers both in one request.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 24 | **The "Password changed" security notification must be confirmed OFF before stage 12 ships.** Supabase can send a `Password changed` notification, which would be a THIRD email the day the reset flow goes live. The docs name no dashboard control for it — the only on/off mechanism they show is the Management API flag `mailer_notifications_password_changed_enabled`. Recommended setting: **off**, with the compensating control being `current_password` on the change-password box (a session hijacker cannot rotate the password without knowing the old one). Revisit as an explicit decision at stage 12. | Rishi, 24 Nov 2026 | **Before stage 12** |
+| 23 | **Add a second admin account that Rishi alone controls.** `public.user_roles` has exactly one `admin` row, on a Google-only account. Losing that Google account loses the admin role, with no second admin to grant it back. A data change, not a migration. **The real break-glass is the Supabase dashboard**, from which an admin row can always be inserted — so the higher-value action is hardening his Supabase account (2FA, recovery), and the second admin covers the narrower case of losing the Google account. Note both admins would share one failure mode (Google suspending him) but not the common ones. The second account sees all applications, so it must be an account only he controls, never a shared mailbox. | Rishi, 24 Nov 2026 | **Now** |
+| 22 | **An admin-set-password tool, LOGGED NOT BUILT.** `auth.admin.updateUserById(uid, { password })` sets a password with no email — the docs say *"Changes are applied directly without confirmation flows"* — service-role and server-side only. Paired with the phone number already collected and validated at recruiter signup, it is a reset with zero emails. Rishi's decision, 24 Nov 2026: *"log it, don't build it. Revisit when a recruiter actually loses their mailbox."* It is the only thing that helps a recruiter whose **mailbox** is gone, which a reset email by definition cannot fix. | Rishi, 24 Nov 2026 | Deferred |
 | 21 | **`/post-a-job` NEEDS RETESTING — decision 29 touches a signed-off page.** `src/Pages/PostAJob.jsx` now shows a signed-in community member a notice that recruiter accounts are separate. The page is stage 3/4 work and signed off. Retest: the recruiter sign-up still works signed out, an already-signed-in recruiter still sees "Your recruiter account is ready", and the new notice appears only for a signed-in non-recruiter. | Rishi, 24 Nov 2026 | **Stage 10 round two** |
 | 20 | **Set `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js` to eight weeks after the real launch date.** Shipped as a placeholder (`2027-01-19`, eight weeks from the day it was written) so the badge is visible on the preview. Eight weeks can only honestly be measured from launch, so this is set at merge **alongside `LAST_UPDATED`** in carried item 1 — same edit, same moment. No code change is needed to remove the badge: it compares the date at render. | Rishi, 24 Nov 2026 | Before merge |
 | 19 | **STAGE 4 CHANGE, TO BE DECIDED SEPARATELY: tell recruiters that a 100% remote role must say so in the description.** Google requires `jobLocationType: TELECOMMUTE` *and* that the description clearly states the role is remote. v1 does not ask recruiters for that, so a "remote" role whose description never says the word gets markup Google may disregard. Logged rather than built, because it changes a signed-off form. | Rishi, 23 Nov 2026 | **Stage 4 change** |
