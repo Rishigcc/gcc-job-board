@@ -78,7 +78,7 @@ function GccJobCard({ job, save }) {
       ) : null}
 
       {job.skills?.length ? (
-        <p className="mt-3 line-clamp-2 break-words text-sm text-slate-600">
+        <p className="mt-3 min-w-0 line-clamp-2 break-words text-sm text-slate-600">
           {job.skills.slice(0, 8).join(" · ")}
         </p>
       ) : null}

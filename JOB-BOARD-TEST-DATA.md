@@ -2545,6 +2545,89 @@ corrected rather than the code.** The `>` inside the JSON body is legitimate —
 a word boundary does legitimately end with a letter before the ellipsis. Both
 assertions now test the real property instead.
 
+### break-words WAS INERT ON A FLEX CHILD — the real cause, 24 Nov 2026
+
+Rishi after the sweep: *"The 150-character title now fails to wrap in three
+places… Everything failing at once points at the class not being emitted…
+Check whether whatever you used in this sweep actually exists in the compiled
+CSS."*
+
+**Checked against `dist/`, and the class was there all along:**
+
+```
+.break-words{overflow-wrap:break-word}
+.break-all{word-break:break-all}
+.min-w-0{min-width:0}
+```
+
+So the hypothesis was wrong, and the truth is worse than a missing class.
+
+#### THE RULE I HALF-KNEW AND DID NOT APPLY
+
+**A flex item's default `min-width` is `auto`, which resolves to its
+MIN-CONTENT size — and `overflow-wrap: break-word` DOES NOT REDUCE
+MIN-CONTENT.**
+
+So a flex child holding one unbroken word refuses to shrink, and no amount of
+`break-words` changes it. The class compiles, the computed style says
+`overflow-wrap: break-word`, and the element still blows out of the card.
+`min-w-0` on the item is what permits it to shrink below min-content, and only
+then can `break-words` act. (`break-all` and `overflow-wrap: anywhere` do
+affect min-content, which is why `break-all` worked on the admin resume path.)
+
+`/recruiter/jobs` was exactly this: the `<h2>` sits in
+`<div className="flex flex-wrap items-center gap-2">` next to the status pill.
+I added `break-words` to it in the sweep and reported it fixed. It was inert.
+
+**Nine places had the same defect**, found by scanning for *an element with a
+break class, inside a flex or grid parent, without `min-w-0`* — which is the
+check the sweep should have been:
+
+| | |
+|---|---|
+| `RecruiterJobs` | the title Rishi reported |
+| `RecruiterApplications`, `MyApplications` | the role title beside its status pill |
+| `RecruiterHome` | the company name in a `justify-between` row |
+| `AdminJobs`, `AdminRecruiters` | the same pill-beside-title pattern |
+| `GccJobCard` | the skills line in a `flex-wrap` |
+| `GccJobDetail` | each skill chip |
+| `JobForm` | `ReviewRow`'s `<dd>` — `flex-col` that becomes `flex-row` at `sm:`, so a row item at every desktop width |
+
+#### THE OTHER TWO PAGES HE REPORTED WERE NOT TOUCHED BY THE SWEEP
+
+Verified from the commit: `f5a5eb5` does not change `GccJobCard.jsx` at all,
+and in `GccJobDetail.jsx` it changes only `Fact`'s `<dd>` — **not the
+`<h1>`**. Both measure as wrapping correctly. Their titles sit in a
+`min-w-0` wrapper, so min-content never binds.
+
+The remaining explanation is that the deployment under test predates the
+fixes — and the most likely reason for that is **a failed Vercel build**,
+because the same push added a new build-time failure path
+(`scripts/prerender.mjs` now exits non-zero if `dist/app.html` is
+unidentifiable) and a new import into that script. A failed build leaves the
+previous deployment serving, which would show all three as broken, exactly as
+reported.
+
+#### DID THIS SHIP WITHOUT THE CHECK? Partly, and the honest answer matters
+
+The class **was** verified in the compiled CSS — `break-words` was confirmed
+present during the gradient check and never removed. So the check I said I had
+started doing was done, and it passed.
+
+**It was the wrong check.** Verifying that a class compiles proves that the
+class compiles. It says nothing about whether the text wraps, because a class
+can be present, applied, computed — and still inert. The gradient check
+happened to be sufficient only because a gradient has no layout interaction to
+be defeated by.
+
+**So the check is now a measurement, not a grep:**
+`scripts/check-overflow.mjs` loads six public pages at 1280, 768 and 375 with
+Playwright, including the 180-character-title role, and fails if the document
+scrolls sideways — naming the offending elements when it does. **18 checks, 0
+failed.** Pages behind a sign-in cannot be reached by a script, so
+`/recruiter/*` and `/admin` are still eyes-on; the structural scan above is
+what covers them.
+
 ### THE OVERFLOW SWEEP — every place the app prints text somebody typed
 
 Rishi, after the first fix missed `/recruiter/jobs`: *"Rather than fix that one

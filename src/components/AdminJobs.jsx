@@ -127,7 +127,7 @@ function AdminJobs() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="break-words text-sm font-bold text-slate-900">
+                      <h3 className="min-w-0 break-words text-sm font-bold text-slate-900">
                         {job.title}
                       </h3>
                       <Pill tone={hidden ? "risk" : display.key === "live" ? "good" : "muted"}>

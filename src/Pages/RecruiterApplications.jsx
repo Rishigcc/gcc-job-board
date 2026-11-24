@@ -376,7 +376,7 @@ function RecruiterApplications() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="break-words text-base font-bold text-slate-900">
+                        <h2 className="min-w-0 break-words text-base font-bold text-slate-900">
                           {row.is_anonymised ? "Details removed" : row.full_name}
                         </h2>
                         <span

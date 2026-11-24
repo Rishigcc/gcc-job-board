@@ -75,7 +75,7 @@ function ReviewRow({ label, children }) {
       <dt className="w-40 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
         {label}
       </dt>
-      <dd className="break-words text-sm text-slate-900">{children}</dd>
+      <dd className="min-w-0 break-words text-sm text-slate-900">{children}</dd>
     </div>
   );
 }

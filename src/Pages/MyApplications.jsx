@@ -143,7 +143,7 @@ function MyApplications() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="break-words text-base font-bold text-slate-900">
+                        <h2 className="min-w-0 break-words text-base font-bold text-slate-900">
                           {row.job_title}
                         </h2>
                         <span

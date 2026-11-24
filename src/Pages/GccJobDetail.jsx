@@ -344,7 +344,7 @@ function GccJobDetail() {
                     {job.skills.map((skill) => (
                       <li
                         key={skill}
-                        className="max-w-full break-words rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700"
+                        className="min-w-0 max-w-full break-words rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700"
                       >
                         {skill}
                       </li>

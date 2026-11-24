@@ -22,7 +22,7 @@ function Recruiter({ row, busy, onVerify, onSuspend }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="break-words text-base font-bold text-slate-900">
+            <h3 className="min-w-0 break-words text-base font-bold text-slate-900">
               {row.company_name}
             </h3>
             {row.is_suspended ? <Pill tone="risk">Suspended</Pill> : null}
