@@ -7,6 +7,8 @@ import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
 import Pagination from "../components/Pagination";
 import EmailSignup from "../components/EmailSignup";
+import BoardPromoCard from "../components/BoardPromoCard";
+import { fetchLiveRoleCount } from "../lib/gccBoardSummary";
 import Seo from "../components/Seo";
 
 const JOBS_PER_PAGE = 20;
@@ -58,6 +60,11 @@ function Jobs() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
+  // The directly-posted board, for the promo card above the Notify Me box.
+  // Its own state, so a slow or failed count cannot hold up the job list --
+  // the card decides for itself and fails closed to no card.
+  const [board, setBoard] = useState({ loading: true, error: null, liveRoles: null });
+
   const jobsSectionRef = useRef(null);
 
   const scrollToJobs = () => {
@@ -81,6 +88,22 @@ function Jobs() {
       scrollToJobs();
     }, 50);
   };
+
+  // Fired in the same effect as the jobs file rather than after it, so the
+  // two requests overlap and this one adds no serial latency. /jobs makes no
+  // other database call -- the listings themselves are a static file.
+  useEffect(() => {
+    let active = true;
+
+    fetchLiveRoleCount().then(({ liveRoles, error }) => {
+      if (!active) return;
+      setBoard({ loading: false, error, liveRoles });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -195,7 +218,17 @@ function Jobs() {
 
         <h1 className="sr-only">GCC Jobs in India</h1>
 
+        {/* Above the Notify Me box, which is itself a coloured panel: two
+            banners in a row is already a lot, and this is the one that leads
+            somewhere. Outside the results list on purpose, so it cannot be
+            mistaken for a result or repeat on every page of pagination. */}
         <div className="mt-8">
+          <BoardPromoCard
+            loading={board.loading}
+            error={board.error}
+            liveRoles={board.liveRoles}
+          />
+
           <EmailSignup />
         </div>
 

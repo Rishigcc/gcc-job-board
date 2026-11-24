@@ -2037,6 +2037,158 @@ exception plus `job_saves` holding zero rows afterwards is direct evidence:
 back, classified both correctly, and deleted them. What was lost was the
 figures, not the verdict.
 
+### Stage 10 — the board's placement changed, 24 Nov 2026
+
+Rishi's decision, verbatim: *"New placement for the board, replacing what
+round one shipped. Remove the 'Apply Directly' link from the header and the
+card from the homepage. Both go. Instead, a promo card at the top of /jobs,
+above the Notify Me box."*
+
+His reason, which is the better argument: `/jobs` is where someone is already
+looking for work, so the card reaches them **mid-search**. A nav item reaches
+people already looking for the board; a homepage card reaches people who
+arrive at the homepage. Neither is a person in the middle of a job hunt.
+
+| What | Then | Now |
+|---|---|---|
+| Header nav | "Apply Directly" item | **removed** |
+| Homepage | fourth action card, four-column grid | **removed**, grid back to three; `FeatureCard.jsx` restored byte-for-byte |
+| `/jobs` | nothing | promo card above the Notify Me box, "New Feature" badge, heading **Exclusive jobs** |
+| `/gcc-jobs` empty state | "Recruiters post roles here directly. Check back shortly." | Rishi's wording, plus two links; signed-in variant |
+| `/gcc-jobs` last page | nothing | "More direct GCC jobs coming soon" |
+
+This **supersedes** decision 27 (add the homepage card) rather than undoing it:
+the findability problem 27 named is real, and the promo card is the answer to
+it. **D1 (the nav label) and D2 (a homepage card) are closed by removal.**
+
+#### The card only renders when the board has live roles — and a plain count would have got that wrong
+
+Rishi's rule: *"The card only appears when the board has live roles. No live
+roles, no card."*
+
+`/jobs` makes **no database query at all** today — the listings are a static
+`/data/jobs.json` — so this needed one. The obvious version, counting
+`public.jobs` from the browser and letting RLS filter it, is wrong. Postgres
+ORs a table's SELECT policies together, and `public.jobs` has three:
+
+| Who is asking | What a plain `count(*)` returns |
+|---|---|
+| a visitor | the public roles |
+| a recruiter | public roles **plus their own** pending, closed, expired, hidden |
+| the admin | **every row in the table** |
+
+**Rishi is the admin.** On a board with no live roles but one closed test
+posting, he would have been the one person on the site seeing a card that
+promised roles and clicked through to an empty board — the exact failure the
+rule exists to prevent, found first by its author.
+
+`public.live_job_count()` (migration 022) is `security definer`, takes no
+arguments, and applies the same `private.job_is_public()` the public read
+policy uses, so the card and `/gcc-jobs` cannot disagree about what "live"
+means. Filtering client-side with `.eq('status','live')` would have needed no
+migration and missed the suspended-recruiter half of that condition.
+
+**Migration 022's checks force the roles.** The Supabase SQL editor runs as
+`postgres`, which has `BYPASSRLS`: a plain `count(*)` there returns every row
+whatever JWT claim is set, so a check written that way would prove nothing but
+its own privilege. c3 and c4 use `set local role anon` / `authenticated` —
+the two roles the browser actually uses — and measure both numbers for all
+three personas. **c4 fails when the bug is absent**, on purpose: if a plain
+count were already correct, the migration is dead weight and should be deleted
+rather than trusted.
+
+#### What the card costs a visitor
+
+One extra request per `/jobs` load: a single integer over RPC, fired in the
+**same effect** as the `jobs.json` fetch rather than after it, so the two
+overlap and nothing on the page waits for it. Rejected alternative: baking the
+count into a static file at build time (free per visitor), because the
+staleness window is up to 24 hours — the first role ever posted would not
+light the card until 02:00 the next morning, which is both wrong and
+untestable in one sitting.
+
+**Fail closed.** An error, a null, a NaN, a string or a negative all resolve to
+*no card*. The one outcome worse than a visitor not seeing the card is a
+visitor clicking it into an empty board.
+
+#### The prerender had to be taught to wait
+
+`/jobs` is prerendered, and the count is issued from an effect after
+hydration — which can start **after** `networkidle` has already been
+declared. Saving then would have put the card on `/jobs` on some builds and
+not others, with nothing in the output to say which had happened. The wrapper
+publishes its decision as `data-board-promo="pending|show|hide"` and
+`scripts/prerender.mjs` waits for it to stop saying `pending`.
+
+Proved both ways locally, 24 Nov 2026: with no function in the database the
+prerendered `/jobs` carries `data-board-promo="hide"` and no card; with a
+positive count it carries the badge, the heading, the body and a real
+`<a href="/gcc-jobs">`.
+
+#### The "New Feature" badge takes itself off
+
+Rishi's decision: `NEW_FEATURE_UNTIL`, **eight weeks, set at merge alongside
+`LAST_UPDATED`** (carried item 20). Not a role count, and not a reminder.
+
+The badge's job is to make the ~2,520 members who already know `/jobs` notice
+the page has changed; they will nearly all have passed through within a few
+weeks. A role count measures **supply**, which is a different fact — the board
+could hit 40 roles in a fortnight while the feature is still new, and worse, it
+would keep the badge shouting "New Feature" over an empty board. Rishi:
+*"Your reasoning about an empty board shouting 'New Feature' is the failure I
+wanted to avoid."* The comparison happens at render, so the live page drops the
+badge the moment the date passes and the 02:00 rebuild refreshes the
+prerendered `/jobs` within a day.
+
+#### The empty state is now mostly unreachable, and kept anyway
+
+Rishi: *"I know this is now mostly unreachable, since the card won't be there
+when the board is empty. Keep it anyway as a fallback for direct URLs."* It
+remains reachable by a bookmark, a typed URL, or a search result that outlived
+the roles it was indexed from.
+
+**He corrected the wording himself**, from "we'll notify you" to "we'll
+announce it there": *"you were right that joining the community doesn't put
+anyone on the jobs alert list, and I'd rather promise what I'll actually do."*
+The two lists are genuinely different — `/signup` creates a community account
+whose only automated email is the digest about hearts and answers, while the
+jobs alert list is the Notify Me box on `/jobs`, which posts to a Google Apps
+Script. **No new automated email is involved, so the one-Brevo-email rule is
+intact.**
+
+The **filtered** miss keeps its own answer. Someone who searched for a Pune
+finance role and found none is not asking to be told about the feature — they
+want their filters back.
+
+**Signed-in members see a different third sentence and a different first
+link**, because `/signup` *redirects a signed-in person to `/welcome`*: the
+link would not merely read oddly, it would not work. `userId` is now
+three-state (`undefined` / `null` / id) so the page says nothing rather than
+flashing the wrong sentence for half a second.
+
+#### Decision 29 — `/post-a-job` now tells a signed-in member that accounts are separate
+
+`/post-a-job` was linked from **nowhere a candidate could reach** — only a
+typed URL or `RecruiterRoute`'s redirect. The empty state's "Are you a
+recruiter or GCC leader?" is its first public entrance, which means a
+signed-in community member can land on a sign-up form while already holding a
+session; filling it in would open a second account on a different email and
+replace the session they arrived with.
+
+Rishi, 24 Nov 2026: *"yes, add the line on /post-a-job telling a signed-in
+community member that recruiter accounts are separate."* The form is left
+available — a community member may genuinely be a GCC leader who wants to post
+— it is just no longer silent about what is about to happen. **This touches a
+signed-off page: carried item 21.**
+
+#### W8 — three vocabularies for one thing
+
+Logged for the site-wide wording review, not fixed here. The same feature is
+now called **"Exclusive jobs"** (the promo card), **"posted directly to our
+website"** (its body), **"Roles posted on iWorkAtGCC"** (the page's own `h1`)
+and **"direct GCC jobs"** (the end-of-list card). Each reads well alone. W7's
+line about the nav label is moot — the nav item is gone.
+
 ### Stage 10 cleanup — created while testing in production
 
 | What | Where | Removed? |
@@ -2189,11 +2341,13 @@ hook and then sweeps. P1's curl covers both in one request.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 21 | **`/post-a-job` NEEDS RETESTING — decision 29 touches a signed-off page.** `src/Pages/PostAJob.jsx` now shows a signed-in community member a notice that recruiter accounts are separate. The page is stage 3/4 work and signed off. Retest: the recruiter sign-up still works signed out, an already-signed-in recruiter still sees "Your recruiter account is ready", and the new notice appears only for a signed-in non-recruiter. | Rishi, 24 Nov 2026 | **Stage 10 round two** |
+| 20 | **Set `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js` to eight weeks after the real launch date.** Shipped as a placeholder (`2027-01-19`, eight weeks from the day it was written) so the badge is visible on the preview. Eight weeks can only honestly be measured from launch, so this is set at merge **alongside `LAST_UPDATED`** in carried item 1 — same edit, same moment. No code change is needed to remove the badge: it compares the date at render. | Rishi, 24 Nov 2026 | Before merge |
 | 19 | **STAGE 4 CHANGE, TO BE DECIDED SEPARATELY: tell recruiters that a 100% remote role must say so in the description.** Google requires `jobLocationType: TELECOMMUTE` *and* that the description clearly states the role is remote. v1 does not ask recruiters for that, so a "remote" role whose description never says the word gets markup Google may disregard. Logged rather than built, because it changes a signed-off form. | Rishi, 23 Nov 2026 | **Stage 4 change** |
 | 18 | **THE POSTING FORM NEEDS RETESTING AS PART OF STAGE 10.** Raising the description minimum from 50 to 400 characters touches signed-off stage 4: `src/lib/jobFormModel.js`, the field hint, and the CHECK constraint on `jobs.description`. Rishi, 23 Nov 2026: "Raising it touches signed-off stage 4, so record that the posting form needs retesting as part of stage 10." | Rishi, 23 Nov 2026 | **Stage 10 round two** |
 | 17 | **STAGE 9 SCOPE: `purge_expired_applications()` writes an audit row.** A nightly retention purge is an administrative action, and on Hobby a log line is unreadable an hour later. An audit row turns "did the sweep run" into a SQL query that is answerable forever rather than within the hour after 02:00 UTC. | Rishi, 23 Nov 2026 | **Stage 9** |
 | 16 | **STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.** Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
-| 15 | **BUILT IN STAGE 10 ROUND ONE, 23 Nov 2026** — shipped as "Apply Directly" in the header nav; awaiting Rishi's sign-off and decision D1 on the label. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
+| 15 | **DONE, BUT NOT AS BUILT — see "the board's placement changed, 24 Nov 2026".** Shipped in round one as an "Apply Directly" nav item and a homepage card; **both removed 24 Nov 2026** and replaced by a single promo card at the top of `/jobs`. The item's requirement — the board must be findable in the same stage that makes it public — is met by that card. D1 (the label) is closed by removal. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
 | 13 | **Partly done by stage 8's own testing, 22 Nov 2026: `candidate_resumes` is empty and the `resumes` bucket is completely empty, so those two lines are closed.** What remains: the anonymised `applications` rows, the 24 `[T5]` jobs, `Test Co A` and `Test Co B`, the two recruiter accounts, and `iworkatgcctest3@gmail.com`. Order still matters — jobs before companies, because of the foreign key. **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |

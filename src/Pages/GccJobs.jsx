@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader";
 import Footer from "../components/Footer";
 import Seo from "../components/Seo";
@@ -104,7 +104,12 @@ function GccJobs() {
   // identical either way -- nothing here waits on the session, so a signed-in
   // candidate sees the roles at the same moment a visitor does and the
   // bookmarks fill in when the session resolves.
-  const [userId, setUserId] = useState(null);
+  // undefined = not known yet, null = signed out, string = signed in.
+  // The save controls treat undefined and null alike, but the empty state
+  // says something different to each, and showing a signed-in member "join
+  // our community" for half a second before correcting it is worse than
+  // waiting half a second to say anything.
+  const [userId, setUserId] = useState(undefined);
 
   useEffect(() => {
     let active = true;
@@ -246,24 +251,92 @@ function GccJobs() {
         ) : null}
 
         {!loading && !error && result.total === 0 ? (
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-10 text-center">
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-8 text-center sm:p-10">
             <h2 className="text-lg font-bold text-slate-900">
               {filtered ? "Nothing matches that" : "No roles posted yet"}
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-slate-600">
-              {filtered
-                ? "Try a broader search, or clear the filters to see everything that is open."
-                : "Recruiters post roles here directly. Check back shortly."}
-            </p>
+
             {filtered ? (
-              <button
-                type="button"
-                onClick={clearAll}
-                className="mt-4 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-              >
-                Clear search and filters
-              </button>
-            ) : null}
+              /* A filtered miss is a different question and gets a different
+                 answer. Someone who searched for a Pune finance role and
+                 found none is not asking to be told about the feature -- they
+                 want their filters back. Rishi's wording below is for the
+                 board having nothing at all, which is what it describes. */
+              <>
+                <p className="mx-auto mt-2 max-w-md text-slate-600">
+                  Try a broader search, or clear the filters to see everything
+                  that is open.
+                </p>
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="mt-4 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Clear search and filters
+                </button>
+              </>
+            ) : (
+              /* MOSTLY UNREACHABLE BY DESIGN, AND KEPT ON PURPOSE. The promo
+                 card on /jobs only renders when the board has live roles, so
+                 nobody is sent here to an empty board. This is the fallback
+                 for a direct URL, a bookmark, or a search result that
+                 outlived the roles it was indexed from -- Rishi's decision,
+                 24 Nov 2026. */
+              <div className="mx-auto mt-2 max-w-xl text-slate-600">
+                <p>
+                  We've added this new feature because many of our GCC
+                  community members asked for it. We're working directly with
+                  recruiters and GCCs to bring you job openings they're
+                  actively hiring for.{" "}
+                  {userId === undefined ? null : userId ? (
+                    <>
+                      You're already in the community, so you'll be among the
+                      first to know when these direct opportunities go live.
+                    </>
+                  ) : (
+                    <>
+                      Meanwhile you can join our GCC community, and we'll
+                      announce it there as soon as these direct opportunities
+                      go live.
+                    </>
+                  )}
+                </p>
+
+                {/* Nothing until we know who is looking: the first link
+                    differs, and /signup bounces a signed-in person to
+                    /welcome, so offering it to them would not just read
+                    oddly -- it would not work. */}
+                {userId === undefined ? null : (
+                  <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+                    {userId ? (
+                      <Link
+                        to="/jobs"
+                        className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                      >
+                        Browse all GCC jobs
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/signup"
+                        className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                      >
+                        Join the community
+                      </Link>
+                    )}
+
+                    {/* The first link to the recruiter sign-up from anywhere
+                        a candidate can reach. Supply is the bottleneck, and
+                        this audience works at the GCCs doing the hiring. */}
+                    <Link
+                      to="/post-a-job"
+                      className="text-sm font-semibold text-blue-700 hover:underline"
+                    >
+                      Are you a recruiter or GCC leader?
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -283,6 +356,17 @@ function GccJobs() {
             />
           ))}
         </div>
+
+        {/* THE LAST PAGE ONLY. Below page 1 of 3 it would say "coming soon"
+            directly above a button that goes to twenty more roles. Dashed
+            and quiet, so it does not read as a role with no title. */}
+        {!loading && !error && result.total > 0 && page >= totalPages ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white/70 p-6 text-center">
+            <p className="text-sm font-semibold text-slate-600">
+              More direct GCC jobs coming soon
+            </p>
+          </div>
+        ) : null}
 
         {/* Numbered pages, reusing the component the collated /jobs page
             already uses -- it collapses to 1 … 4 5 6 … 20 past a handful of

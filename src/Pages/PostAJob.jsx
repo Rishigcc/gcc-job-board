@@ -204,6 +204,20 @@ function PostAJob() {
 
   const alreadyRecruiter = Boolean(session) && isRecruiterUser(session.user);
 
+  // DECISION 29, Rishi, 24 Nov 2026. Signed in, but as a community member.
+  //
+  // Nobody could reach this page by accident until now -- it was linked from
+  // nowhere a candidate could see. The /gcc-jobs empty state links to it on
+  // purpose ("Are you a recruiter or GCC leader?"), which means a signed-in
+  // member can now land on a sign-up form while already holding a session.
+  // Filling it in would open a second account on a different email and
+  // replace the session they arrived with.
+  //
+  // The form is left available, because a community member genuinely may be
+  // a GCC leader who wants to post. It is just no longer silent about what
+  // is about to happen.
+  const signedInAsCandidate = Boolean(session) && !alreadyRecruiter;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Seo
@@ -283,6 +297,19 @@ function PostAJob() {
 
           {/* ---------- Forms ---------- */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+
+            {signedInAsCandidate ? (
+              <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+                <p className="text-sm text-slate-800">
+                  <strong className="font-semibold">
+                    You're signed in as a community member.
+                  </strong>{" "}
+                  Recruiter accounts are separate, so posting a role means
+                  creating one below with your work email — and that will sign
+                  you out of your community account on this device.
+                </p>
+              </div>
+            ) : null}
 
             {alreadyRecruiter ? (
               <div>

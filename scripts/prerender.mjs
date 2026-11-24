@@ -207,11 +207,34 @@ async function waitForContent(page, route) {
   }
 
   if (route.kind === "jobs") {
+    // Two things have to resolve here, not one.
+    //
+    // The listings come from a static file, and the old condition -- no
+    // "Loading" heading, at least one heading -- covers them.
+    //
+    // The promo card above them asks the database how many roles the board
+    // is showing, and renders nothing at all until it knows. Saving the HTML
+    // before that answer arrives would put the card on /jobs on some builds
+    // and not others, with nothing in the output to say which had happened.
+    // So the wrapper publishes its decision as data-board-promo, and this
+    // waits for it to stop saying "pending".
+    //
+    // networkidle alone was not enough: the count is issued from an effect
+    // after hydration, which can start after the idle window has already
+    // been declared.
     await page.waitForFunction(
-      () =>
-        !Array.from(document.querySelectorAll("h2")).some((h) =>
-          h.textContent.trim().startsWith("Loading")
-        ) && document.querySelectorAll("h2").length > 0,
+      () => {
+        const headings = Array.from(document.querySelectorAll("h2"));
+        if (headings.some((h) => h.textContent.trim().startsWith("Loading"))) {
+          return false;
+        }
+        if (headings.length === 0) return false;
+
+        const promo = document.querySelector("[data-board-promo]");
+        if (!promo) return false;
+
+        return promo.getAttribute("data-board-promo") !== "pending";
+      },
       undefined,
       options
     );
