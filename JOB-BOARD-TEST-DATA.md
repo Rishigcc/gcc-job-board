@@ -2743,6 +2743,95 @@ Migration 020's own check `c7` inserts three saves, reads them back and deletes
 them **before** judging the result, so a failed check cleans up after itself as
 well as a passing one does. `c8` then asserts the table is empty.
 
+## /profile for a recruiter — SCOPED 25 Nov 2026, NOT BUILT
+
+Rishi: *"/profile makes no sense for a recruiter… The delete control is the
+worst of it: for a recruiter it either does nothing or reads as though it
+might delete their account."*
+
+**A recruiter's header has exactly two items** — My Dashboard and Profile — so
+this is half their navigation. `show: Boolean(session)`, and `/profile` is
+deliberately not behind `blockRecruiters`; `src/main.jsx` carries the comment
+*"Deliberately opt-in, not applied to every protected route: /profile must
+stay reachable for recruiters."*
+
+### Block by block, and what is actually dangerous
+
+| Block | A recruiter sees | Verdict |
+|---|---|---|
+| Name | **"—"** — `profiles.google_display_name` is null for a recruiter by invariant I1 | looks broken |
+| Email | **"—"** — `google_email` null for the same reason | looks broken |
+| Display Name form | works, and `saveDisplayName` upserts only `{id, display_name}`, so I1 holds | **intended** — decision 10: setting a display name is choosing to join the community |
+| Questions Asked / Saved | 0 / 0 | useless |
+| Roles Saved | 0, or more — a recruiter **can** save roles | useless, not wrong |
+| Your applications | "You have not applied to any roles yet" + a button to `/my-applications`, itself deliberately recruiter-reachable | useless |
+| Your resume | "No resume on file" **and a working upload control** | **HARMFUL — carried item 28** |
+| Delete my job board data | a link to `/profile/delete-data` | **not destructive; badly misleading** |
+
+**The delete control cannot do what it appears to.** Read out of the live
+database, `anonymise_job_data_for()` touches exactly three tables:
+`candidate_resumes`, `job_saves`, and `applications where candidate_id = me`.
+It does **not** touch `recruiter_profiles`, `jobs`, `companies` or
+`auth.users`. So for a recruiter it is a no-op apart from deleting any roles
+they bookmarked. **It cannot delete their account, their company or their
+postings.** The danger is entirely in the reading — and the confirmation page
+makes it worse, not better, by describing a resume file and applications that
+do not exist for them.
+
+**The resume upload is the one real harm**, and it is not confusion: see
+carried item 28. It is a live defect independent of this page's redesign.
+
+### What a recruiter version should hold
+
+Rishi's list — company name, work email, phone, website, verification status,
+and later the password controls — plus three things that need deciding with it:
+
+- **`recruiter_profiles.company_name` is NOT the company their roles are
+  listed under.** That is `jobs.company_id → companies.name`, and recruiters
+  cannot rename a company (only `admin_rename_company` can, because
+  `companies.slug` is immutable). A settings page that lets them edit
+  "company name" and changes nothing on their postings is a trap. Either show
+  both and label them, or make it read-only.
+- **The login email must be read-only**, or it becomes a Supabase
+  "Change email address" template — a **third** Brevo email, which the
+  restated rule does not cover. If it is ever wanted, it is a decision, not a
+  field.
+- **Verification status already lives on `/recruiter`**, with the unverified
+  explanation and the 10-role cap. Duplicating it would put the same fact on
+  two screens, which W3's reconciliation rule exists to prevent. Link to it.
+- `recruiter_profiles.gstin` exists and is unused — available if wanted.
+
+### Rename, separate route, or conditional render? SEPARATE ROUTE
+
+**`/recruiter/settings`.** Reasons, strongest first:
+
+1. **A conditional render would break decision 10.** The project has already
+   decided one person may be both a candidate and a recruiter, and that
+   `/profile` and `/ask` stay reachable for recruiters *because of it*. Hiding
+   the candidate blocks from anyone with `account_type: recruiter` takes the
+   candidate half away from exactly the person that decision was written for.
+2. **A rename breaks links.** `/profile` is in the privacy policy as where
+   delete-my-data lives, and it is bookmarked by a community of 2,520.
+3. **`/recruiter/settings` inherits `RecruiterRoute`**, which already handles
+   the session, the `recruiter_profiles` row creation and the suspension
+   state. A new top-level route would re-implement all three.
+
+Recommended navigation: the recruiter header shows **Settings** rather than
+Profile, and the settings page carries one line — "you also have a community
+profile" — linking to `/profile`. That respects decision 10 without putting
+two near-identical links side by side.
+
+### Which stage? STAGE 12, as Rishi said
+
+His reasoning holds: the password controls are the main reason the page needs
+to exist, so building it earlier means building a page with four read-only
+fields on it.
+
+**Two things do not wait for stage 12:** carried item 28 (the resume upload
+guard, a live defect), and — if it is wanted sooner — hiding the
+delete-my-job-board-data link from an account with no job board data, which is
+one condition and could ride with any stage.
+
 ## Stage 12 — recruiter password reset (SCOPED 24 Nov 2026, NOT BUILT)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on
@@ -3332,6 +3421,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 28 | **LIVE DEFECT: a recruiter can upload a resume from `/profile`, and it poisons an admin report.** `api/upload-resume.js` has no recruiter guard — it keys off the caller's token and upserts `public.candidate_resumes`. Nothing leaks (the bucket is private and the path is the uploader's own folder), but it creates a `candidate_resumes` row for an account with **no applications**, which is exactly the gap the admin "resume-less candidates" report exists to detect: *"candidate_resumes against distinct candidates with applications. Should be equal; a gap means something broke."* So a recruiter idly uploading a CV raises a false alarm in the one report built to catch breakage. Needs a guard in the endpoint, not only a hidden control. Found 25 Nov 2026 while answering what a recruiter sees on `/profile`. | 25 Nov 2026 | **Before merge** |
 | 27 | **LIVE DEFECT ON A SIGNED-OFF PAGE: pasted Markdown is rendered literally to candidates.** Rishi's correction, 24 Nov 2026: *"a candidate reading job 13 right now sees `# Job Description` and `**bold**` on screen, so item 27 is a live defect on a signed-off page, not just a snippet problem."* He is right, and I had filed it a category too low. **The defect is what a candidate reads**; the Google snippet beginning `# Job Description` is a symptom of the same cause, not the problem. Job 13's description opens `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout, and `/gcc-jobs/:slugId` renders it with `whitespace-pre-wrap`, which deliberately never parses HTML. Options: render a safe Markdown subset; strip the markers for display and for the meta description; or change the field hint and let recruiters paste plain text. Whichever is chosen, note that the markup must keep matching the page — Google requires everything in the markup to be visible on it — so display and markup have to change together. | Found 24 Nov 2026 testing against a real row; severity corrected by Rishi the same day | **Before merge** |
 | 26 | **`alter table public.jobs validate constraint jobs_description_check;` after the pre-merge clearout.** Migration 023 added it `NOT VALID` because 24 of 25 existing rows are under 400 characters — all of them `[T5]` test jobs deleted by carried item 13. Once those are gone, validate it, and confirm `convalidated` is true. The statement is at the bottom of the migration file. It fails loudly if anything short remains, which is the point. | Migration 023 | **After carried item 13, before merge** |
 | 25 | **DESIGN PASS: two items from stage 10's sign-off.** (a) The `/post-a-job` recruiter panel has a lot of empty white space under the sign-up button. (b) The promo card's illustration keeps its yellow sparks — decided, not outstanding; recorded so the design pass does not reopen it. | Rishi, 24 Nov 2026 | Design pass |
