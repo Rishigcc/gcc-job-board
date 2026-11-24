@@ -25,6 +25,7 @@ import SavedJobs from "./Pages/SavedJobs.jsx";
 import Privacy from "./Pages/Privacy.jsx";
 import RecruiterTerms from "./Pages/RecruiterTerms.jsx";
 import PostAJob from "./Pages/PostAJob.jsx";
+import RecruiterResetPassword from "./Pages/RecruiterResetPassword.jsx";
 import RecruiterHome from "./Pages/RecruiterHome.jsx";
 import RecruiterJobs from "./Pages/RecruiterJobs.jsx";
 import RecruiterJobNew from "./Pages/RecruiterJobNew.jsx";
@@ -235,6 +236,22 @@ function AppRoutes() {
 
       {/* Recruiter sign-up and sign-in — public */}
       <Route path="/post-a-job" element={<PostAJob />} />
+
+      {/* WHERE THE RESET EMAIL LANDS, and deliberately a PLAIN route.
+          Not ProtectedRoute: the session arrives in the URL fragment and is
+          consumed asynchronously, so a guard reading getSession() on mount
+          would bounce a recruiter to sign-in before their own link had
+          finished working. Not RecruiterRoute either, which would try to
+          read or create a recruiter_profiles row before the password was
+          even set. The page handles its own states, including the one where
+          there is no session at all.
+
+          NOT in scripts/prerender.mjs's route list: nothing here is public,
+          and a prerendered copy would carry a stale shell. */}
+      <Route
+        path="/recruiter/reset-password"
+        element={<RecruiterResetPassword />}
+      />
 
       {/* Recruiter area. RecruiterRoute proves there is a confirmed session
           and a recruiter_profiles row before any of these render. */}
