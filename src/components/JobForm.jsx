@@ -456,7 +456,7 @@ function JobForm({
             label="About the role"
             htmlFor="description"
             required
-            hint="What the person will do, who they report to, what the team owns. Paste from your JD if you have one."
+            hint="What the person will do, who they report to, what the team owns. Paste from your JD if you have one — a full description is what gets the role into Google's job results."
             error={errors.description}
           >
             <textarea
@@ -468,9 +468,16 @@ function JobForm({
               maxLength={DESCRIPTION_MAX}
               placeholder="Describe the role…"
             />
+            {/* The counter earns its keep when it is short, so that is where
+                it explains itself. "N more characters needed" reads as a
+                hurdle; the reason to care is that Google will not list a
+                thin posting. Google states no number -- only "we don't allow
+                job postings with incomplete job descriptions" -- so 400 is
+                our floor, roughly 60 words, chosen to catch the one-liner
+                rather than to measure completeness. */}
             <p className="mt-1 text-xs text-slate-500">
               {descriptionLength < DESCRIPTION_MIN
-                ? `${DESCRIPTION_MIN - descriptionLength} more characters needed`
+                ? `${(DESCRIPTION_MIN - descriptionLength).toLocaleString()} more characters needed — Google needs a full description to list the role`
                 : `${descriptionLength.toLocaleString()} characters`}
             </p>
           </Field>

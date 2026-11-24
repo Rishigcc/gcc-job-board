@@ -42,7 +42,7 @@ export const EMPTY_JOB = {
   skills: "",
 };
 
-export const DESCRIPTION_MIN = 50;
+export const DESCRIPTION_MIN = 400;
 export const DESCRIPTION_MAX = 20000;
 
 export function validateJob(v) {
@@ -92,7 +92,11 @@ export function validateJob(v) {
 
   const description = (v.description || "").trim();
   if (description.length < DESCRIPTION_MIN) {
-    e.description = `Describe the role in at least ${DESCRIPTION_MIN} characters. You have ${description.length}.`;
+    // The message names the CONSEQUENCE, not the rule. "At least 400
+    // characters" reads as an arbitrary hurdle; the reason a recruiter
+    // should care is that Google will not list a thin posting, and most
+    // candidates reach these roles through Google.
+    e.description = `Describe the role in at least ${DESCRIPTION_MIN} characters — you have ${description.length}. A thin description stops the role appearing in Google's job results, where most candidates will find it.`;
   } else if (description.length > DESCRIPTION_MAX) {
     e.description = `Keep the description under ${DESCRIPTION_MAX.toLocaleString()} characters.`;
   }

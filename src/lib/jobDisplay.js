@@ -8,7 +8,7 @@
 // client, which needs a browser environment to exist at all.
 // ===========================================================================
 
-import { slugify } from "./jobOptions";
+import { slugify } from "./jobOptions.js";
 
 // ---------------------------------------------------------------------------
 // URLs. /gcc-jobs/<slug>-<id>

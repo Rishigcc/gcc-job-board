@@ -3,3 +3,4 @@ Allow: /
 Disallow: /app.html
 
 Sitemap: https://www.iworkatgcc.com/sitemap.xml
+Sitemap: https://www.iworkatgcc.com/sitemap-jobs.xml

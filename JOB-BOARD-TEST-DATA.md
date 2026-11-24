@@ -2307,6 +2307,121 @@ part someone would otherwise find out the hard way."*
   in a corner aren't the warning-coloured panel I objected to."* That closes
   the colour note raised when the illustration was wired in.
 
+### Stage 10 round two — the SEO half (BUILT 24 Nov 2026)
+
+| Piece | Where |
+|---|---|
+| Per-request job page with `JobPosting` markup | `api/job-page.js` |
+| The head block, pure and tested | `src/lib/jobPageHead.js` |
+| Jobs sitemap | `api/sitemap-jobs.js` → `/sitemap-jobs.xml` |
+| Ordered rewrites | `vercel.json` |
+| `noindex` removed | `src/Pages/GccJobDetail.jsx` |
+| Description minimum 50 → 400 | `src/lib/jobFormModel.js`, `src/components/JobForm.jsx`, migration 023 |
+
+#### A 404 that still serves a working page
+
+A role that is not public answers **404**, which is how Google drops a closed
+listing — **but the 404 is served with the app shell as its body.** A browser
+renders it normally: React boots, fetches the role with whatever session is in
+the browser, and a recruiter still sees their own closed or pending posting
+exactly as before. **The status code is for crawlers; the body is for people.**
+
+That matters because the recruiter preview is signed-off stage 4 behaviour —
+`src/lib/publicJobs.js` calls it *"a preview, not a leak"*. A 404 that served
+Vercel's own error page would have broken it. This way nothing a human does
+changes, and Rishi's instruction ("404 for a role that isn't public") is met
+exactly.
+
+#### A database error must NOT 404 a live role
+
+Google treats 404 as *gone*, and getting a listing back afterwards is slow and
+not in our hands. So on a Supabase error the function serves the shell
+untouched, `no-store`, with **no robots meta of its own** — the page still
+works, React fetches the role itself, and nothing has told Google anything.
+Fail-closed is right for the promo card and wrong here; the directions are
+opposite because the costs are.
+
+#### The markup is injected server-side and NOT rendered by React
+
+`src/components/Seo.jsx` already takes a `jsonLd` prop. It is deliberately not
+used on this page: two `JobPosting` objects on one page is worse than none,
+because Google's rule is one job per page. The title and description come from
+the **same helpers** the function uses, so the tags React hoists on hydration
+say exactly what the served HTML already said.
+
+#### The publishable key, not the service key
+
+The function must see exactly what a stranger sees, and the "anyone reads
+public jobs" policy already applies `private.job_is_public()` — status, expiry
+and recruiter suspension. The service key would mean re-deciding in JavaScript
+what the database already decides.
+
+#### The shell is fetched, not read off disk
+
+`dist/app.html` is static output, not part of the function's bundle. Fetching
+it from the request's own host means the asset hashes always match the
+deployment actually serving the request, and a warm container fetches it once.
+
+#### TWO EXTENSIONLESS IMPORTS WOULD HAVE BROKEN THE FUNCTION
+
+`src/lib/jobDisplay.js` and `src/lib/jobPosting.js` both did
+`import { ... } from "./jobOptions"`. Vite resolves that; **plain Node ESM does
+not.** Both now carry the `.js`, and the whole chain was imported from plain
+Node to prove it rather than assume the bundler would cover it.
+
+#### Migration 023 had to be `NOT VALID`, and the measurement is why
+
+Measured before writing it: **24 of the 25 rows in `public.jobs` are under 400
+characters**, the shortest 197 — and all 24 are the `[T5]` test jobs queued for
+deletion. The one genuine posting is 7,085. `alter table ... add constraint`
+validates existing rows, so the plain version **fails on the first of those 24
+and changes nothing.**
+
+Two intended consequences: editing one of the 24 short test jobs is now
+refused until its description reaches 400 (which is what carried item 18's
+posting-form retest exercises), and the constraint stays marked NOT VALID
+until the pre-merge clearout, after which it is validated — **carried item 26**.
+
+`c2` inserts a 399-character row and a 400-character row and removes both.
+The columns were read off the table first rather than guessed: **`apply_mode`
+is NOT NULL with no default**, and omitting it would have raised
+`not_null_violation`, which the 399 branch would not have recognised as a
+`check_violation` — so the check would have failed for a reason unrelated to
+400 characters. The fixture recruiter also excludes suspended accounts, so
+`private.jobs_cap_guard()` cannot refuse the row for its own reasons.
+
+#### A FINDING FROM TESTING AGAINST A REAL ROW, NOT A FIXTURE
+
+Job 13's description is **pasted Markdown** — `# Job Description`,
+`**Job Title:**`. The detail page renders it with `whitespace-pre-wrap` and
+deliberately never parses HTML, so a candidate sees those asterisks and
+hashes literally. The markup therefore matches the page, which is the
+visibility rule satisfied — but it means **Google's snippet will begin
+"# Job Description – Finance | Record to Report"**, and the meta description
+carries the same.
+
+Not fixed, and not a bug in this stage: rendering Markdown would change a
+signed-off page and reintroduce the HTML parsing that page was explicitly
+built to avoid. Logged as **carried item 27**, because recruiters pasting from
+JD tools will keep doing this.
+
+#### How it was proved before handover
+
+| | |
+|---|---|
+| `scripts/stage10-head-test.mjs` | **103 assertions.** Seven attack titles — attribute breakout, element breakout, `</title>`, `</script>`, single-quote breakout, comment escape, a pre-escaped entity — each asserted to leave **no stray `<` or `>`** anywhere in the head, with the JSON-LD then **re-parsed** to prove it is still JSON and still carries the title intact |
+| The other three suites | 116 SEO + 111 saved roles + 62 promo, all still passing — **392 assertions in total** |
+| A real production row | job 13 run through the builders: all required properties present, `jobLocation` with `addressCountry: IN`, `FULL_TIME`, `monthsOfExperience: 24` from `experience_min: 2`, **no `baseSalary` because none is disclosed**, no `totalJobOpenings` because `openings` is null |
+| Node ESM | the function's whole import chain loaded by plain `node`, which is what the `.js` extensions were for |
+| The build | 87 pages, `dist/gcc-jobs` absent so the rewrite fires, `sitemap.xml` still a real file so it is served ahead of any rewrite |
+
+**Two assertions in the head test were wrong on the first run and were
+corrected rather than the code.** The `>` inside the JSON body is legitimate —
+`descriptionToHtml`'s `<p>` and `<br>` come through as `\u003cp>`, because only
+`<` needs escaping to stop an element closing early — and a description cut at
+a word boundary does legitimately end with a letter before the ellipsis. Both
+assertions now test the real property instead.
+
 ### Stage 10 cleanup — created while testing in production
 
 | What | Where | Removed? |
@@ -2662,6 +2777,8 @@ hook and then sweeps. P1's curl covers both in one request.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 27 | **Recruiters paste Markdown into the description, and it is rendered literally.** Job 13 begins `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout. The detail page uses `whitespace-pre-wrap` and deliberately never parses HTML, so the asterisks and hashes show on screen — and therefore in the `JobPosting` description and the meta description, which is where Google's snippet comes from. Not fixed in stage 10: rendering Markdown changes a signed-off page and reintroduces the HTML parsing that page was built to avoid. Options when it is taken up: render a safe subset, strip the markers for the meta description only, or tell recruiters in the field hint to paste plain text. | Found 24 Nov 2026 testing against a real row | Wording review / design pass |
+| 26 | **`alter table public.jobs validate constraint jobs_description_check;` after the pre-merge clearout.** Migration 023 added it `NOT VALID` because 24 of 25 existing rows are under 400 characters — all of them `[T5]` test jobs deleted by carried item 13. Once those are gone, validate it, and confirm `convalidated` is true. The statement is at the bottom of the migration file. It fails loudly if anything short remains, which is the point. | Migration 023 | **After carried item 13, before merge** |
 | 25 | **DESIGN PASS: two items from stage 10's sign-off.** (a) The `/post-a-job` recruiter panel has a lot of empty white space under the sign-up button. (b) The promo card's illustration keeps its yellow sparks — decided, not outstanding; recorded so the design pass does not reopen it. | Rishi, 24 Nov 2026 | Design pass |
 | 24 | **The "Password changed" security notification must be confirmed OFF before stage 12 ships.** Supabase can send a `Password changed` notification, which would be a THIRD email the day the reset flow goes live. The docs name no dashboard control for it — the only on/off mechanism they show is the Management API flag `mailer_notifications_password_changed_enabled`. Recommended setting: **off**, with the compensating control being `current_password` on the change-password box (a session hijacker cannot rotate the password without knowing the old one). Revisit as an explicit decision at stage 12. | Rishi, 24 Nov 2026 | **Before stage 12** |
 | 23 | **Add a second admin account that Rishi alone controls.** `public.user_roles` has exactly one `admin` row, on a Google-only account. Losing that Google account loses the admin role, with no second admin to grant it back. A data change, not a migration. **The real break-glass is the Supabase dashboard**, from which an admin row can always be inserted — so the higher-value action is hardening his Supabase account (2FA, recovery), and the second admin covers the narrower case of losing the Google account. Note both admins would share one failure mode (Google suspending him) but not the common ones. The second account sees all applications, so it must be an account only he controls, never a shared mailbox. | Rishi, 24 Nov 2026 | **Now** |

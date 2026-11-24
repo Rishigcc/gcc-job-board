@@ -58,7 +58,7 @@
 //                 item 19, to be decided separately.
 // ===========================================================================
 
-import { EMPLOYMENT_TYPES, WORK_MODES } from "./jobOptions";
+import { EMPLOYMENT_TYPES, WORK_MODES } from "./jobOptions.js";
 
 // The city value that means "no particular city", from jobOptions.
 export const ANYWHERE_IN_INDIA = "Anywhere in India";

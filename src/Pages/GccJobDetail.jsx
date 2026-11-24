@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-r
 import SiteHeader from "../components/SiteHeader";
 import Footer from "../components/Footer";
 import Seo from "../components/Seo";
+import { metaDescription, pageTitle } from "../lib/jobPageHead";
 import ApplyPanel from "../components/ApplyPanel";
 import SaveJobButton from "../components/SaveJobButton";
 import { WORK_MODES, EMPLOYMENT_TYPES } from "../lib/jobOptions";
@@ -26,7 +27,9 @@ import {
 // mismatch redirects to the canonical path rather than 404ing or, worse,
 // serving the same job on two URLs.
 //
-// noindex until stage 10 renders these server-side.
+// Served with its JobPosting markup by api/job-page.js, so this page is
+// indexable. The noindex that stood here until 24 Nov 2026 was waiting on
+// exactly that.
 // ===========================================================================
 
 const workModeLabel = (value) =>
@@ -244,11 +247,17 @@ function GccJobDetail() {
 
   return (
     <div className="min-h-screen bg-slate-100">
+      {/* NO noindex, and NO jsonLd.
+          The markup is injected into the page source by api/job-page.js, per
+          request. Passing jsonLd here as well would put two JobPosting
+          objects on one page, and Google's rule is one job per page -- two is
+          worse than none. The title and description come from the same
+          helpers that function uses, so the tags React hoists on hydration
+          say exactly what the served HTML already said. */}
       <Seo
-        title={`${job.title}${company ? ` at ${company}` : ""} — iWorkAtGCC`}
-        description={job.description.slice(0, 160)}
+        title={pageTitle(job, company)}
+        description={metaDescription(job.description)}
         path={jobPath(job)}
-        noindex
       />
 
       <SiteHeader />

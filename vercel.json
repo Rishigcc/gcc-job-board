@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/gcc-jobs/:slugId",
+      "destination": "/api/job-page?slugId=:slugId"
+    },
+    {
+      "source": "/sitemap-jobs.xml",
+      "destination": "/api/sitemap-jobs"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/app.html"
     }
@@ -19,9 +27,18 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "X-Frame-Options", "value": "DENY" },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
         {
           "key": "Permissions-Policy",
           "value": "camera=(), microphone=(), geolocation=(), payment=()"
