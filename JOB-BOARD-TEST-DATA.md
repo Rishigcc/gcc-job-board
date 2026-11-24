@@ -2861,6 +2861,85 @@ collected in v1 cannot be recovered in v2. Everything else about the work gets
 *easier* later, because by then there are real roles and real traffic to
 measure instead of a board with no roles.
 
+## public.companies read policy — migration 024, 24 Nov 2026
+
+Rishi's decision: **option (a)**, and run it **before** the seed — *"No reason
+to have a window where all 1,814 are public when the ordering is free."*
+
+| Who | Sees |
+|---|---|
+| a visitor (`anon`) | only a company that has **at least one public role** |
+| a signed-in user (`authenticated`) | every company |
+
+### *** THIS IS NOT PROTECTION OF THE LIST ***
+
+**Recorded at Rishi's explicit request**, so nobody later mistakes the policy
+for something stronger than it is. His words, accepting the caveat: *"a Google
+sign-in is a speed bump, not a lock. I'm accepting that — the list isn't worth
+building a server-side search for today. Record the caveat so the next person
+doesn't mistake (a) for protection."*
+
+**Any community account can read all 1,814 rows, and anyone can create one in
+seconds with a Google sign-in.** The policy stops the list being handed to
+anonymous crawlers and scrapers. It does not stop a determined person, and it
+is not meant to. If it ever needs real protection, the shape is: keep this
+policy and replace the picker's direct table read with a `security definer`
+search function that returns matches rather than letting a client page through
+the table. **Deliberately not built.**
+
+### Why not simply restrict the table to `authenticated`
+
+`/gcc-jobs` and every job page are public and **embed the company name**.
+PostgREST applies the policy to an embedded table too, so a blanket
+restriction would show a visitor every role with no employer on it — and strip
+`hiringOrganization` out of the `JobPosting` markup, one of Google's five
+**required** properties. `buildJobPosting()` refuses to emit anything without
+it, so the board would quietly vanish from Google's job results. What is being
+protected is not the names on the roles we publish; those are public already.
+
+### The index is part of the policy, not a tidy-up
+
+The visitor policy runs `exists (select 1 from public.jobs where company_id =
+…)` per candidate row, and **`public.jobs` had no index on `company_id`** —
+checked. At 25 jobs that is free; at 1,816 companies it is a sequential scan
+per row evaluated, on the hottest read path the site has. `jobs_company_id_idx`
+is created in the same migration, and the rollback deliberately leaves it.
+
+### Dry-run before handing it over
+
+| Checked | Result |
+|---|---|
+| Companies visible to a visitor after the change | **2 of 2** — both current companies have live roles, so nothing visible today disappears |
+| `private.job_is_public` | `SECURITY DEFINER`, `STABLE` — which is what lets it answer for `anon` without `anon` being able to read `recruiter_profiles` |
+| Grants behind both policies | `anon` select ✓, `authenticated` select ✓ |
+| The c3 fixture insert | `name` and `slug` both `text`; `returning id into` a `uuid`, and `companies.id` is a uuid |
+| Server-side readers | only `api/job-page.js`, and it uses the **publishable** key, so policy 1 covers it for exactly the public roles it serves markup for |
+
+**c3 makes its own negative fixture.** Every company currently has a public
+role, so there is nothing the policy would hide — the check inserts a company
+with no jobs, confirms `anon` cannot see it, and deletes it. Without that, the
+protective half of this migration would be unproven at the moment it is
+applied.
+
+### A grant I misread, recorded so the next person does not repeat it
+
+`has_table_privilege('authenticated','public.companies','insert')` returns
+**false**, which looked like the grant trap that has caught this project three
+times — an INSERT policy with no grant behind it, making the policy
+decoration. It is not. Migration 001 line 374 grants **column-level** insert:
+
+```sql
+revoke insert, update, delete on public.companies from anon, authenticated;
+grant insert (name, slug) on public.companies to authenticated;
+-- Recruiters may name a company but not attach a logo to it.
+```
+
+`has_table_privilege` reports false for a column-level grant because the
+table-level privilege genuinely is not held. **`has_column_privilege` is the
+right instrument**: `name` true, `slug` true, `logo_url` false. And
+`src/lib/jobMutations.js` inserts exactly `{ name, slug }`, so the picker's
+"add a new company" works and is correctly unable to set a logo.
+
 ## The company seed — GENERATED 24 Nov 2026, NOT YET RUN
 
 Rishi, 24 Nov 2026: *"The company seed was never run. Typing 'walmart' offers

@@ -1,7 +1,8 @@
 import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { preview, loadEnv } from "vite";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, writeFile, readFile } from "node:fs/promises";
+import { isAppShell } from "../src/lib/jobPageHead.js";
 import path from "node:path";
 
 const DIST = path.resolve("dist");
@@ -407,7 +408,33 @@ async function main() {
   // Preserve an un-prerendered shell for the SPA catch-all rewrite. Without
   // it, unmatched routes (a question posted since the last build) would be
   // served the prerendered homepage, including its canonical URL.
-  await copyFile(path.join(DIST, "index.html"), path.join(DIST, "app.html"));
+  const shellPath = path.join(DIST, "app.html");
+  await copyFile(path.join(DIST, "index.html"), shellPath);
+
+  // THE BUILD FAILS HERE RATHER THAN THE SITE FAILING LATER.
+  //
+  // api/job-page.js reads dist/app.html to assemble every job page, and
+  // refuses to serve a document it cannot identify -- so a deploy that
+  // somehow produced no app.html, or a foreign one, would answer 503 on
+  // every /gcc-jobs/<role> URL while the rest of the site looked fine.
+  //
+  // That is a silent-ish failure nobody is watching for, and it costs one
+  // read to turn it into a failed deploy. Checked with the SAME function the
+  // serverless function uses, so the two cannot disagree about what counts
+  // as our shell.
+  const shell = await readFile(shellPath, "utf8");
+
+  if (!isAppShell(shell)) {
+    console.error(
+      `[prerender] FAILED: ${shellPath} is not a usable app shell.\n` +
+        "  api/job-page.js would answer 503 on every job page.\n" +
+        "  It must contain <div id=\"root\">, an /assets/index-*.js bundle " +
+        "and a </head>."
+    );
+    process.exit(1);
+  }
+
+  console.log(`[prerender] app.html verified (${shell.length} bytes)`);
 
   const server = await preview({
     preview: { port: 4183, strictPort: true },
