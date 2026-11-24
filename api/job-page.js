@@ -1,5 +1,12 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { buildJobPageHead, injectHead } from "../src/lib/jobPageHead.js";
+import {
+  buildJobPageHead,
+  injectHead,
+  isAppShell,
+} from "../src/lib/jobPageHead.js";
 import { jobPath, parseJobParam } from "../src/lib/jobDisplay.js";
 
 // ===========================================================================
@@ -13,15 +20,51 @@ import { jobPath, parseJobParam } from "../src/lib/jobDisplay.js";
 //   servable at 3:01pm, and the build that writes the other 87 pages runs
 //   once a night. So this page is assembled per request.
 //
+// THE SHELL IS READ OFF DISK. IT USED TO BE FETCHED, AND THAT WAS WRONG.
+//
+//   The first version fetched /app.html over HTTP from the deployment's own
+//   host and trusted it if the response was ok. On a preview with Vercel's
+//   deployment protection on, that fetch was intercepted and answered with
+//   VERCEL'S LOGIN PAGE -- valid HTML, status 200 -- which was then injected
+//   into and served. The browser got a blank page and 70 MIME-type errors,
+//   because the document referenced /_next/ chunks that do not exist here.
+//
+//   Rishi's instruction, 24 Nov 2026: "If the approach has to change, say so
+//   plainly rather than working around protection -- I'd rather rebuild this
+//   than ship something that only works because production happens not to
+//   have protection on."
+//
+//   So THERE IS NO REQUEST-TIME NETWORK CALL FOR THE SHELL any more. It is
+//   read from the deployment's own filesystem, included by the `functions`
+//   block in vercel.json. Nothing can intercept a file read.
+//
+//   And separately -- because the two faults were separate -- the shell is
+//   now IDENTIFIED rather than merely received. isAppShell() looks for our
+//   own mount point and our own hashed bundle, both of which Vercel's page
+//   lacked. That check is what makes this class of bug impossible whatever
+//   the shell's source, which was Rishi's first point and the more important
+//   one: "If that internal fetch ever returns anything unexpected in
+//   production, this function will inject into it and serve it to
+//   candidates."
+//
+//   AND THERE IS NO FETCH FALLBACK, deliberately. One would be safe now --
+//   isAppShell() would refuse the protection page whatever delivered it --
+//   but it would also mean a protected preview quietly behaves differently
+//   from production, which is the thing Rishi asked not to ship. A clean 503
+//   he can report beats a difference nobody notices.
+//
+//   IF THE SHELL CANNOT BE IDENTIFIED, THIS SERVES NOTHING. A job page that
+//   does not load is a bad day. A job page that loads as somebody else's
+//   document is the thing worth refusing.
+//
 // WHY THE MARKUP IS NOT RENDERED BY REACT INSTEAD
 //   It could be -- src/components/Seo.jsx already takes a jsonLd prop and
-//   escapes it the same way. Googlebot does run JavaScript. But it would put
-//   a time-sensitive listing behind a rendering queue we cannot see, and it
-//   would mean the markup is absent from the page source, which is the one
-//   place every other crawler and every debugging tool looks. Seo's jsonLd
-//   prop is deliberately NOT used on this page: two copies of a JobPosting
-//   on one page is worse than none, because Google's rule is one job per
-//   page.
+//   escapes it the same way. But it would put a time-sensitive listing
+//   behind a rendering queue we cannot see, and the markup would be absent
+//   from the page source, which is where every other crawler and every
+//   debugging tool looks. Seo's jsonLd prop is deliberately NOT used on this
+//   page: two JobPosting objects on one page is worse than none, because
+//   Google's rule is one job per page.
 //
 // THE TWO STATUS CODES, AND WHY A 404 STILL SERVES A WORKING PAGE
 //   A role that is not public gets 404 -- which is how Google drops a listing
@@ -29,7 +72,7 @@ import { jobPath, parseJobParam } from "../src/lib/jobDisplay.js";
 //   so a browser renders it normally: React boots, fetches the role with
 //   whoever's session is in the browser, and a recruiter still sees their own
 //   closed or pending posting exactly as before. The status code is for
-//   crawlers; the body is for people. Nothing a human does changes.
+//   crawlers; the body is for people.
 //
 //   That matters because the recruiter preview is signed-off stage 4
 //   behaviour: src/lib/publicJobs.js calls it "a preview, not a leak".
@@ -52,24 +95,51 @@ const COLUMNS =
   "experience_min, salary_min, salary_max, salary_currency, salary_period, " +
   "openings, skills, published_at, expires_at, companies(name)";
 
-// The shell is the same bytes for every request and changes only on deploy,
-// so a warm container fetches it once. Fetched rather than read off disk
-// because dist/app.html is static output, not part of this function's
-// bundle -- and fetching it means the asset hashes always match the
-// deployment actually serving the request.
+// Where dist/app.html can be, in order. The first is what vercel.json's
+// includeFiles produces; the rest cover running from the repo root and from
+// the function's own directory, so `vercel dev` and a local script find it
+// too. A list rather than one path because the cost of an extra miss is a
+// few microseconds and the cost of guessing wrong is the whole feature.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+const SHELL_PATHS = [
+  path.join(process.cwd(), "dist", "app.html"),
+  path.join(process.cwd(), "app.html"),
+  path.join(HERE, "..", "dist", "app.html"),
+];
+
+// The shell is identical for every request and changes only on deploy, so a
+// warm container reads it once. Only an IDENTIFIED shell is ever cached: an
+// unidentified one must be re-read next time rather than remembered.
 let shellCache = null;
 
-async function loadShell(req) {
+async function loadShell() {
   if (shellCache) return shellCache;
 
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  const proto = req.headers["x-forwarded-proto"] || "https";
+  const tried = [];
 
-  const response = await fetch(`${proto}://${host}/app.html`);
-  if (!response.ok) throw new Error(`app.html returned ${response.status}`);
+  for (const candidate of SHELL_PATHS) {
+    let html;
+    try {
+      html = await readFile(candidate, "utf8");
+    } catch {
+      tried.push(`${candidate} (not readable)`);
+      continue;
+    }
 
-  shellCache = await response.text();
-  return shellCache;
+    if (!isAppShell(html)) {
+      // Found a file, and it is not ours. Worth saying loudly in the log,
+      // because this is the exact shape of the bug that got here: a document
+      // that exists and is wrong.
+      tried.push(`${candidate} (found, but not our shell)`);
+      continue;
+    }
+
+    shellCache = html;
+    return shellCache;
+  }
+
+  throw new Error(`No app shell could be identified. Tried: ${tried.join("; ")}`);
 }
 
 function send(res, { status, body, cache }) {
@@ -83,10 +153,12 @@ export default async function handler(req, res) {
 
   let shell;
   try {
-    shell = await loadShell(req);
-  } catch {
-    // Without the shell there is no page to serve at all. 503 rather than
-    // 404: this is our failure, and must not be read as "the role is gone".
+    shell = await loadShell();
+  } catch (error) {
+    // Deliberately not a 404: this is our failure, and must not be read by
+    // a crawler as "the role is gone". Deliberately not a half-built page
+    // either -- see the header.
+    console.error("[job-page]", error.message);
     res.setHeader("Cache-Control", "no-store");
     return res.status(503).send("The page could not be assembled.");
   }
@@ -117,6 +189,7 @@ export default async function handler(req, res) {
   const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   if (!url || !key) {
+    console.error("[job-page] Supabase environment variables are missing.");
     res.setHeader("Cache-Control", "no-store");
     return res.status(503).send("The page could not be assembled.");
   }
@@ -135,6 +208,7 @@ export default async function handler(req, res) {
   // our own -- the page still works, React fetches the role itself, and
   // nothing has told Google anything.
   if (error) {
+    console.error("[job-page] jobs query failed:", error.message);
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(shell);

@@ -2318,6 +2318,81 @@ part someone would otherwise find out the hard way."*
 | `noindex` removed | `src/Pages/GccJobDetail.jsx` |
 | Description minimum 50 → 400 | `src/lib/jobFormModel.js`, `src/components/JobForm.jsx`, migration 023 |
 
+#### THE SHELL WAS FETCHED OVER HTTP, AND THAT WAS WRONG — FOUND 24 Nov 2026
+
+The first version of `api/job-page.js` fetched `/app.html` over HTTP from the
+deployment's own host and trusted it when `response.ok` was true. Rishi tested
+step 1 and got **a blank page with 70 MIME-type errors**, not the 503 I had
+predicted. His diagnosis, from View Source, was exact:
+
+```
+data-dpl-id="dpl_2pfh63eC3yPnKdmeRGgHS3stomBy"
+src="/_next/static/immutable/chunks/0c0hxoamwjsbw.js"
+data-testid="geistcn/skip-nav-link"
+```
+
+**Vercel's deployment-protection page is a Next.js app.** Protection
+intercepted the internal fetch and answered with its own login page — valid
+HTML, status 200 — so the guard passed, the markup was injected into a
+stranger's document, and that is what the browser got. The markup itself was
+correct; only the shell was someone else's.
+
+**TWO SEPARATE FAULTS, AND HE SEPARATED THEM CORRECTLY.**
+
+*1. The guard was too weak for production, not just preview.* His words:
+*"'Did I get HTML back' isn't enough — it got HTML. It needs to verify the
+shell is actually ours before injecting. If that internal fetch ever returns
+anything unexpected in production, this function will inject into it and serve
+it to candidates."*
+
+`isAppShell()` in `src/lib/jobPageHead.js` now identifies the shell
+**positively**: `<div id="root">`, a `/assets/index-*.js` bundle with this
+deployment's hash, and a `</head>` to inject before. Vercel's page has none of
+the three, so the positive checks alone refuse it. A list of markers from the
+real incident is kept as a second layer, and the test **strips every one of
+them and asserts the page is still refused** — because a guard that works only
+by recognising one known document would not survive the next unexpected one.
+
+*2. The approach changed rather than being patched.* His instruction: *"If the
+approach has to change, say so plainly rather than working around protection —
+I'd rather rebuild this than ship something that only works because production
+happens not to have protection on."*
+
+**There is no request-time network call for the shell any more.** It is read
+off the deployment's own filesystem, declared in `vercel.json`:
+
+```json
+"functions": { "api/job-page.js": { "includeFiles": "dist/app.html" } }
+```
+
+Nothing can intercept a file read, so the fault is not merely detected — it is
+out of reach. **And there is no fetch fallback, deliberately.** One would be
+safe now that the shell is identified, but it would mean a protected preview
+quietly behaving differently from production, which is the thing he asked not
+to ship.
+
+**Proved locally before pushing**, by invoking the handler with a mock
+request/response against the real database and the real built shell:
+
+| Request | Status | Markup | Notes |
+|---|---|---|---|
+| `program-manager-13` (live) | **200** | JobPosting, title intact | `index, follow` |
+| `t5-platform-engineer-17` (closed) | **404** | none | `noindex, nofollow`, full shell in the body |
+| `nonsense-99999` | **404** | none | |
+| `wrong-slug-13` | **301** | — | → `/gcc-jobs/program-manager-13` |
+| `` (empty) | **404** | none | |
+| `../../etc/passwd` | **404** | none | `parseJobParam` requires a trailing `-<digits>` |
+
+And on the served document: our mount point present, our hashed bundle
+present, **no `_next` reference**, exactly one `</head>`, markup inside it.
+
+**The one thing that cannot be verified without deploying** is whether
+`includeFiles` puts `dist/app.html` where the function can read it. If it does
+not, every job page answers **503** and nothing else on the site is affected —
+loud, bounded, and caught by step 1. The fallback would then be to have
+`scripts/prerender.mjs` write the shell into a module the function imports
+statically.
+
 #### A 404 that still serves a working page
 
 A role that is not public answers **404**, which is how Google drops a closed
@@ -2355,12 +2430,6 @@ The function must see exactly what a stranger sees, and the "anyone reads
 public jobs" policy already applies `private.job_is_public()` — status, expiry
 and recruiter suspension. The service key would mean re-deciding in JavaScript
 what the database already decides.
-
-#### The shell is fetched, not read off disk
-
-`dist/app.html` is static output, not part of the function's bundle. Fetching
-it from the request's own host means the asset hashes always match the
-deployment actually serving the request, and a warm container fetches it once.
 
 #### TWO EXTENSIONLESS IMPORTS WOULD HAVE BROKEN THE FUNCTION
 

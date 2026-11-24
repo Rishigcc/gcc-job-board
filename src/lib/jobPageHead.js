@@ -130,3 +130,56 @@ export function injectHead(shell, headHtml) {
 
   return `${shell.slice(0, at)}    ${headHtml}\n  ${shell.slice(at)}`;
 }
+
+// ---------------------------------------------------------------------------
+// IS THIS DOCUMENT OURS?
+//
+// WHY THIS EXISTS. The first version of api/job-page.js fetched the app shell
+// over HTTP from the deployment's own host and checked `response.ok`. On a
+// preview with Vercel's deployment protection enabled, that fetch was
+// intercepted and answered with Vercel's own LOGIN PAGE -- valid HTML, status
+// 200 -- so the check passed, the markup was injected into a stranger's
+// document, and the page served to the browser was blank with 70 MIME-type
+// errors. Rishi found it and named the real fault: "'Did I get HTML back'
+// isn't enough -- it got HTML."
+//
+// So identification is POSITIVE. The three required markers are things only
+// our own Vite shell has:
+//
+//   <div id="root">            the mount point React boots into
+//   /assets/index-*.js         the bundle, with the hash of THIS deployment
+//   </head>                    somewhere to inject, which is the point
+//
+// Vercel's protection page has none of them, so the positive checks alone
+// would have refused it. The rejected list below adds nothing to the
+// security of this function -- it is there to name the incident, so that a
+// future reader knows what was actually served and does not weaken the
+// positive checks thinking they are theoretical.
+//
+// The caller must treat false as "serve nothing". Injecting into an
+// unidentified document is the failure this prevents, and a page that does
+// not load is better than a page that loads as someone else's.
+// ---------------------------------------------------------------------------
+
+// Markers seen in the document Vercel's deployment protection actually
+// returned, 24 Nov 2026. Not the guard -- a record of the incident.
+export const NOT_OUR_SHELL_MARKERS = [
+  "_next/",            // Vercel's platform pages are Next.js apps
+  "data-dpl-id",       // a Vercel deployment id attribute
+  "geistcn/",          // Vercel's own design system
+];
+
+export function isAppShell(html) {
+  if (typeof html !== "string" || html.length < 100) return false;
+
+  // Positive identification. All three, or it is not ours.
+  if (!/<div\s+id=["']root["']/i.test(html)) return false;
+  if (!/<script[^>]+src=["']\/assets\/index-[^"']+\.js["']/i.test(html)) return false;
+  if (!/<\/head>/i.test(html)) return false;
+
+  // Belt, after braces.
+  const lower = html.toLowerCase();
+  if (NOT_OUR_SHELL_MARKERS.some((m) => lower.includes(m))) return false;
+
+  return true;
+}

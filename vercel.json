@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/job-page.js": {
+      "includeFiles": "dist/app.html"
+    }
+  },
   "rewrites": [
     {
       "source": "/gcc-jobs/:slugId",

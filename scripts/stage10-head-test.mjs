@@ -21,12 +21,15 @@
 //   parsing it rather than by eyeballing it.
 // ===========================================================================
 
+import { readFileSync } from "node:fs";
 import {
   escapeHtml,
   metaDescription,
   pageTitle,
   buildJobPageHead,
   injectHead,
+  isAppShell,
+  NOT_OUR_SHELL_MARKERS,
   META_DESCRIPTION_MAX,
 } from "../src/lib/jobPageHead.js";
 
@@ -273,6 +276,100 @@ check("an empty shell returns null", injectHead("", indexed), null);
 check("a null shell returns null", injectHead(null, indexed), null);
 check("an empty head returns null", injectHead(SHELL, ""), null);
 check("a null head returns null", injectHead(SHELL, null), null);
+
+// ---------------------------------------------------------------------------
+// 7. isAppShell -- THE REGRESSION TEST FOR A REAL INCIDENT
+//
+// api/job-page.js used to fetch the shell over HTTP and trust it if the
+// response was ok. On a preview with Vercel's deployment protection on, the
+// fetch was intercepted and answered with VERCEL'S LOGIN PAGE: valid HTML,
+// status 200. It was injected into and served, and the browser showed a blank
+// page with 70 MIME-type errors.
+//
+// The document below is built from the markers Rishi read out of View Source
+// on the page that was actually served. This is not a hypothetical.
+// ---------------------------------------------------------------------------
+
+// The REAL shell, read off disk rather than written as a fixture -- so this
+// test fails if the build ever stops producing something the function can
+// identify, which is the failure that matters.
+// Resolved from the working directory, NOT from import.meta.url: esbuild
+// bundles this file somewhere else before node runs it, which moves
+// import.meta.url with it. Every test in this project documents "run it from
+// the repo root", and this is the line that depends on it.
+let realShell = null;
+try {
+  realShell = readFileSync(`${process.cwd()}/dist/app.html`, "utf8");
+} catch {
+  realShell = null;
+}
+
+checkTrue("dist/app.html exists to test against (npm run build, from the repo root)",
+  realShell !== null);
+if (realShell) {
+  checkTrue("THE REAL BUILT SHELL IS ACCEPTED", isAppShell(realShell));
+}
+
+// Vercel's deployment-protection page, from the markers in View Source.
+const VERCEL_PROTECTION_PAGE = `<!DOCTYPE html>
+<html lang="en" data-dpl-id="dpl_2pfh63eC3yPnKdmeRGgHS3stomBy">
+  <head>
+    <meta charset="utf-8"/>
+    <title>Authentication Required</title>
+    <script src="/_next/static/immutable/chunks/0c0hxoamwjsbw.js"></script>
+  </head>
+  <body>
+    <a data-testid="geistcn/skip-nav-link" href="#main">Skip to content</a>
+    <div id="__next"><p>Log in to continue</p></div>
+  </body>
+</html>`;
+
+checkFalse("VERCEL'S PROTECTION PAGE IS REFUSED", isAppShell(VERCEL_PROTECTION_PAGE));
+
+// THE ASSERTION THAT MATTERS MOST. Strip every marker on the rejected list
+// and it must STILL be refused -- by the positive checks alone. A guard that
+// only works because it recognises this one page would not survive the next
+// unexpected document, which was Rishi's actual point.
+let declawed = VERCEL_PROTECTION_PAGE;
+for (const marker of NOT_OUR_SHELL_MARKERS) {
+  declawed = declawed.split(marker).join("harmless-");
+}
+checkFalse("...and still refused with every blocklist marker removed",
+  isAppShell(declawed));
+checkFalse("the blocklist really was neutralised in that copy",
+  NOT_OUR_SHELL_MARKERS.some((m) => declawed.toLowerCase().includes(m)));
+
+// Each required marker, removed one at a time from a shell that is otherwise
+// valid. All three are load-bearing or one of these passes.
+const GOOD = `<!doctype html><html><head>
+  <script type="module" crossorigin src="/assets/index-x08IFQC6.js"></script>
+  </head><body><div id="root"></div></body></html>`;
+
+checkTrue("the minimal good shell is accepted", isAppShell(GOOD));
+checkFalse("without <div id=\"root\"> it is refused",
+  isAppShell(GOOD.replace('<div id="root"></div>', "<div></div>")));
+checkFalse("without the hashed /assets/ bundle it is refused",
+  isAppShell(GOOD.replace(/<script[^>]*><\/script>/, "")));
+checkFalse("without a </head> it is refused",
+  isAppShell(GOOD.replace("</head>", "")));
+
+// A Vite shell for a DIFFERENT project would be accepted, and that is fine:
+// the function only ever reads its own deployment's filesystem, so the
+// question this answers is "is this our kind of document", not "which site".
+// What it must never accept is a document with no React mount point at all.
+for (const [label, value] of [
+  ["an empty string", ""],
+  ["null", null],
+  ["undefined", undefined],
+  ["a number", 42],
+  ["an object", {}],
+  ["a short string", "<html></html>"],
+  ["a JSON error body", '{"error":"Unauthorized"}'],
+  ["plain text", "Authentication Required"],
+  ["an HTML fragment with no head", '<div id="root"></div>'],
+]) {
+  checkFalse(`${label} is refused`, isAppShell(value));
+}
 
 // ---------------------------------------------------------------------------
 
