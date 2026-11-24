@@ -174,11 +174,11 @@ checkFalse("the badge is gone within a year", isNewFeature(inAYear, NEW_FEATURE_
 // ---------------------------------------------------------------------------
 
 check("the badge reads as approved", PROMO.badge, "New Feature");
-check("the heading reads as approved", PROMO.heading, "Exclusive jobs");
+check("the heading reads as approved", PROMO.heading, "Exclusive GCC jobs");
 check(
   "the body reads as approved",
   PROMO.body,
-  "These jobs are posted directly to our website. Search, save, apply and track your application, all in one place."
+  "These jobs are posted directly to our community website. Search, save, apply and track your application, all in one place."
 );
 check("the card goes to the board", PROMO.to, "/gcc-jobs");
 

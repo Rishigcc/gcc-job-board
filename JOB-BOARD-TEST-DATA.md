@@ -2061,6 +2061,42 @@ This **supersedes** decision 27 (add the homepage card) rather than undoing it:
 the findability problem 27 named is real, and the promo card is the answer to
 it. **D1 (the nav label) and D2 (a homepage card) are closed by removal.**
 
+#### The card's colour and copy, revised 24 Nov 2026
+
+Rishi, after seeing it: *"Drop the yellow. It reads as a warning rather than
+an announcement."* He is right, and the reason is worth keeping: yellow is the
+colour this site uses for nothing and the colour the whole web uses for
+caution, so amber was carrying a meaning nobody intended.
+
+Replaced with **blue into purple** — both already in use on the homepage
+cards, no new hue, because the design pass is still deferred until every stage
+is done and this must not pre-empt it. It is the **saturation** that does the
+work, not the hue: everything else on `/jobs` is a white card or the pale blue
+Notify Me box directly below, so a filled, shadowed panel reads as an
+announcement while still being the site's own blue. A gradient and two
+blurred highlights supply the depth he asked for — *"flat colour reads as a
+notice, a lit surface reads as a feature."*
+
+Checked rather than assumed: the project is on **Tailwind v4**, which renamed
+the gradient utilities, so every class used was confirmed present in the
+compiled CSS before pushing.
+
+| | Then | Now |
+|---|---|---|
+| Heading | "Exclusive jobs" | **"Exclusive GCC jobs"** |
+| First sentence | "...posted directly to our website." | **"...posted directly to our community website."** |
+| Colour | amber-50 / amber-300 | blue-600 → purple-700 gradient, white text |
+
+**The line break he spotted was a real fault.** The body had `max-w-2xl`
+(672px) inside a card already constrained by the page's `max-w-6xl` column —
+a second cap doing nothing but breaking the sentence with half the line above
+it empty. Removed; the card's own width is the only constraint now.
+
+Also on his instruction, the `/gcc-jobs` subtitle became **"Posted directly by
+the people hiring for GCC roles."** The old one ("...you are not sent off to
+another site") explained the board by contrast with `/jobs`, which only makes
+sense to someone who already knows both pages.
+
 #### The card only renders when the board has live roles — and a plain count would have got that wrong
 
 Rishi's rule: *"The card only appears when the board has live roles. No live

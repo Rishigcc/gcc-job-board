@@ -9,18 +9,27 @@ import { trackEvent } from "../analytics";
 // carries data-board-promo="pending" | "show" | "hide".
 //
 // That attribute is not decoration. scripts/prerender.mjs renders /jobs with
-// Playwright and saves the HTML, and it now waits for this attribute to stop
+// Playwright and saves the HTML, and it waits for this attribute to stop
 // saying "pending" before it saves. Without it the save races the count: the
 // static /jobs would carry the card on some builds and not others, with
 // nothing to show which had happened. With it, the prerendered page always
 // states the answer that was true at build time, and the live query corrects
 // it on hydration if a role was posted since.
 //
-// COLOUR. Amber, against the white job cards and the blue Notify Me box
-// below it -- distinct, as Rishi asked, without inventing an identity. The
-// real palette (muted plum, mauve, warm rose, amber accents) comes at the
-// design stage, and amber is the one accent already named in it, so this is
-// the choice least likely to need undoing.
+// COLOUR, revised 24 Nov 2026. Amber first, and Rishi was right about it:
+// "it reads as a warning rather than an announcement." Yellow is the colour
+// this site uses for nothing, and the colour the whole web uses for caution.
+//
+// So: blue into purple, both already in use on the homepage cards, with no
+// new hue introduced -- the design pass is still deferred until every stage
+// is done, and this must not pre-empt it.
+//
+// It is the SATURATION that does the work rather than the hue. Everything
+// else on /jobs is a white card or the pale blue Notify Me box directly
+// below, so a filled, shadowed panel reads as an announcement at a glance
+// while still being the site's own blue. The gradient and the two blurred
+// highlights are there for depth, which was the other half of the note:
+// flat colour reads as a notice, a lit surface reads as a feature.
 // ===========================================================================
 
 function BoardPromoCard({ loading, error, liveRoles }) {
@@ -33,42 +42,62 @@ function BoardPromoCard({ loading, error, liveRoles }) {
         <Link
           to={PROMO.to}
           onClick={() => trackEvent("exclusive_jobs_promo_clicked")}
-          className="mb-8 block rounded-2xl border border-amber-300 bg-amber-50 px-6 py-6 transition hover:border-amber-400 hover:bg-amber-100/70"
+          className="group relative mb-8 block overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 px-6 py-7 shadow-lg shadow-blue-900/20 transition hover:shadow-xl hover:shadow-blue-900/30 sm:px-8"
         >
-          {showBadge ? (
-            <span className="inline-flex items-center rounded-full bg-amber-500 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
-              {PROMO.badge}
-            </span>
-          ) : null}
+          {/* Depth, not decoration: two soft highlights so the panel reads as
+              a lit surface rather than a block of flat colour. aria-hidden
+              and pointer-events-none -- they are lighting, not content. */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl"
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-24 -left-12 h-56 w-56 rounded-full bg-purple-300/20 blur-2xl"
+          />
 
-          <h2
-            className={`text-lg font-bold text-slate-900 md:text-xl ${
-              showBadge ? "mt-3" : ""
-            }`}
-          >
-            {PROMO.heading}
-          </h2>
+          <div className="relative">
+            {showBadge ? (
+              <span className="inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white ring-1 ring-inset ring-white/30">
+                {PROMO.badge}
+              </span>
+            ) : null}
 
-          <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-slate-700">
-            {PROMO.body}
-          </p>
-
-          <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-800">
-            {PROMO.linkLabel}
-            <svg
-              width={16}
-              height={16}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+            <h2
+              className={`text-xl font-bold tracking-tight text-white sm:text-2xl ${
+                showBadge ? "mt-3" : ""
+              }`}
             >
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          </span>
+              {PROMO.heading}
+            </h2>
+
+            {/* No max-width. It had one, and on a wide screen it wrapped
+                "all in one place" onto a second line with half the line above
+                it empty. The card is already inside the page's max-w-6xl
+                column, so that was a second constraint doing nothing but
+                breaking the sentence. */}
+            <p className="mt-2 text-[15px] leading-relaxed text-blue-50">
+              {PROMO.body}
+            </p>
+
+            <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-white">
+              {PROMO.linkLabel}
+              <svg
+                width={16}
+                height={16}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className="transition-transform group-hover:translate-x-0.5"
+              >
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </span>
+          </div>
         </Link>
       ) : null}
     </div>

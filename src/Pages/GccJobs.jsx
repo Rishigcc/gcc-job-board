@@ -151,8 +151,7 @@ function GccJobs() {
           Roles posted on iWorkAtGCC
         </h1>
         <p className="mt-2 max-w-2xl text-slate-600">
-          Posted directly by the people hiring. Apply here with your resume —
-          you are not sent off to another site.
+          Posted directly by the people hiring for GCC roles.
         </p>
 
         {/* ------------------------------------------------------------- */}
