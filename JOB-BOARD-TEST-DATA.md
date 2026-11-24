@@ -2400,10 +2400,16 @@ visibility rule satisfied — but it means **Google's snippet will begin
 "# Job Description – Finance | Record to Report"**, and the meta description
 carries the same.
 
-Not fixed, and not a bug in this stage: rendering Markdown would change a
-signed-off page and reintroduce the HTML parsing that page was explicitly
-built to avoid. Logged as **carried item 27**, because recruiters pasting from
-JD tools will keep doing this.
+**Rishi corrected the severity, and he was right.** I logged this as an SEO
+snippet problem. It is not: *"a candidate reading job 13 right now sees
+`# Job Description` and `**bold**` on screen, so item 27 is a live defect on a
+signed-off page, not just a snippet problem."* The thing a candidate reads is
+the defect; the snippet is the same cause showing up somewhere else.
+
+Still not fixed **in this stage**, because rendering Markdown changes a
+signed-off page and reintroduces the HTML parsing that page was explicitly
+built to avoid — but it is now **carried item 27, due before merge**, not a
+wording-review item. Recruiters pasting from JD tools will keep doing this.
 
 #### How it was proved before handover
 
@@ -2777,7 +2783,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
-| 27 | **Recruiters paste Markdown into the description, and it is rendered literally.** Job 13 begins `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout. The detail page uses `whitespace-pre-wrap` and deliberately never parses HTML, so the asterisks and hashes show on screen — and therefore in the `JobPosting` description and the meta description, which is where Google's snippet comes from. Not fixed in stage 10: rendering Markdown changes a signed-off page and reintroduces the HTML parsing that page was built to avoid. Options when it is taken up: render a safe subset, strip the markers for the meta description only, or tell recruiters in the field hint to paste plain text. | Found 24 Nov 2026 testing against a real row | Wording review / design pass |
+| 27 | **LIVE DEFECT ON A SIGNED-OFF PAGE: pasted Markdown is rendered literally to candidates.** Rishi's correction, 24 Nov 2026: *"a candidate reading job 13 right now sees `# Job Description` and `**bold**` on screen, so item 27 is a live defect on a signed-off page, not just a snippet problem."* He is right, and I had filed it a category too low. **The defect is what a candidate reads**; the Google snippet beginning `# Job Description` is a symptom of the same cause, not the problem. Job 13's description opens `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout, and `/gcc-jobs/:slugId` renders it with `whitespace-pre-wrap`, which deliberately never parses HTML. Options: render a safe Markdown subset; strip the markers for display and for the meta description; or change the field hint and let recruiters paste plain text. Whichever is chosen, note that the markup must keep matching the page — Google requires everything in the markup to be visible on it — so display and markup have to change together. | Found 24 Nov 2026 testing against a real row; severity corrected by Rishi the same day | **Before merge** |
 | 26 | **`alter table public.jobs validate constraint jobs_description_check;` after the pre-merge clearout.** Migration 023 added it `NOT VALID` because 24 of 25 existing rows are under 400 characters — all of them `[T5]` test jobs deleted by carried item 13. Once those are gone, validate it, and confirm `convalidated` is true. The statement is at the bottom of the migration file. It fails loudly if anything short remains, which is the point. | Migration 023 | **After carried item 13, before merge** |
 | 25 | **DESIGN PASS: two items from stage 10's sign-off.** (a) The `/post-a-job` recruiter panel has a lot of empty white space under the sign-up button. (b) The promo card's illustration keeps its yellow sparks — decided, not outstanding; recorded so the design pass does not reopen it. | Rishi, 24 Nov 2026 | Design pass |
 | 24 | **The "Password changed" security notification must be confirmed OFF before stage 12 ships.** Supabase can send a `Password changed` notification, which would be a THIRD email the day the reset flow goes live. The docs name no dashboard control for it — the only on/off mechanism they show is the Management API flag `mailer_notifications_password_changed_enabled`. Recommended setting: **off**, with the compensating control being `current_password` on the change-password box (a session hijacker cannot rotate the password without knowing the old one). Revisit as an explicit decision at stage 12. | Rishi, 24 Nov 2026 | **Before stage 12** |
