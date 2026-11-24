@@ -101,15 +101,49 @@ from c;
 -- The row is inserted and deleted again, so this check leaves nothing behind
 -- whether it passes or fails. It borrows a real recruiter and company id
 -- because the row has to satisfy every OTHER constraint for this one to be
--- the thing being tested -- and the columns were read off the table before
--- writing it rather than guessed. apply_mode in particular is NOT NULL with
--- no default: omitting it raises not_null_violation, which the 399 branch
--- would NOT have seen as a check_violation, so the check would have failed
--- for a reason that has nothing to do with 400 characters.
+-- the thing being tested.
+--
+-- apply_mode is NOT NULL with no default: omitting it raises
+-- not_null_violation, which the 399 branch would NOT have seen as a
+-- check_violation, so the check would have failed for a reason that has
+-- nothing to do with 400 characters.
+--
+-- THIS BLOCK FAILED ON ITS FIRST REAL RUN, 24 Nov 2026:
+--
+--   ERROR: 22P02: invalid input syntax for type bigint:
+--          "4b7a0c43-eac2-4e52-9e9c-ea3226bf03e9"
+--   CONTEXT: PL/pgSQL function inline_code_block line 12 at SQL statement
+--
+-- v_company was declared `bigint`. jobs.id IS a bigint, and I generalised
+-- from it -- but companies.id is a UUID, so jobs.company_id is one too. The
+-- select-into tried to put a uuid in a bigint and Postgres said so. The whole
+-- script is one implicit transaction in the Supabase SQL editor, so the
+-- ALTER TABLE above it rolled back with the block and the database was
+-- unchanged.
+--
+-- EVERY COLUMN IN BOTH INSERTS IS NOW TYPE-CHECKED AGAINST THE LIVE TABLE
+-- rather than read off a related table and assumed. The check that does it,
+-- for the next person writing one of these -- it needs no write permission,
+-- which is why it can be run before handing the file over:
+--
+--   with intended(pos, col, val_type) as (
+--     values (1,'title', pg_typeof('x'::text)),
+--            (13,'company_id', pg_typeof((select company_id from public.jobs limit 1))),
+--            ...
+--   )
+--   select i.col, i.val_type::text, c.data_type
+--   from intended i join information_schema.columns c
+--     on c.table_schema='public' and c.table_name='jobs'
+--    and c.column_name = i.col
+--   order by i.pos;
+--
+-- All 14 columns verified ok before this file was handed over the second
+-- time, and the select-into itself was executed read-only to prove it
+-- assigns cleanly.
 do $$
 declare
   v_poster  uuid;
-  v_company bigint;
+  v_company uuid;
   v_399     boolean := false;
   v_400     boolean := false;
   v_msg     text := '(none)';

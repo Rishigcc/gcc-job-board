@@ -2459,6 +2459,54 @@ is NOT NULL with no default**, and omitting it would have raised
 400 characters. The fixture recruiter also excludes suspended accounts, so
 `private.jobs_cap_guard()` cannot refuse the row for its own reasons.
 
+#### MIGRATION 023 FAILED ON ITS FIRST RUN — 24 Nov 2026
+
+```
+ERROR: 22P02: invalid input syntax for type bigint:
+       "4b7a0c43-eac2-4e52-9e9c-ea3226bf03e9"
+CONTEXT: PL/pgSQL function inline_code_block line 12 at SQL statement
+```
+
+**The database was unchanged.** A multi-statement script in the Supabase SQL
+editor runs as one implicit transaction, so the `ALTER TABLE` above the
+failing block rolled back with it. Verified rather than assumed: the
+constraint still read `>= 50` with `convalidated: true`, and there were zero
+`check023-boundary` rows and zero `[CHECK023]` titles left behind.
+
+**The fault:** `v_company` was declared `bigint`. **`jobs.id` is a bigint, and
+I generalised from it** — but `companies.id` is a **uuid**, so
+`jobs.company_id` is one too. The `select ... into` tried to put a uuid in a
+bigint. Rishi's own guess from the error text ("jobs.id is a bigint and
+posted_by is a uuid, so I'd look there first") was one column away.
+
+Fixed by declaring `v_company uuid`.
+
+**RISHI'S STANDING INSTRUCTION, and he is right to insist:** *"This is the
+second migration in two days that failed on its first real run — 017 had the
+round(double precision) error you caught by dry-running it. You caught that
+one before handing it to me; this one you didn't. Whatever you did for 017
+that you skipped here, do it every time: execute the checks against the live
+database before giving me the file."*
+
+Recorded in the project memory as a standing rule. What the read-only MCP
+connection can and cannot do, since that is what made it tempting to skip:
+
+| | |
+|---|---|
+| **can** | run every pure-`SELECT` check and read the figures |
+| **can** | execute a `DO` block's `select ... into` read-only, to prove the assignments bind |
+| **can** | **type-check every column of an `INSERT`** against the live table with `pg_typeof` + `information_schema.columns` — no write permission needed |
+| **can** | read actual constraints, defaults and nullability |
+| **cannot** | `CREATE TABLE`, even temporary — "cannot execute CREATE TABLE in a read-only transaction", so the temp-table harness itself cannot be rehearsed |
+| **cannot** | `EXPLAIN` an `INSERT` — that needs insert permission, "permission denied for table jobs" |
+
+**What was done before handing 023 over the second time:** the failing
+`select ... into` executed read-only with the corrected declarations; **all
+14 columns of both inserts type-checked against the live table** (all ok);
+and c1 and c3 run as bare queries. The worked type-check query is in the
+migration's own header, so the next person writing a `DO` block has it to
+hand.
+
 #### A FINDING FROM TESTING AGAINST A REAL ROW, NOT A FIXTURE
 
 Job 13's description is **pasted Markdown** — `# Job Description`,
