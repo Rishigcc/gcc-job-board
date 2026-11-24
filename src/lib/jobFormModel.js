@@ -92,11 +92,12 @@ export function validateJob(v) {
 
   const description = (v.description || "").trim();
   if (description.length < DESCRIPTION_MIN) {
-    // The message names the CONSEQUENCE, not the rule. "At least 400
-    // characters" reads as an arbitrary hurdle; the reason a recruiter
-    // should care is that Google will not list a thin posting, and most
-    // candidates reach these roles through Google.
-    e.description = `Describe the role in at least ${DESCRIPTION_MIN} characters — you have ${description.length}. A thin description stops the role appearing in Google's job results, where most candidates will find it.`;
+    // THE REQUIREMENT ALONE. The reason is already on screen twice by the
+    // time this appears -- in the field hint and in the live counter -- and
+    // Rishi's note, 24 Nov 2026: "At the moment someone is blocked, tell
+    // them what to do, not why for the third time." Explaining the Google
+    // consequence here was my addition and it was one explanation too many.
+    e.description = `Describe the role in at least ${DESCRIPTION_MIN} characters — you have ${description.length}.`;
   } else if (description.length > DESCRIPTION_MAX) {
     e.description = `Keep the description under ${DESCRIPTION_MAX.toLocaleString()} characters.`;
   }

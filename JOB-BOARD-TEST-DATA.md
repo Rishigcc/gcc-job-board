@@ -2758,12 +2758,32 @@ addresses; and the change-password box refusing a wrong current password.
 under test is an absence — that nothing was sent — and absence is proved at
 the sender, not at an inbox that may simply be slow.
 
-## Stage 11 (analytics) — WHAT IT ACTUALLY CONTAINS
+## Stage 11 (analytics) — DEFERRED TO v2, 24 Nov 2026
 
 Recorded 24 Nov 2026, because Rishi is weighing deferring it to v2 and asked
 to be told exactly what is in it and what would be left.
 
-**It contains analytics and nothing else.** Four events through a serverless
+**RISHI'S DECISION, 24 Nov 2026, verbatim:** *"Stage 11 is deferred to v2.
+GA4 already records per-role page views, so what I'd be deferring is a number
+shown inside the product, not the ability to measure."*
+
+### WHAT IS BEING GIVEN UP: THE DATA IS NOT RETROACTIVE
+
+Views not collected in v1 **cannot be recovered in v2**. If the board runs for
+six months without stage 11, there is no view history for those six months —
+not in the product, and not reconstructible from anything else, because no
+table is recording it. GA4 will hold its own page-view history for the
+retention period configured on that property, which is a different thing from
+per-role counts the product can read and show a recruiter.
+
+Everything else about the work gets *easier* by waiting, not harder: there will
+be real roles and real traffic to measure instead of a board with none. The
+non-retroactivity is the whole of the cost, and it is recorded here so it is a
+known trade rather than a surprise.
+
+### WHAT IT CONTAINED
+
+**Analytics and nothing else.** Four events through a serverless
 function, so the visitor hash can use the real IP while the salt stays
 server-side, and no raw IP is stored. There is no migration, no policy, no
 page and no cleanup bundled into it.
@@ -2800,6 +2820,51 @@ existence of view data.
 collected in v1 cannot be recovered in v2. Everything else about the work gets
 *easier* later, because by then there are real roles and real traffic to
 measure instead of a board with no roles.
+
+## The company seed — GENERATED 24 Nov 2026, NOT YET RUN
+
+Rishi, 24 Nov 2026: *"The company seed was never run. Typing 'walmart' offers
+to create it as a new company — the 1,814-name list is still just a file on
+disk. You said generating companies.sql was a one-command step independent of
+stage 9, and then it never happened."*
+
+He is right, and it was mine to do. `scripts/build-company-seed.mjs` has
+existed since stage 4; it had simply never been run against
+`supabase/seed/gcc-companies.txt`.
+
+```
+read       1815 lines
+kept       1814 companies
+collisions 0
+rejected   0
+wrote      supabase/seed/companies.sql
+```
+
+**Zero collisions and zero rejections**, which is the result worth noting: no
+two names in that list slugify the same way, so nothing had to be chosen by
+hand and no name was silently dropped.
+
+**Dry-run before handing it over** (the rule from migration 023, applied):
+
+| Checked | Result |
+|---|---|
+| `on conflict (slug)` has something to conflict on | `companies_slug_key :: UNIQUE (slug)` exists |
+| Columns the insert must satisfy | only `name` and `slug` — `id` defaults to `gen_random_uuid()`, `created_at` to `now()`, `logo_url` is nullable |
+| Apostrophe escaping | `Hudson''s Bay`, `L''Oréal`, `Lowe''s`, `Moody''s Analytics`, `Sonny''s Enterprises` all doubled correctly |
+| Existing rows that could be overwritten | 2 — `Test Co A` and `Test Co B`. Neither slug appears in the list, and `do nothing` would protect them anyway |
+| Size | 61 KB, 1,839 lines — one statement, well inside what the SQL editor takes |
+| `walmart` | present at line 1,764 as `('Walmart', 'walmart')`, which is the case he reported |
+
+**What it does to the picker.** `CompanyPicker` searches on two characters,
+debounced 250ms, `ilike` on both name and slug, capped at 8 results. Today
+every search returns nothing and the only option offered is "Add … as a new
+company". After the seed, a recruiter typing `walm` gets `Walmart` to click,
+and the create-new option appears **only when the search comes back empty** —
+which is the behaviour it was built for and has never been able to show.
+
+**Note, not a blocker:** `public.companies` is readable by anon, so all 1,814
+names are on the public API the moment this runs. They are company names, not
+anyone's data, but it is not a private staging area.
 
 ## Launch checklist — production-dependent verification
 
