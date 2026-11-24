@@ -2758,6 +2758,49 @@ addresses; and the change-password box refusing a wrong current password.
 under test is an absence — that nothing was sent — and absence is proved at
 the sender, not at an inbox that may simply be slow.
 
+## Stage 11 (analytics) — WHAT IT ACTUALLY CONTAINS
+
+Recorded 24 Nov 2026, because Rishi is weighing deferring it to v2 and asked
+to be told exactly what is in it and what would be left.
+
+**It contains analytics and nothing else.** Four events through a serverless
+function, so the visitor hash can use the real IP while the salt stays
+server-side, and no raw IP is stored. There is no migration, no policy, no
+page and no cleanup bundled into it.
+
+**Nothing launch-critical is inside it.** The merge, the test-data clearout,
+the policy date, the second admin and the constraint validation are all
+carried items with their own due points, none of which is "stage 11". Stage 12
+(recruiter password reset) is now the last stage before the merge, so dropping
+11 does not move the merge at all.
+
+**NOTHING IN STAGES 1–10 DEPENDS ON IT.** Checked rather than recalled:
+
+| Checked | Result |
+|---|---|
+| A views table, or any table named for analytics or events | **none exists** |
+| A `view_count` column, or any UI reading one | **none anywhere** in `src/`, `api/` or the migrations |
+| Job-board analytics already shipped | exactly one call — `exclusive_jobs_promo_clicked` in `BoardPromoCard.jsx` |
+| What `trackEvent` is | GA4 only (`window.gtag`), no server and no database, and guarded to `www.iworkatgcc.com` so previews never pollute it |
+
+**And the funnel already excludes views on purpose.** Stage 9b recorded it:
+*"all of these come from existing tables plus the audit log. Nothing needs new
+collection except 'did anyone look at the role', which needs stage 11. So the
+honest funnel in 9b is applications → shortlisted → not selected."* The admin
+reports were built around its absence, so deferring changes nothing there.
+
+**The one thing GA4 already gives him for free.** `src/main.jsx` fires a
+global `page_view` with `page_path` on every route change, so once the board is
+live, GA4 records views of `/gcc-jobs/<slug>-<id>` with no stage 11 at all.
+What stage 11 would add is a **de-duplicated per-role count inside the product**
+— the number a recruiter could be shown on their own dashboard — not the
+existence of view data.
+
+**The only real cost of deferring: the data is not retroactive.** Views not
+collected in v1 cannot be recovered in v2. Everything else about the work gets
+*easier* later, because by then there are real roles and real traffic to
+measure instead of a board with no roles.
+
 ## Launch checklist — production-dependent verification
 
 **This is the list, so it does not live only in a conversation.** Each item
@@ -2910,8 +2953,8 @@ hook and then sweeps. P1's curl covers both in one request.
 | 20 | **Set `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js` to eight weeks after the real launch date.** Shipped as a placeholder (`2027-01-19`, eight weeks from the day it was written) so the badge is visible on the preview. Eight weeks can only honestly be measured from launch, so this is set at merge **alongside `LAST_UPDATED`** in carried item 1 — same edit, same moment. No code change is needed to remove the badge: it compares the date at render. | Rishi, 24 Nov 2026 | Before merge |
 | 19 | **STAGE 4 CHANGE, TO BE DECIDED SEPARATELY: tell recruiters that a 100% remote role must say so in the description.** Google requires `jobLocationType: TELECOMMUTE` *and* that the description clearly states the role is remote. v1 does not ask recruiters for that, so a "remote" role whose description never says the word gets markup Google may disregard. Logged rather than built, because it changes a signed-off form. | Rishi, 23 Nov 2026 | **Stage 4 change** |
 | 18 | **THE POSTING FORM NEEDS RETESTING AS PART OF STAGE 10.** Raising the description minimum from 50 to 400 characters touches signed-off stage 4: `src/lib/jobFormModel.js`, the field hint, and the CHECK constraint on `jobs.description`. Rishi, 23 Nov 2026: "Raising it touches signed-off stage 4, so record that the posting form needs retesting as part of stage 10." | Rishi, 23 Nov 2026 | **Stage 10 round two** |
-| 17 | **STAGE 9 SCOPE: `purge_expired_applications()` writes an audit row.** A nightly retention purge is an administrative action, and on Hobby a log line is unreadable an hour later. An audit row turns "did the sweep run" into a SQL query that is answerable forever rather than within the hour after 02:00 UTC. | Rishi, 23 Nov 2026 | **Stage 9** |
-| 16 | **STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.** Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
+| 17 | ~~**STAGE 9 SCOPE: `purge_expired_applications()` writes an audit row.**~~ **DONE in stage 9** — verified against the live database 24 Nov 2026: the function's body writes an audit row. Was still shown as open. Originally: A nightly retention purge is an administrative action, and on Hobby a log line is unreadable an hour later. An audit row turns "did the sweep run" into a SQL query that is answerable forever rather than within the hour after 02:00 UTC. | Rishi, 23 Nov 2026 | **Stage 9** |
+| 16 | ~~**STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.**~~ **DONE in stage 9** — verified 24 Nov 2026 while answering what remains before launch: `AdminReports.jsx` shows `orphaned_files` with a risk tone, and `api/admin-delete-orphan.js` does the deleting, so it reports first and deletes second as decided. Was still shown as open, which would have made the pre-launch list two items longer than it is. Originally: Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
 | 15 | **DONE, BUT NOT AS BUILT — see "the board's placement changed, 24 Nov 2026".** Shipped in round one as an "Apply Directly" nav item and a homepage card; **both removed 24 Nov 2026** and replaced by a single promo card at the top of `/jobs`. The item's requirement — the board must be findable in the same stage that makes it public — is met by that card. D1 (the label) is closed by removal. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
 | 13 | **Partly done by stage 8's own testing, 22 Nov 2026: `candidate_resumes` is empty and the `resumes` bucket is completely empty, so those two lines are closed.** What remains: the anonymised `applications` rows, the 24 `[T5]` jobs, `Test Co A` and `Test Co B`, the two recruiter accounts, and `iworkatgcctest3@gmail.com`. Order still matters — jobs before companies, because of the foreign key. **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
