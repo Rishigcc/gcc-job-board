@@ -146,25 +146,42 @@ function Profile() {
           ) : (
             <div className="space-y-5">
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-800">
-                  Name
-                </label>
+              {/* RENDERED ONLY WHEN THERE IS SOMETHING TO SHOW.
+                  Both come from the Google identity -- profiles
+                  .google_display_name and .google_email -- which invariant I1
+                  keeps NULL for a recruiter. So a recruiter saw two rows
+                  reading "—", which is half of what they see at the top of
+                  this page and reads as broken software. Rishi, 25 Nov 2026.
 
-                <p className="mt-2 break-words rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
-                  {name || "—"}
-                </p>
-              </div>
+                  THE CONDITION IS THE ABSENCE OF THE DATA, NOT account_type.
+                  Keying off the role is the conditional-render mistake
+                  decision 10 rules out -- one person may be both a candidate
+                  and a recruiter, and this page is deliberately reachable for
+                  recruiters because of it. Testing the value also tidies the
+                  page for any community member missing one. */}
+              {name ? (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800">
+                    Name
+                  </label>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-800">
-                  Email
-                </label>
+                  <p className="mt-2 break-words rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
+                    {name}
+                  </p>
+                </div>
+              ) : null}
 
-                <p className="mt-2 break-words rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
-                  {email || "—"}
-                </p>
-              </div>
+              {email ? (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800">
+                    Email
+                  </label>
+
+                  <p className="mt-2 break-words rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
+                    {email}
+                  </p>
+                </div>
+              ) : null}
 
               <form onSubmit={handleSave}>
                 <label

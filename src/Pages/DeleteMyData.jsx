@@ -5,7 +5,11 @@ import SiteHeader from "../components/SiteHeader";
 import Footer from "../components/Footer";
 import Seo from "../components/Seo";
 import { fetchMyResume } from "../lib/applications";
-import { deleteMyResume, deleteMyJobData } from "../lib/candidateData";
+import {
+  deleteMyResume,
+  deleteMyJobData,
+  fetchMyApplications,
+} from "../lib/candidateData";
 import { formatApplicationDate } from "../lib/applicationDisplay";
 import { confirmed, CONFIRM_DELETE_MY_DATA } from "../lib/confirmations";
 
@@ -56,6 +60,11 @@ function Shell({ children }) {
 function DeleteMyData() {
   const [resume, setResume] = useState(undefined);
 
+  // undefined until known, then a count. Together with `resume` these decide
+  // whether this page has anything to offer at all -- see hasData below.
+  const [appCount, setAppCount] = useState(undefined);
+  const [savedCount, setSavedCount] = useState(undefined);
+
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -78,12 +87,34 @@ function DeleteMyData() {
 
       if (!id) {
         setResume(null);
+        setAppCount(0);
+        setSavedCount(0);
         return;
       }
 
       fetchMyResume(id).then((row) => {
         if (active) setResume(row);
       });
+
+      // my_applications() returns only rows whose candidate_id is the caller,
+      // and anonymising NULLS that column -- so this count is already the
+      // count of applications that still identify them. Nothing anonymised
+      // can appear here, which is exactly the right signal: an anonymised
+      // application is not data this page can still delete.
+      fetchMyApplications().then((result) => {
+        if (active) setAppCount(result.rows ? result.rows.length : 0);
+      });
+
+      // Counted off the table, like /profile does, rather than through
+      // my_saved_jobs(): the question is how many rows exist, not how many
+      // are still showable.
+      supabase
+        .from("job_saves")
+        .select("job_id", { count: "exact", head: true })
+        .eq("user_id", id)
+        .then(({ count }) => {
+          if (active) setSavedCount(count || 0);
+        });
     });
 
     return () => {
@@ -174,6 +205,74 @@ function DeleteMyData() {
         >
           Back to your profile
         </Link>
+      </Shell>
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // IS THERE ANYTHING HERE TO DELETE?
+  //
+  // undefined while any of the three is still loading, so the page does not
+  // flash "nothing to delete" at someone who has plenty.
+  //
+  // WHY THIS PAGE AND NOT THE LINK TO IT. Rishi asked to hide the "Delete my
+  // job board data" link from an account with no job board data. The privacy
+  // policy states as fact: "There is a Delete my job board data link on your
+  // profile." Most of the 2,520 community members have no job board data at
+  // all, so hiding the link on that condition would make a published sentence
+  // false for nearly everyone who reads the policy. Fixing the PAGE keeps the
+  // policy true and still removes the alarming reading -- at the point of
+  // decision, which is where it was doing the damage.
+  //
+  // For a recruiter the endpoint was always a no-op, but the old page
+  // promised to delete a resume and applications they do not have, leaving
+  // "my account" as the only remaining explanation.
+  //
+  // The condition is DATA, not account_type: a recruiter who saved a role
+  // has job board data and gets the full page, which is what decision 10
+  // requires.
+  const loadingData =
+    resume === undefined || appCount === undefined || savedCount === undefined;
+
+  const hasData = loadingData
+    ? undefined
+    : Boolean(resume) || appCount > 0 || savedCount > 0;
+
+  // `notice` holds "your resume has been deleted". Someone who deletes their
+  // resume and has nothing else would otherwise flip straight to the
+  // nothing-to-delete panel and lose the confirmation they just earned.
+  if (hasData === false && !notice) {
+    return (
+      <Shell>
+        <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          Delete my job board data
+        </h1>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-7 sm:py-7">
+          <h2 className="text-base font-bold text-slate-900">
+            There is nothing here to delete
+          </h2>
+
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            You have no resume on file, no applications and no saved roles, so
+            this page has nothing to remove. Nothing has been deleted and
+            nothing needs to be.
+          </p>
+
+          <p className="mt-3 text-sm leading-relaxed text-slate-600">
+            This page covers the job board only. It never touches your account,
+            your questions, your answers or the questions you have saved — and
+            if you are here as a recruiter, it never touches your company or
+            the roles you have posted.
+          </p>
+
+          <Link
+            to="/profile"
+            className="mt-5 inline-block rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            Back to your profile
+          </Link>
+        </div>
       </Shell>
     );
   }
