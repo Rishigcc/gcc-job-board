@@ -42,14 +42,14 @@ function GccJobCard({ job, save }) {
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-lg font-bold leading-snug text-slate-900">
+          <h2 className="break-words text-lg font-bold leading-snug text-slate-900">
             <Link to={jobPath(job)} className="transition hover:text-blue-700">
               {job.title}
             </Link>
           </h2>
 
           {company ? (
-            <p className="mt-0.5 text-sm font-semibold text-slate-700">{company}</p>
+            <p className="mt-0.5 break-words text-sm font-semibold text-slate-700">{company}</p>
           ) : null}
         </div>
 
@@ -78,7 +78,7 @@ function GccJobCard({ job, save }) {
       ) : null}
 
       {job.skills?.length ? (
-        <p className="mt-3 line-clamp-2 text-sm text-slate-600">
+        <p className="mt-3 line-clamp-2 break-words text-sm text-slate-600">
           {job.skills.slice(0, 8).join(" · ")}
         </p>
       ) : null}

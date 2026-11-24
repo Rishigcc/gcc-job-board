@@ -48,12 +48,12 @@ function InactiveRow({ row, onRemove }) {
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-base font-bold leading-snug text-slate-600">
+          <h2 className="break-words text-base font-bold leading-snug text-slate-600">
             {withheld ? "A role you saved" : row.title}
           </h2>
 
           {!withheld && row.company_name ? (
-            <p className="mt-0.5 text-sm font-semibold text-slate-500">
+            <p className="mt-0.5 break-words text-sm font-semibold text-slate-500">
               {row.company_name}
             </p>
           ) : null}

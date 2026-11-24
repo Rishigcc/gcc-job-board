@@ -2545,6 +2545,46 @@ corrected rather than the code.** The `>` inside the JSON body is legitimate —
 a word boundary does legitimately end with a letter before the ellipsis. Both
 assertions now test the real property instead.
 
+### An unbroken description overflowed the card — found 24 Nov 2026
+
+Rishi, testing stage 10 round two: *"a job description with no spaces
+overflows the detail page, on desktop and mobile. The text runs past the card
+edge instead of wrapping. `whitespace-pre-wrap` doesn't break an unbroken
+string — it needs the same treatment you gave the recruiter card's email field
+in stage 7."*
+
+Both halves of that are right. `white-space: pre-wrap` preserves newlines; it
+does **not** introduce a break inside a run of characters that contains no
+space. `break-words` (`overflow-wrap: break-word`) is what does, and it is
+what `src/Pages/RecruiterApplications.jsx:400` already used on the applicant's
+email in stage 7.
+
+**And the same fault was in four other elements**, each with a `min-w-0`
+wrapper and no `break-words` — all of them printing text somebody typed:
+
+| Where | Element |
+|---|---|
+| `GccJobDetail.jsx` | the description (**reported**), the `<h1>` title, the company name, each skill chip |
+| `GccJobCard.jsx` | the title, the company name, the skills line |
+| `SavedJobs.jsx` | the inactive row's title and company name |
+
+Fixed in the same pass rather than left for a second report. His own example
+was a test description, but as he said, *"a long URL or a pasted line of
+dashes in a real JD would do it too"* — and `jobs_title_check` allows 200
+characters, so an unbroken title overflows identically.
+
+`min-w-0` was already on every wrapper and is the other half of the fix:
+without it the grid track itself widens and no amount of wrapping inside
+helps. The skill chips also needed `max-w-full`, because a `rounded-full` pill
+sizes to its content and would otherwise stretch the row.
+
+**A side-effect worth recording.** `npm run build:spa` empties `dist/`, which
+deletes `dist/app.html` — written by `scripts/prerender.mjs`, not by Vite. The
+head test's "the real built shell is accepted" assertion failed because of it,
+which is the assertion doing its job: it reads the shell off disk precisely so
+that it fails when the build stops producing one. **Only `npm run build`
+leaves a complete `dist/`.**
+
 ### Stage 10 cleanup — created while testing in production
 
 | What | Where | Removed? |

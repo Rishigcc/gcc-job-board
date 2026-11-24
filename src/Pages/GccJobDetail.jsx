@@ -279,11 +279,14 @@ function GccJobDetail() {
             <div className="min-w-0 p-6 sm:p-8">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                  {/* The title has the same fault as the description and
+                      the constraint allows 200 characters, so an unbroken
+                      one would overflow identically. */}
+                  <h1 className="break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
                     {job.title}
                   </h1>
                   {company ? (
-                    <p className="mt-1 text-lg font-semibold text-slate-700">{company}</p>
+                    <p className="mt-1 break-words text-lg font-semibold text-slate-700">{company}</p>
                   ) : null}
                 </div>
 
@@ -319,8 +322,18 @@ function GccJobDetail() {
               <h2 className="mt-7 text-base font-bold text-slate-900">About the role</h2>
 
               {/* Plain text from the recruiter, rendered as text. Line breaks
-                  are preserved by CSS; nothing here is ever parsed as HTML. */}
-              <p className="mt-2 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-800">
+                  are preserved by CSS; nothing here is ever parsed as HTML.
+
+                  break-words IS LOAD-BEARING. whitespace-pre-wrap preserves
+                  newlines but will not break a run of characters with no
+                  space in it, so a pasted URL, a line of dashes or a
+                  description typed without spaces ran straight past the card
+                  edge on desktop and mobile alike. Rishi found it, 24 Nov
+                  2026, and named the fix: the same treatment the applicant's
+                  email got in stage 7. The min-w-0 on the grid column above
+                  is the other half -- without it the track itself widens and
+                  no amount of wrapping inside helps. */}
+              <p className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-slate-800">
                 {job.description}
               </p>
 
@@ -331,7 +344,7 @@ function GccJobDetail() {
                     {job.skills.map((skill) => (
                       <li
                         key={skill}
-                        className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700"
+                        className="max-w-full break-words rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700"
                       >
                         {skill}
                       </li>
