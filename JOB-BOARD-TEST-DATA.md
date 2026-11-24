@@ -2986,6 +2986,78 @@ guard, a live defect), and — if it is wanted sooner — hiding the
 delete-my-job-board-data link from an account with no job board data, which is
 one condition and could ride with any stage.
 
+## THE FOURTH FAULTY CHECK — migration 025's c1, 25 Nov 2026
+
+Rishi: *"6 of 7 PASS. c1 FAILS… But the grants are correct."* They were.
+**The check was wrong and the function was right.**
+
+### What c1 asserted that was false
+
+```sql
+and pg_get_function_identity_arguments(p.oid) = 'text'
+```
+
+That function returns argument **names and types** — `p_email text` — so the
+comparison was false and **could never be true for any function with a named
+argument.** Every other condition in c1 was true: definer, pinned at
+`search_path=public, pg_catalog`, returns text, service_role true, anon false,
+authenticated false, role list present, identity gate present.
+
+**Migration 022 used the identical line** and passed only because its function
+takes **no** arguments, where the value is `''`. Right once and wrong once for
+the same reason — the definition of a line I had not understood.
+
+Fixed to `pronargs` and `proargtypes`, which are the columns that mean what
+was intended. **The corrected c1 was then run against the live function before
+being handed back: PASS, with the full detail readable.**
+
+### The security posture is correct. The function stays.
+
+| | |
+|---|---|
+| `security definer` | true |
+| `proconfig` | `search_path=public, pg_catalog` |
+| arguments | 1, of type `text` |
+| returns | `text` |
+| `service_role` execute | **true** |
+| `anon` execute | **false** |
+| `authenticated` execute | **false** |
+| role list present | true |
+| identity gate present | true |
+
+Nothing to drop, nothing to re-run except the corrected c1.
+
+### WHAT CHANGES, because four is a pattern and not four accidents
+
+Rishi: *"The pattern isn't the individual mistakes, it's that the checks get
+less scrutiny than the code they're checking. Say what you'll do differently
+rather than just fixing this one."*
+
+The four: 015's c3 that could not fail, 017's c5 that could not pass, 020's
+eight that could not be read, and now 025's c1 that could not pass.
+
+**The rule added after 023 was half a rule.** It said *execute the migration's
+checks against the live database before handing the file over*, and for 025 I
+did execute — the function's **logic**. Every persona's verdict was computed
+read-only and every one was right. **I never evaluated what c1 asserted.** The
+dry run proved what the migration does, not what the checks claim.
+
+**The missing half, now recorded in the project memory:**
+
+> Every check that is meant to PASS must be proven to pass against a subject
+> that already satisfies it.
+
+A catalog-reading check can always be aimed at something that exists. Pointing
+025's c1 at `public.anonymise_job_data_for(uuid)` — definer, pinned,
+service_role-only, one named argument — returns `p_user uuid` and **fails**,
+in one read-only query, before the file leaves my hands. That is the test that
+catches this entire class, and it would have caught 017's c5 as well.
+
+**A check has two failure modes** — passing when it should fail, and failing
+when it should pass — and **neither is visible from reading it.** That is why
+reading them more carefully was never going to be the answer, and why the
+remedy is an executed predicate rather than more attention.
+
 ## Stage 12 — BUILD SCOPE, settled 25 Nov 2026
 
 Three deliverables. The constraints, the enforcement design and the proof plan

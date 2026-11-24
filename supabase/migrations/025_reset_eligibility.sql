@@ -135,12 +135,33 @@ delete from stage12_gate_checks;
 
 
 -- --- c1: definer, pinned, SERVICE_ROLE ONLY ------------------------------
+-- THIS CHECK FAILED ON ITS FIRST RUN, 25 Nov 2026, AND THE CHECK WAS WRONG.
+-- The function was correct the whole time.
+--
+--   It asserted `pg_get_function_identity_arguments(p.oid) = 'text'`.
+--   That function returns argument NAMES AND TYPES -- 'p_email text' -- so
+--   the comparison was false, and could never be true for any function with
+--   a named argument. Migration 022 used the same line and passed only
+--   because its function takes NO arguments, where the value is ''. Right
+--   once and wrong once for the same reason, which is the definition of a
+--   line I did not understand.
+--
+--   Arity and types now come from pronargs and proargtypes, which are the
+--   columns that mean what I wanted.
+--
+-- HOW IT WOULD HAVE BEEN CAUGHT, and the rule this earned: a check that is
+-- meant to PASS must be proven to pass against a subject that already
+-- satisfies it. Pointing this exact predicate at
+-- public.anonymise_job_data_for(uuid) -- definer, pinned, service_role-only,
+-- one named argument -- returns 'p_user uuid' and FAILS, in one read-only
+-- query, before the file is ever handed over.
 insert into stage12_gate_checks (seq, label, result, detail)
 with f as (
   select
     p.prosecdef                                               as definer,
     coalesce(array_to_string(p.proconfig, ' '), '(none)')     as cfg,
-    pg_get_function_identity_arguments(p.oid)                 as args,
+    p.pronargs                                                as nargs,
+    pg_catalog.format_type(p.proargtypes[0], null)            as arg0type,
     pg_catalog.format_type(p.prorettype, null)                as rettype,
     has_function_privilege('service_role',  p.oid, 'execute') as svc,
     has_function_privilege('anon',          p.oid, 'execute') as anon_x,
@@ -153,7 +174,8 @@ select 1,
   'c1  definer, pinned, and callable by service_role ALONE',
   case when f.definer
             and f.cfg like '%search_path=public, pg_catalog%'
-            and f.args = 'text'
+            and f.nargs = 1
+            and f.arg0type = 'text'
             and f.rettype = 'text'
             and f.svc and not f.anon_x and not f.auth_x
             and f.body like '%eligible_roles%'
@@ -161,7 +183,8 @@ select 1,
        then 'PASS' else 'FAIL' end,
   'security definer: ' || f.definer
     || '  ·  proconfig: ' || f.cfg
-    || '  ·  args: ' || f.args || '  ·  returns: ' || f.rettype
+    || '  ·  arguments: ' || f.nargs || ' of type ' || f.arg0type
+    || '  ·  returns: ' || f.rettype
     || '  ·  service_role: ' || f.svc
     || '  ·  anon (MUST be false): ' || f.anon_x
     || '  ·  authenticated (MUST be false): ' || f.auth_x
