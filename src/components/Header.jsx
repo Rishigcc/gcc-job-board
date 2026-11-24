@@ -56,15 +56,6 @@ function MailIcon(props) {
 // A paper plane, for the board where an application is actually sent. Not a
 // second briefcase: two briefcases side by side read as one feature split in
 // half rather than as two different things.
-function SendIcon(props) {
-  return (
-    <svg {...iconProps} {...props}>
-      <path d="M22 2 11 13" />
-      <path d="M22 2 15 22l-4-9-9-4Z" />
-    </svg>
-  );
-}
-
 const ACTION_ITEMS = [
   {
     key: "jobs",
@@ -75,24 +66,6 @@ const ACTION_ITEMS = [
     Icon: BriefcaseIcon,
     accent: "blue",
     to: "/jobs",
-  },
-  // THE BOARD'S CARD SITS SECOND, DIRECTLY BESIDE THE COLLATED LISTINGS.
-  // Side by side is what makes the difference between them legible; far
-  // apart, they read as the same feature listed twice.
-  //
-  // The title says "Roles", which the navigation label does not -- that is
-  // W7, Rishi's decision to settle the nav wording in the site-wide review
-  // rather than in isolation. Here there is room to say both the thing and
-  // the difference, so it does.
-  {
-    key: "gccJobs",
-    title: "Apply Directly to GCC Roles",
-    description:
-      "Roles posted on iWorkAtGCC by the people hiring for them. Apply here with your resume — no redirect to another site.",
-    linkLabel: "See roles you can apply to",
-    Icon: SendIcon,
-    accent: "orange",
-    to: "/gcc-jobs",
   },
   {
     key: "join",
@@ -169,15 +142,10 @@ function Header() {
     trackEvent("ask_answer_connect_clicked");
   };
 
-  const handleApplyDirectly = () => {
-    trackEvent("apply_directly_clicked");
-  };
-
   const handlers = {
     join: handleJoinCommunity,
     questions: handleAskAnswerConnect,
     jobs: handleExploreJobs,
-    gccJobs: handleApplyDirectly,
   };
 
   return (
@@ -246,7 +214,7 @@ function Header() {
             card sitting alone on a second row at a third of the width. This
             is a visible change to the homepage layout for everyone, which is
             why it is a step in the checklist rather than a quiet edit. */}
-        <div className="grid gap-5 md:grid-cols-2 md:gap-6 lg:grid-cols-4">
+        <div className="grid gap-5 md:grid-cols-3 md:gap-6">
           {ACTION_ITEMS.map((item) => (
             <FeatureCard
               key={item.key}

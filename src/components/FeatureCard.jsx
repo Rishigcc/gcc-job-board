@@ -1,20 +1,15 @@
 import { Link } from "react-router-dom";
 
-// orange was added for the fourth card (the job board). The same four names
-// the benefits list below the hero already uses, so the homepage does not
-// carry two different ideas of what an accent is.
 const ACCENT_CLASSES = {
   green: "bg-green-100 text-green-600",
   purple: "bg-purple-100 text-purple-600",
   blue: "bg-blue-100 text-blue-600",
-  orange: "bg-orange-100 text-orange-600",
 };
 
 const WAVE_CLASSES = {
   green: "bg-green-200",
   purple: "bg-purple-200",
   blue: "bg-blue-200",
-  orange: "bg-orange-200",
 };
 
 function ArrowIcon(props) {

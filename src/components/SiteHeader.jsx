@@ -60,26 +60,6 @@ function SiteHeader() {
         </>
       ),
     },
-    // Roles posted on iWorkAtGCC itself. It sits beside "Explore GCC Jobs"
-    // rather than replacing it: that label has been in this nav since before
-    // the board existed and the community knows it. The two are different
-    // things -- one sends a candidate to someone else's site, this one does
-    // not -- and the label is what says so.
-    //
-    // A paper plane, not a second briefcase: two briefcases side by side
-    // would read as one feature split in half.
-    {
-      key: "gccJobs",
-      label: "Apply Directly",
-      to: "/gcc-jobs",
-      show: !isRecruiter,
-      icon: (
-        <>
-          <path d="M22 2 11 13" />
-          <path d="M22 2 15 22l-4-9-9-4Z" />
-        </>
-      ),
-    },
     {
       key: "questions",
       label: "Ask, Answer & Connect",
