@@ -3093,6 +3093,69 @@ The second is a product decision, not a tidy-up. Nothing stops a recruiter
 asking questions today, and nothing marks their questions as coming from a
 recruiter.
 
+### Deliverable 1a — `api/request-password-reset.js`, BUILT 25 Nov 2026
+
+One reply for every outcome: `200 { ok: true }`, `no-store`, padded to a
+**1,200ms floor**. Eligible, role-not-eligible, no-identity, no-account,
+malformed input and a failed send all return the same bytes.
+
+**The gate uses the service key; the send uses the publishable key.** The
+first because `reset_eligibility_for_email` is granted to `service_role`
+alone. The second because the send is Supabase's own reset flow — it mints
+the token, applies its own rate limits, and goes through the SMTP already
+configured for the signup email. **Nothing in this file composes or delivers
+mail**, which is why this is the second permitted email rather than a new
+sending path.
+
+**Fail closed on a gate error.** An unreadable gate means no email: sending
+one anyway is the single thing the endpoint exists to prevent.
+
+**What the timing floor actually protects.** Not "does this address have an
+account" — Supabase's `/auth/v1/recover` is open to anyone holding the
+publishable key and answers identically, so that secret is not ours to keep.
+It protects the secret this endpoint *adds*: **whether the address has the
+recruiter role.** And it is mitigation, not elimination — SMTP has variance a
+fixed floor cannot fully mask.
+
+**Deliberately absent: a rate limiter.** Supabase already enforces one reset
+per user per 60 seconds and 30 requests per 5 minutes per IP on the send, and
+since every reply is identical there is nothing to learn by hammering it —
+only database load, which the RPC absorbs. If that changes, the fix belongs at
+the edge, not in the file.
+
+**Deliberately absent: the address in the logs.** The verdict is logged
+because it answers "nothing arrived"; the address is not, because a log of who
+asked for a reset is a record nobody needs. What was sent is in Brevo's log.
+
+#### How it was proved: `scripts/stage12-reset-gate-test.mjs`, 63 assertions
+
+**The test cannot send an email, by construction.** Every address it uses is
+one the gate must refuse — a real community member, the admin, an address with
+no account, and malformed input — so none can reach the send. Fixtures are
+looked up through the admin API rather than hardcoded, so no member is named
+in a committed file.
+
+Twelve refusing paths enumerated, each asserted to return **status 200, body
+`{ ok: true }`, `no-store`, and ≥1,195ms**, then every reply asserted
+**byte-identical to the first**, with the spread across all of them under
+400ms. The method guard is the one path allowed to differ, and 405 is asserted
+separately.
+
+**For the one path a test must not run**, the eligible send, the test proves it
+has nowhere else to answer from: exactly **one** `res.status(200)` in the
+file, at least five refusals routed through `sameReply`, the send reached only
+after an eligible verdict, the gate on the service key and the send on the
+publishable one.
+
+**Two bugs in the test itself, both found by running it.** The
+"send is reached only after an eligible verdict" assertion compared against
+the **header comment's** mention of `resetPasswordForEmail` rather than the
+call, and failed on correct code — now anchored on `anon.auth.`. And a
+variable named `communityEmail` actually held the admin's row, so **the
+community-member case described in the header was never run**; it is now, and
+it is the case covering 2,652 accounts. Both are the check-the-check rule from
+025 applied to a JavaScript test instead of a migration.
+
 ### WHAT IS NEEDED BEFORE IT STARTS, not partway through
 
 | | Prerequisite | Why |
@@ -3712,7 +3775,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 27 | **LIVE DEFECT ON A SIGNED-OFF PAGE: pasted Markdown is rendered literally to candidates.** Rishi's correction, 24 Nov 2026: *"a candidate reading job 13 right now sees `# Job Description` and `**bold**` on screen, so item 27 is a live defect on a signed-off page, not just a snippet problem."* He is right, and I had filed it a category too low. **The defect is what a candidate reads**; the Google snippet beginning `# Job Description` is a symptom of the same cause, not the problem. Job 13's description opens `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout, and `/gcc-jobs/:slugId` renders it with `whitespace-pre-wrap`, which deliberately never parses HTML. Options: render a safe Markdown subset; strip the markers for display and for the meta description; or change the field hint and let recruiters paste plain text. Whichever is chosen, note that the markup must keep matching the page — Google requires everything in the markup to be visible on it — so display and markup have to change together. | Found 24 Nov 2026 testing against a real row; severity corrected by Rishi the same day | **Before merge** |
 | 26 | **`alter table public.jobs validate constraint jobs_description_check;` after the pre-merge clearout.** Migration 023 added it `NOT VALID` because 24 of 25 existing rows are under 400 characters — all of them `[T5]` test jobs deleted by carried item 13. Once those are gone, validate it, and confirm `convalidated` is true. The statement is at the bottom of the migration file. It fails loudly if anything short remains, which is the point. | Migration 023 | **After carried item 13, before merge** |
 | 25 | **DESIGN PASS: two items from stage 10's sign-off.** (a) The `/post-a-job` recruiter panel has a lot of empty white space under the sign-up button. (b) The promo card's illustration keeps its yellow sparks — decided, not outstanding; recorded so the design pass does not reopen it. | Rishi, 24 Nov 2026 | Design pass |
-| 24 | **The "Password changed" security notification must be confirmed OFF before stage 12 ships.** Supabase can send a `Password changed` notification, which would be a THIRD email the day the reset flow goes live. The docs name no dashboard control for it — the only on/off mechanism they show is the Management API flag `mailer_notifications_password_changed_enabled`. Recommended setting: **off**, with the compensating control being `current_password` on the change-password box (a session hijacker cannot rotate the password without knowing the old one). Revisit as an explicit decision at stage 12. | Rishi, 24 Nov 2026 | **Before stage 12** |
+| 24 | ~~**The "Password changed" security notification must be confirmed OFF before stage 12 ships.**~~ **DONE 25 Nov 2026, and MY ANSWER WAS WRONG ABOUT WHERE.** I said the docs name no dashboard control and the only mechanism was the Management API flag `mailer_notifications_password_changed_enabled`, needing a Personal Access Token. The docs do not name it — **the dashboard does have it.** Rishi found it: **Authentication → Emails**, a **Security** section below the templates list, with toggles for Password changed, Email address changed, Phone number changed, Sign-in method linked/removed and MFA method added/removed. **All seven were already off.** No API call and no token. Recorded here as the location, because the next person will look where I told them to look and not find it. | Rishi, 25 Nov 2026 | Closed |
 | 23 | **Add a second admin account that Rishi alone controls.** `public.user_roles` has exactly one `admin` row, on a Google-only account. Losing that Google account loses the admin role, with no second admin to grant it back. A data change, not a migration. **The real break-glass is the Supabase dashboard**, from which an admin row can always be inserted — so the higher-value action is hardening his Supabase account (2FA, recovery), and the second admin covers the narrower case of losing the Google account. Note both admins would share one failure mode (Google suspending him) but not the common ones. The second account sees all applications, so it must be an account only he controls, never a shared mailbox. | Rishi, 24 Nov 2026 | **Now** |
 | 22 | **An admin-set-password tool, LOGGED NOT BUILT.** `auth.admin.updateUserById(uid, { password })` sets a password with no email — the docs say *"Changes are applied directly without confirmation flows"* — service-role and server-side only. Paired with the phone number already collected and validated at recruiter signup, it is a reset with zero emails. Rishi's decision, 24 Nov 2026: *"log it, don't build it. Revisit when a recruiter actually loses their mailbox."* It is the only thing that helps a recruiter whose **mailbox** is gone, which a reset email by definition cannot fix. | Rishi, 24 Nov 2026 | Deferred |
 | 21 | **`/post-a-job` NEEDS RETESTING — decision 29 touches a signed-off page.** `src/Pages/PostAJob.jsx` now shows a signed-in community member a notice that recruiter accounts are separate. The page is stage 3/4 work and signed off. Retest: the recruiter sign-up still works signed out, an already-signed-in recruiter still sees "Your recruiter account is ready", and the new notice appears only for a signed-in non-recruiter. | Rishi, 24 Nov 2026 | **Stage 10 round two** |
