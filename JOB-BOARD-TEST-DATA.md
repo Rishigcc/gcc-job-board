@@ -2998,12 +2998,28 @@ and what has to be true before it starts.
 |---|---|
 | 1 | **The reset flow.** A request page (email in, one reply whatever the answer) and a landing page (set a new password). Gated server-side: only an account with the recruiter **role** gets an email, and the landing page refuses an ineligible account. |
 | 2 | **The change-password box**, for a signed-in recruiter, requiring `current_password`. `@supabase/supabase-js` is 2.112.3, past the 2.102.0 that added it. |
-| 3 | **`/recruiter/settings`**, inside `RecruiterRoute`. Company name read-only with both names shown and labelled; login email read-only; verification status linked to `/recruiter`, not duplicated. The recruiter header shows **Settings** in place of Profile, with one line linking to the community profile. |
+| 3 | **`/recruiter/settings`**, inside `RecruiterRoute`. Company name read-only with both names shown and labelled; login email read-only; verification status linked to `/recruiter`, not duplicated. The recruiter header shows **Settings** in place of Profile. **No line linking to the community profile** — that line assumed one account could be both, and it cannot. |
+| 4 | **The candidate-only routes are closed to recruiters.** `blockRecruiters` on all seven: `/profile`, `/profile/asked`, `/profile/saved`, `/profile/saved-jobs`, `/profile/delete-data`, `/my-applications`, `/ask`. It redirects to `/recruiter` **before anything mounts**, so there is no conditional rendering inside any page and no flash. And `show: Boolean(session) && !isRecruiter` on the Profile nav item. |
+| 5 | **Two comments corrected in the same pass.** `/my-applications`'s route comment (*"one person may be both a candidate and a recruiter, and the candidate half is theirs to see"*) and `ProtectedRoute`'s (*"`/profile` must stay reachable for recruiters"*) both rest on the premise disproved on 25 Nov. Rishi: *"a wrong premise left in a comment is how the next person re-derives the same error."* `RecruiterRoute`'s *"one person is allowed to be both"* branch comment needs the person/account distinction spelled out rather than removed — the branch itself is still correct. |
+| 6 | **The privacy policy gains a recruiter paragraph**, approved as drafted 25 Nov 2026: *"Your recruiter account is separate from a community account, even if you use iWorkAtGCC as both — they are two separate logins. You can see and correct what we hold about you from your recruiter settings. To delete a recruiter account and its roles, email jobs@iworkatgcc.com and we will do it by hand."* **It commits Rishi to deleting recruiter accounts by hand on request**, which he accepted explicitly at this volume. It goes in the `<h2>If you are a recruiter</h2>` section, which today says what is stored and nothing about access or deletion. The candidate sentence about the delete link is **not** changed — it is already candidate-scoped. |
 
 Migration **025** adds the eligibility function: `security definer`, pinned
 `search_path`, granted to **service_role only**, reading `public.user_roles`
 with an eligible-roles list in one place, plus the identity check that stops a
 password being created on an OAuth-only account.
+
+#### Why `/ask` is in the blocked list
+
+Rishi's two reasons, 25 Nov 2026, and the second is the one that matters:
+
+1. *"With `/profile` blocked a recruiter can't set a display name, so a
+   question from a recruiter account has no name to show."*
+2. *"A recruiter posting into a community of 2,520 job-seekers is a channel I
+   don't want open by accident."*
+
+The second is a product decision, not a tidy-up. Nothing stops a recruiter
+asking questions today, and nothing marks their questions as coming from a
+recruiter.
 
 ### WHAT IS NEEDED BEFORE IT STARTS, not partway through
 
@@ -3640,11 +3656,49 @@ hook and then sweeps. P1's curl covers both in one request.
 | 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
 | 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |
 | 9 | ~~**`auth.signUp` is not domain-restricted.**~~ **DEFERRED by Rishi, 18 Nov 2026.** The free-provider blocklist lives in the client form and in the `handle_new_recruiter` trigger, but the trigger only fires when the `recruiter_profiles` row is inserted, so a scripted call to `/auth/v1/signup` can still create an **unconfirmed** `auth.users` row on any domain and burn one Brevo send. Rishi's call: the trigger still stops them becoming a recruiter, so it is a junk account that can do nothing. Not worth a Before User Created auth hook. Revisit only if junk signups or send quota ever become a real problem. | Stage 3 review | Deferred — no action |
-| 10 | **A recruiter can create a community `profiles` row — and that is now intended.** `saveDisplayName()` in `src/lib/useDisplayName.js` upserts one, reachable from `/profile`, `/ask` and any question page. **Rishi's decision, 18 Nov 2026: leave the behaviour as it is.** Someone who deliberately sets a display name is choosing to join the community, which matches the "one person can be both" decision. `/ask` and `/profile` stay reachable for recruiters. **The guard is the invariant below, not a code change.** | Stage 3 review | Decided — see the invariant |
+| 10 | **HALF SUPERSEDED 25 Nov 2026 — see "Decision 10 does not apply to /profile".** The half that said *"`/ask` and `/profile` stay reachable for recruiters"* **no longer stands**: stage 12 blocks both, because the dual-use account that reasoning protected does not exist and cannot be created (0 of 2,656 accounts have two identities; `recruiter_profiles` rows are only ever created from `PostAJob.jsx`'s signUp metadata, and `handle_new_recruiter()` raises for free email domains). Decision 10 protects a **person** who holds two logins, not one account. The consequence accepted with it: a recruiter can no longer set a display name, so the "recruiter chooses to join the community" path closes — that person uses their Google login instead. The rest of the item stands as the record of what was decided on 18 Nov. Originally: **A recruiter can create a community `profiles` row — and that is now intended.** `saveDisplayName()` in `src/lib/useDisplayName.js` upserts one, reachable from `/profile`, `/ask` and any question page. **Rishi's decision, 18 Nov 2026: leave the behaviour as it is.** Someone who deliberately sets a display name is choosing to join the community, which matches the "one person can be both" decision. `/ask` and `/profile` stay reachable for recruiters. **The guard is the invariant below, not a code change.** | Stage 3 review | Decided — see the invariant |
 | 11 | ~~**Stale unconfirmed `auth.users` rows / pre-account-takeover.**~~ **CLOSED 18 Nov 2026 by test T2 — outcome B.** A pre-registered unconfirmed password account was merged into the same user id when the real owner signed in with Google, and Supabase wiped **both** the attacker's password (`has_password` false, `providers` google only) **and** the attacker's `user_metadata`. `signInWithPassword` with the attacker's password returned 400 "Invalid login credentials". No cleanup cron is needed. | Stage 3 review | Closed |
 | 12 | **`user_activity` now skips recruiters.** `ActivityTracker` is mounted at the app root and ran `record_activity()` for every signed-in user, recruiters included — proven by the one row `community@iworkatgcc.com` had accumulated. That table feeds the digest's active-user set and the community stats, so recruiters were inflating both. Guarded in stage 3. The guard keys off `account_type` metadata; if one account ever needs to be both candidate and recruiter, change it to key off the presence of a `profiles` row instead. | Rishi, stage 3 retest | Closed (guard shipped); stray row listed above for cleanup |
 
 ## Invariants — things a later stage must not quietly break
+
+### I3 — a forged `account_type` must stay unable to create a recruiter
+
+**Recorded 25 Nov 2026 as a known abuse case with no action needed.** Rishi
+asked for it in the record rather than in a conversation.
+
+`src/lib/accountType.js` is explicit that `isRecruiterUser()` is *"a DISPLAY
+and ROUTING hint only… never a security boundary"*, and
+`auth.updateUser({ data })` does let a signed-in person write their own
+`user_metadata`. So a community member **can** forge
+`account_type: "recruiter"` from the browser console, and `RecruiterRoute`
+would then try to create a `recruiter_profiles` row for their Google account.
+
+**What stops it is in the database.** `private.handle_new_recruiter()` fires
+BEFORE INSERT and raises for free email domains. Measured 25 Nov 2026:
+**2,611 of the 2,654 Google accounts are on blocked free domains**, so the
+forge fails for all of them.
+
+**The 43 remaining are on work domains and would succeed** — ending up with a
+Google identity and a recruiter row on one account, the only way a single
+account can be both. Accepted, because a person on a work domain who
+deliberately forges recruiter metadata **is** a recruiter, not a dual-use
+candidate anyone needs to design around. The blast radius is junk postings,
+which stage 9's admin hide already covers, and candidate details stay withheld
+until the company is verified.
+
+**Stage 12 already refuses this account**, which is why the reset gate has two
+halves rather than one: such an account has `user_roles.role = 'recruiter'`
+(so the **role** gate passes) and **no password** (so the **identity** gate
+refuses). A role-only test would have emailed a reset link to a Google
+account, which is precisely the identity-linking risk the second gate exists
+for.
+
+**What a later stage must not do:** collapse the reset gate to the role test
+alone, or move the free-domain check out of
+`private.handle_new_recruiter()` into client code.
+
+
 
 These are not to-do items. They are rules that currently hold, that nothing
 enforces mechanically, and that a reasonable-looking future change could
