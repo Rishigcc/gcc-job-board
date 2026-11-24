@@ -747,7 +747,7 @@ function QuestionDetail() {
                   </form>
                 ) : (
                   <>
-                <h1 className="text-xl font-bold leading-snug text-slate-900 sm:text-2xl">
+                <h1 className="break-words text-xl font-bold leading-snug text-slate-900 sm:text-2xl">
                   {question.title}
                 </h1>
 
@@ -769,7 +769,7 @@ function QuestionDetail() {
                   </div>
                 )}
 
-                <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-600 sm:text-base">
+                <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 sm:text-base">
                   {question.description}
                 </p>
 
@@ -1031,7 +1031,7 @@ function QuestionDetail() {
                             : "border-slate-200"
                         }`}
                       >
-                        <p className="text-xs text-slate-500 sm:text-sm">
+                        <p className="break-words text-xs text-slate-500 sm:text-sm">
                           {answer.author_name || "Community Member"}
                           {answer.user_id === question.user_id && (
                             <span className="ml-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
@@ -1088,7 +1088,7 @@ function QuestionDetail() {
                           </form>
                         ) : (
                           <>
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 sm:text-base">
+                            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700 sm:text-base">
                               {answer.body}
                             </p>
 

@@ -114,7 +114,7 @@ function QuestionCard({
     >
       <h2
         ref={titleRef}
-        className="line-clamp-2 text-lg font-bold leading-snug text-slate-900 sm:text-xl"
+        className="line-clamp-2 break-words text-lg font-bold leading-snug text-slate-900 sm:text-xl"
       >
         {question.title}
       </h2>
@@ -133,7 +133,7 @@ function QuestionCard({
 
       <p
         ref={descriptionRef}
-        className="mt-2 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-slate-600 sm:text-base"
+        className="mt-2 line-clamp-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 sm:text-base"
       >
         {question.description}
       </p>

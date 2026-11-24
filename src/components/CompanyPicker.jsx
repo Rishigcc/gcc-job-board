@@ -242,7 +242,7 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
           }
         >
           <div>
-            <p className="text-sm font-semibold text-slate-900">{companyName}</p>
+            <p className="break-words text-sm font-semibold text-slate-900">{companyName}</p>
             <p className="mt-0.5 text-xs text-slate-700">
               {isNew
                 ? "New company. This name will be created and cannot be edited afterwards — check the spelling now."
@@ -305,7 +305,7 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
                         : "bg-white text-slate-800 hover:bg-slate-50")
                     }
                   >
-                    <span className="font-medium">{company.name}</span>
+                    <span className="break-words font-medium">{company.name}</span>
                     <span className="shrink-0 text-xs text-slate-500">Use this</span>
                   </button>
                 </li>
@@ -318,7 +318,7 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
           )}
 
           {slugTwin ? (
-            <p className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <p className="break-words border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
               <strong>{slugTwin.name}</strong> is the same name, so it will be
               used rather than a second copy created.
             </p>

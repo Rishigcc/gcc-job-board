@@ -33,7 +33,7 @@ function Recruiter({ row, busy, onVerify, onSuspend }) {
             )}
           </div>
 
-          <p className="mt-1 text-sm text-slate-700">
+          <p className="mt-1 break-words text-sm text-slate-700">
             {row.recruiter_name} · @{row.email_domain}
           </p>
 

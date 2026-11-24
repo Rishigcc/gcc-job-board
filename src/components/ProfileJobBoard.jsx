@@ -183,7 +183,7 @@ function ProfileJobBoard({ userId }) {
 
             {chosen ? (
               <div className="mt-3 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5">
-                <p className="text-sm font-medium text-slate-900">
+                <p className="break-words text-sm font-medium text-slate-900">
                   {chosen.name} · {(chosen.size / 1024).toFixed(0)} KB
                 </p>
 

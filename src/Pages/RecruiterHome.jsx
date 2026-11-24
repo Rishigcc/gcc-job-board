@@ -36,7 +36,7 @@ function RecruiterHome() {
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
 
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+          <h1 className="break-words text-2xl font-bold text-slate-900 sm:text-3xl">
             {profile.company_name}
           </h1>
 

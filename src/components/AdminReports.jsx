@@ -212,7 +212,7 @@ function Roles({ rows }) {
       ) : (
         <Table head={["Role", "Status", "Apps", "Unactioned", "Shortlisted", "Not selected", "Anon.", "First application"]}>
           {visible.map((r) => (
-            <tr key={r.job_id} className="border-b border-slate-200 align-top">
+            <tr key={r.job_id} className="border-b border-slate-200 align-top break-words">
               <td className="px-2 py-2">
                 <div className="font-semibold text-slate-900">{r.title}</div>
                 <div className="text-xs text-slate-500">
@@ -251,7 +251,7 @@ function Recruiters({ rows }) {
   return (
     <Table head={["Recruiter", "State", "Roles", "Applications", "Decided", "Verification took", "Last posted"]}>
       {rows.map((r) => (
-        <tr key={r.user_id} className="border-b border-slate-200 align-top">
+        <tr key={r.user_id} className="border-b border-slate-200 align-top break-words">
           <td className="px-2 py-2">
             <div className="font-semibold text-slate-900">{r.company_name}</div>
             <div className="text-xs text-slate-500">
@@ -347,7 +347,7 @@ function Candidates({ rows, totals }) {
       ) : (
         <Table head={["Candidate", "Roles applied to", "Shortlisted", "Not selected", "First", "Last", ""]}>
           {rows.map((c) => (
-            <tr key={c.candidate_id} className="border-b border-slate-200 align-top">
+            <tr key={c.candidate_id} className="border-b border-slate-200 align-top break-words">
               <td className="px-2 py-2">
                 <div className="font-semibold text-slate-900">{c.full_name || "—"}</div>
                 {c.has_resume ? null : (
@@ -381,7 +381,7 @@ function Candidates({ rows, totals }) {
             <p className="text-sm text-slate-600">Nothing to show for that candidate.</p>
           ) : (
             <>
-              <h3 className="text-base font-bold text-slate-900">{detail[0].full_name}</h3>
+              <h3 className="break-words text-base font-bold text-slate-900">{detail[0].full_name}</h3>
               <p className="mt-1 break-words text-sm text-slate-700">
                 <a href={`mailto:${detail[0].email}`} className="font-medium text-blue-700 hover:underline">
                   {detail[0].email}

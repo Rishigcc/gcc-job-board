@@ -2545,6 +2545,71 @@ corrected rather than the code.** The `>` inside the JSON body is legitimate —
 a word boundary does legitimately end with a letter before the ellipsis. Both
 assertions now test the real property instead.
 
+### THE OVERFLOW SWEEP — every place the app prints text somebody typed
+
+Rishi, after the first fix missed `/recruiter/jobs`: *"Rather than fix that one
+and find a seventh tomorrow: sweep every place in the app that prints text a
+user typed."* Right call — the first pass fixed the five places I happened to
+be looking at.
+
+**Method, so the number can be trusted.** The free-text columns were read off
+the live database rather than remembered: `jobs.title/description/skills`,
+`applications.full_name/email/phone/notice_period`, `companies.name`,
+`profiles.display_name/google_*`, `questions.title/description/author_name`,
+`answers.body`, `recruiter_profiles.*`. Dropdown-backed columns were excluded
+on purpose — `city`, `work_mode`, `job_function`, `employment_type`,
+`status`, `apply_mode`, `salary_*` come from `jobOptions`, so no recruiter can
+make them long.
+
+Then every `.jsx` under `src/` was scanned for renderings of those fields, and
+each hit resolved against **its own element and its ancestors**.
+
+**`overflow-wrap` IS AN INHERITED PROPERTY**, which the first count got wrong.
+A parent carrying `break-words` covers every child, so 21 of the 46 renderings
+were already protected — including `GccJobCard`'s title `<Link>`, covered by
+the `<h2>` around it. Fixing those again would have been noise.
+
+**Two gaps in the method, both found by running it rather than trusting it:**
+
+1. **Single-line elements were invisible to the first pattern.** The admin
+   reports render `<div className="…">{r.title}</div>` on one line, so a
+   pattern requiring the interpolation to stand alone missed every table cell
+   — exactly the pages Rishi asked about.
+2. **A column-driven list misses derived names.** `{agency}` on the job detail
+   page and in `ApplyPanel` is recruiter-supplied text that arrives from
+   `job_posting_agency()`, not from a column called `agency`. So is
+   `{chosen.name}` — the **resume filename**, which the candidate chose. Four
+   more places came from a second sweep for derived names.
+
+**28 places fixed, across 15 files.**
+
+| Where | What it prints |
+|---|---|
+| `RecruiterJobs` | the job title — **the one Rishi reported** |
+| `RecruiterApplications` | the heading naming the role and company; the error message (`break-all`, since a Postgres string has no spaces to break at) |
+| `RecruiterHome` | the recruiter's own company name |
+| `QuestionDetail` | the question title, its body, each answer's body, the author name |
+| `QuestionCard`, `TrendingQuestionCard` | title and description |
+| `Profile` | the Google name and email shown back to the member |
+| `ProfileJobBoard` | **the resume filename** |
+| `ApplyPanel` | the role, the company and the posting agency |
+| `CompanyPicker` | a result name, the resolved chip, the same-name note |
+| `JobForm` | `ReviewRow`'s `<dd>` |
+| `GccJobDetail` | `Fact`'s `<dd>` — the 270px sidebar, the narrowest column on the site |
+| `AdminReports` | three `<tr>` elements and the candidate detail heading |
+| `AdminRecruiters` | the recruiter name and email domain |
+
+**Three of those were chosen for inheritance rather than for the line that
+failed**, so they cover what is there now and what gets added later:
+`AdminReports`' three `<tr>`s (every cell in every reports table),
+`ReviewRow`'s `<dd>` (both review rows and any future one), and `Fact`'s
+`<dd>` (every row in the job sidebar).
+
+**`line-clamp` was hiding four of them rather than fixing them.** It sets
+`overflow: hidden`, so a long unbroken title was clipped instead of spilling —
+contained, but cut mid-character with no ellipsis and no wrap. Those four now
+wrap first and clamp second.
+
 ### An unbroken description overflowed the card — found 24 Nov 2026
 
 Rishi, testing stage 10 round two: *"a job description with no spaces

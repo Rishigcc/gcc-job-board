@@ -253,7 +253,7 @@ function RecruiterApplications() {
           <h1 className="text-xl font-bold text-red-900">
             These applications could not be loaded.
           </h1>
-          <p className="mt-2 font-mono text-xs text-red-700">{resolved.message}</p>
+          <p className="mt-2 break-all font-mono text-xs text-red-700">{resolved.message}</p>
         </div>
       </Shell>
     );
@@ -282,7 +282,7 @@ function RecruiterApplications() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Applications
           </h1>
-          <p className="mt-1.5 text-slate-700">
+          <p className="mt-1.5 break-words text-slate-700">
             <strong>{job.title}</strong>
             {job.companies?.name ? <> · {job.companies.name}</> : null} · {job.city}
           </p>

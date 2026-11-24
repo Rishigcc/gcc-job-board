@@ -264,7 +264,7 @@ function TrendingQuestionCard({ desktopIntervalMultiplier = 5 }) {
             >
               <Link
                 to={`/questions/${spotlightQuestions[safeSpotlightIndex].slug}`}
-                className="block h-12 line-clamp-2 text-lg font-extrabold leading-snug tracking-tight text-slate-900 transition hover:text-blue-700"
+                className="block h-12 line-clamp-2 break-words text-lg font-extrabold leading-snug tracking-tight text-slate-900 transition hover:text-blue-700"
               >
                 {spotlightQuestions[safeSpotlightIndex].title}
               </Link>
@@ -275,7 +275,7 @@ function TrendingQuestionCard({ desktopIntervalMultiplier = 5 }) {
 
               <p
                 ref={heroDescriptionRef}
-                className="mt-1.5 h-10 line-clamp-2 text-sm leading-5 text-slate-600"
+                className="mt-1.5 h-10 line-clamp-2 break-words text-sm leading-5 text-slate-600"
               >
                 {spotlightQuestions[safeSpotlightIndex].description}
               </p>

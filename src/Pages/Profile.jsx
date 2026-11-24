@@ -151,7 +151,7 @@ function Profile() {
                   Name
                 </label>
 
-                <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
+                <p className="mt-2 break-words rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
                   {name || "—"}
                 </p>
               </div>
@@ -161,7 +161,7 @@ function Profile() {
                   Email
                 </label>
 
-                <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
+                <p className="mt-2 break-words rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
                   {email || "—"}
                 </p>
               </div>

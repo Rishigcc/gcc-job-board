@@ -194,7 +194,7 @@ function ApplyPanel({ job, agency, openByDefault }) {
         <h2 className="text-lg font-bold text-emerald-950">
           You have applied to this job
         </h2>
-        <p className="mt-2 text-[15px] leading-relaxed text-emerald-900">
+        <p className="mt-2 break-words text-[15px] leading-relaxed text-emerald-900">
           Your resume and details have gone to the recruiter for{" "}
           <strong>{job.title}</strong>
           {job.companies?.name ? <> at <strong>{job.companies.name}</strong></> : null}.
@@ -204,7 +204,7 @@ function ApplyPanel({ job, agency, openByDefault }) {
             staffing firm is handling this role, the candidate should know
             who actually receives their resume. */}
         {agency && agency !== job.companies?.name ? (
-          <p className="mt-2 text-[15px] leading-relaxed text-emerald-900">
+          <p className="mt-2 break-words text-[15px] leading-relaxed text-emerald-900">
             This role is being handled by <strong>{agency}</strong>, so they
             will see your application as well as the hiring company.
           </p>
