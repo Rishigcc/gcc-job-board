@@ -53,7 +53,16 @@ function Privacy() {
       <p>
         You sign in with Google. We receive your name, email address and
         profile picture from your Google account. We also store the questions
-        and answers you post, and which posts you have saved or liked.
+        and answers you post, and which questions you have saved or liked.
+      </p>
+
+      <h3>When you save a role</h3>
+      <p>
+        If you press Save on a role, we store which role it was, your account
+        reference and the date. Nothing else, and nobody is told — the
+        recruiter cannot see who has saved their role, or how many people
+        have. It is a bookmark for you, and you can remove it at any time from
+        your profile.
       </p>
 
       <h3>When you apply for a job</h3>
@@ -134,6 +143,11 @@ function Privacy() {
           <strong>Your resume file:</strong> until you replace or delete it.
         </li>
         <li>
+          <strong>Saved roles:</strong> until you remove them, until you
+          delete your job board data, or until your account is deleted —
+          whichever comes first.
+        </li>
+        <li>
           <strong>Recruiter records:</strong> for as long as the account
           exists, and afterwards only what we need to keep for tax and legal
           reasons.
@@ -153,6 +167,11 @@ function Privacy() {
         <li>
           <strong>Your resume file is permanently deleted</strong> from our
           storage. This cannot be undone.
+        </li>
+        <li>
+          <strong>Every role you have saved is deleted</strong>, not
+          anonymised. There is nothing in a saved role worth keeping once you
+          have asked to be forgotten.
         </li>
         <li>
           <strong>
@@ -175,7 +194,8 @@ function Privacy() {
         <li>You can apply to the same role again afterwards if you want to.</li>
         <li>
           <strong>
-            Your community account, questions and answers are not touched.
+            Your community account, questions, answers and saved questions are
+            not touched.
           </strong>{" "}
           They are removed on request as a separate step — email{" "}
           <a href="mailto:jobs@iworkatgcc.com">jobs@iworkatgcc.com</a> and say
@@ -211,11 +231,12 @@ function Privacy() {
         imply otherwise.
       </p>
       <p>
-        What you can do now is <strong>Delete my data</strong>, above. That
-        strips your name and contact details from every application you have
-        sent and permanently deletes your resume file. It is not the same as
-        withdrawing — the recruiter keeps an anonymous record that an
-        application was made — and it cannot be undone.
+        What you can do now is <strong>Delete my job board data</strong>,
+        above. That strips your name and contact details from every
+        application you have sent, permanently deletes your resume file, and
+        removes every role you have saved. It is not the same as withdrawing —
+        the recruiter keeps an anonymous record that an application was made —
+        and it cannot be undone.
       </p>
       <p>
         If you want a recruiter to stop considering you for a specific role,

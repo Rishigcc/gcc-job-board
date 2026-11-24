@@ -975,7 +975,7 @@ sign-off.
 | W1 | The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
 | W2 | Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
 | ~~W3~~ **DONE in 9b** | ~~The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** **Shipped 23 Nov 2026: anonymised applications no longer count toward "new" and appear as their own figure. Left here rather than deleted, because W6 is about how that same line now reads.** |
-| W4 | The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
+| ~~W4~~ **DONE 24 Nov 2026** | ~~The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**.** Fixed as part of the D3 policy rewrite, with Rishi's agreement: *"Take W4 in D as you suggested — no point leaving the old name in a sentence you're rewriting."* The same stale name was also in a code comment in `Profile.jsx`, now corrected. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
 | W5 | **Two tabs called Roles on `/admin`** — the action queue's and the report's. Confusing on one screen. | Rishi, 23 Nov 2026. Renaming one is a word; deciding which is the question. The admin one acts on roles, the report one counts them, so "Moderate roles" / "Roles" or "Roles" / "Role performance" are both defensible. |
 | W7 | **The navigation label "Apply Directly" does not contain the word "jobs".** | Raised by me, 23 Nov 2026; Rishi's decision the same day: *"Keep 'Apply Directly' for now. Your reservation is noted and I agree it's real, but the wording review covers the whole site and this is one line. Log it there rather than deciding it in isolation."* The concern: scanning *Explore GCC Jobs · Apply Directly*, a visitor may not realise both are job listings — and the item holding our own roles is the one that does not announce itself as roles. Candidates that keep the distinction and still say jobs: **Direct GCC Jobs**, **Jobs: Apply Directly**. Note the homepage card added the same day says "Apply Directly to GCC **Roles**", so the two surfaces currently word it differently — which the review should settle together. |
 | W6 | **The recruiter summary line's figures overlap** — `1 new · 1 not selected · 3 anonymised` sums to 5 against 4 applications, because the not-selected one is also anonymised. | Deliberate, and recorded as deliberate in the W3 note: the first three say what you decided, the last says who can no longer be contacted. But Rishi is right that **a reader will try to add them**, and a figure that invites a wrong sum is a wording problem even when every number is correct. Options: separate them visually, or label the last one so it reads as a qualifier rather than a fourth bucket. |
@@ -1944,6 +1944,27 @@ homepage is prerendered, so `dist/index.html` now contains a real
 `<a href="/gcc-jobs">`. A crawler reaching the homepage finds the board
 **without running JavaScript** — which is part of what round two was for,
 delivered early by where the card happens to live.
+
+### Stage 10 — D3's policy wording, approved 24 Nov 2026
+
+Four changes, all approved as drafted:
+
+| Where | What changed |
+|---|---|
+| **What we collect** | A new `<h3>When you save a role</h3>`. It sits between the community section and the application section because a saved role is the **only** job board data collected from someone who has not applied — so it cannot live under "When you apply", and it is not community data either. It states plainly that the recruiter is told nothing: not who saved the role, not how many did. |
+| **What we collect** (community) | *"which posts you have saved or liked"* → *"which **questions** you have saved or liked"*, so the two kinds of save are never confused anywhere in the document. |
+| **What we keep and for how long** | A retention line: saved roles last until removed, until the job board data is deleted, or until the account is deleted — whichever comes first. |
+| **Deleting your data** | A new bullet before the applications one: every saved role is **deleted, not anonymised**, because there is nothing in a bookmark worth keeping once someone has asked to be forgotten. And the "not touched" bullet now names **saved questions** explicitly. |
+| **Can I take an application back?** | Rewritten to include saved roles — and **W4 fixed in the same sentence**, since it was being rewritten anyway. |
+
+**`LAST_UPDATED` deliberately left at 22 November 2026.** Carried item 1 sets
+it to the real launch date at merge, and no date is correct before then: the
+policy is not published, so "24 November" would be as untrue as "22
+November". This is the one place where leaving a stale value is the honest
+choice rather than the lazy one.
+
+**D3 is now complete.** The code was ahead of the promise between 23 and 24
+November, which was only safe because nothing merges until stage 11.
 
 ### Stage 10 — D3, and the argument I got wrong
 

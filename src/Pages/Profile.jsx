@@ -263,7 +263,7 @@ function Profile() {
         )}
 
         {/* The job board half of the profile: applications, the resume on
-            file, and Delete my data -- which lives here because the privacy
+            file, and Delete my job board data -- which lives here because the privacy
             policy says it does. Kept in its own component so this page, which
             the community has used since before the job board existed, gains
             one line rather than two hundred. */}
