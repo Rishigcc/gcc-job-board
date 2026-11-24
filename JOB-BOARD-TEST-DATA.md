@@ -2274,6 +2274,39 @@ website"** (its body), **"Roles posted on iWorkAtGCC"** (the page's own `h1`)
 and **"direct GCC jobs"** (the end-of-list card). Each reads well alone. W7's
 line about the nav label is moot — the nav item is gone.
 
+### Stage 10 round two (placement) — SIGNED OFF 24 Nov 2026
+
+Rishi's result, verbatim: *"Stage 10 round two (placement) passes."*
+
+| What he confirmed | Result |
+|---|---|
+| Migration 021 | 5 checks, all PASS |
+| Migration 022 | 4 checks, all PASS — **c4 showed the point: 23 as a visitor against 25 as the recruiter** |
+| Fail-closed before 022 ran | no card on `/jobs` |
+| The card | renders, links to `/gcc-jobs`, and `live_job_count()` matches the 23 the page prints |
+| Removals | no "Apply Directly" anywhere; homepage back to three cards; recruiters still see the promo card |
+| `/gcc-jobs` | end-of-list card on the last page only; `zzzz` gives "Nothing matches that", not the new-feature copy |
+| `/post-a-job` | no notice signed out; amber notice for a signed-in community member; "Your recruiter account is ready" for a recruiter |
+| Delete flow | resume gone, **6 applications anonymised, 5 saved roles removed**, community account and saved questions untouched, Roles Saved 0, Questions Saved unchanged, lower-case confirmation refused |
+| 375px | no overflow; illustration dropped on phones as intended |
+
+**c4 is the check worth remembering.** It was written to fail if the bug it
+describes were absent, and it reported 23 against 25 — a plain count really
+would have shown the admin two roles that no visitor can see. The card would
+have appeared over an empty board for exactly one person: its author.
+
+On decision 29's notice, Rishi: *"The notice also warns that posting signs
+them out of their community account on that device — good catch, that's the
+part someone would otherwise find out the hard way."*
+
+**Two items deferred to the design pass, not fixed now, on his instruction:**
+
+- The `/post-a-job` recruiter panel has a lot of empty white space under the
+  button.
+- **The illustration's yellow sparks stay.** His words: *"three accent marks
+  in a corner aren't the warning-coloured panel I objected to."* That closes
+  the colour note raised when the illustration was wired in.
+
 ### Stage 10 cleanup — created while testing in production
 
 | What | Where | Removed? |
@@ -2629,6 +2662,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 25 | **DESIGN PASS: two items from stage 10's sign-off.** (a) The `/post-a-job` recruiter panel has a lot of empty white space under the sign-up button. (b) The promo card's illustration keeps its yellow sparks — decided, not outstanding; recorded so the design pass does not reopen it. | Rishi, 24 Nov 2026 | Design pass |
 | 24 | **The "Password changed" security notification must be confirmed OFF before stage 12 ships.** Supabase can send a `Password changed` notification, which would be a THIRD email the day the reset flow goes live. The docs name no dashboard control for it — the only on/off mechanism they show is the Management API flag `mailer_notifications_password_changed_enabled`. Recommended setting: **off**, with the compensating control being `current_password` on the change-password box (a session hijacker cannot rotate the password without knowing the old one). Revisit as an explicit decision at stage 12. | Rishi, 24 Nov 2026 | **Before stage 12** |
 | 23 | **Add a second admin account that Rishi alone controls.** `public.user_roles` has exactly one `admin` row, on a Google-only account. Losing that Google account loses the admin role, with no second admin to grant it back. A data change, not a migration. **The real break-glass is the Supabase dashboard**, from which an admin row can always be inserted — so the higher-value action is hardening his Supabase account (2FA, recovery), and the second admin covers the narrower case of losing the Google account. Note both admins would share one failure mode (Google suspending him) but not the common ones. The second account sees all applications, so it must be an account only he controls, never a shared mailbox. | Rishi, 24 Nov 2026 | **Now** |
 | 22 | **An admin-set-password tool, LOGGED NOT BUILT.** `auth.admin.updateUserById(uid, { password })` sets a password with no email — the docs say *"Changes are applied directly without confirmation flows"* — service-role and server-side only. Paired with the phone number already collected and validated at recruiter signup, it is a reset with zero emails. Rishi's decision, 24 Nov 2026: *"log it, don't build it. Revisit when a recruiter actually loses their mailbox."* It is the only thing that helps a recruiter whose **mailbox** is gone, which a reset email by definition cannot fix. | Rishi, 24 Nov 2026 | Deferred |
