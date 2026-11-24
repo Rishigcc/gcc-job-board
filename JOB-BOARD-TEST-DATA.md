@@ -2940,6 +2940,63 @@ right instrument**: `name` true, `slug` true, `logo_url` false. And
 `src/lib/jobMutations.js` inserts exactly `{ name, slug }`, so the picker's
 "add a new company" works and is correctly unable to set a logo.
 
+## The picker offered "add as new" next to a match — fixed 24 Nov 2026
+
+Rishi, after running the seed: *"typing `wal` shows Walmart and 'Add "wal" as
+a new company' directly beneath it — one misclick from a permanent company
+called "wal". That's the duplicate-creation problem the picker was built to
+stop."*
+
+**And I had told him it already behaved correctly.** I read this comment —
+
+```
+// Enter picks a highlighted row, or adds a new company only when the
+// search has come back empty.
+```
+
+— and described it as the **render** rule. It is the **Enter key** rule. The
+keyboard path was always safe; the mouse path never was, and that asymmetry is
+why nobody had noticed in four stages of testing. `canAddNew` was
+`showPanel && slug.length > 0 && !slugTwin` — nothing about whether the list
+had matches in it.
+
+The damage is permanent by design: `companies.slug` is immutable (migration
+001, *"a live URL must never change"*), recruiters cannot delete, so junk
+created here needs `admin_rename_company` to clear up.
+
+### WHY IT IS NOT SIMPLY "EMPTY RESULTS ONLY"
+
+That was the obvious fix and it has a worse failure mode. The search is
+`ilike %term%`, so **a company whose full name is a proper substring of a
+listed one can never produce an empty result.** A recruiter at a company
+called "Sonic" sees "SonicWall", gets no way to add their own, and **cannot
+post at all** — `jobs.company_id` is NOT NULL. A recruiter blocked from the
+product is worse than a misnamed company an admin can rename in one call.
+
+### WHAT IT DOES NOW
+
+| Results | What is offered |
+|---|---|
+| none | "Add '<name>' as a new company", prominent, as before |
+| matches | **no create row.** A muted "None of these is my company" instead |
+| matches, after that is clicked | a note to check the list again, **then** the create button |
+
+Three properties worth keeping:
+
+- **The common case resolves itself.** Because the match is on a substring,
+  typing the FULL company name empties the list — so anyone whose company is
+  genuinely absent reaches the prominent offer by typing what they were going
+  to type anyway.
+- **The reveal is stored as the term it was opened for**, not a boolean, so
+  typing one more character closes it again with no effect and no stale state.
+- **The note above the revealed button is a spacer as well as a sentence.**
+  Without it the create button would appear exactly where the recruiter just
+  clicked, and a double-click would reveal and create in one gesture —
+  reintroducing the misclick the arrangement exists to stop.
+
+`Enter` now honours a deliberately opened hatch too, so the keyboard and the
+mouse finally agree about when a company can be created.
+
 ## The company seed — GENERATED 24 Nov 2026, NOT YET RUN
 
 Rishi, 24 Nov 2026: *"The company seed was never run. Typing 'walmart' offers

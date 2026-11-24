@@ -66,6 +66,10 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
   // what react-hooks/set-state-in-effect is asking for.
   const [results, setResults] = useState({ term: "", rows: [] });
   const [highlight, setHighlight] = useState(-1);
+  // Which term the "add anyway" escape hatch was opened for. Stored as the
+  // term rather than a boolean, so typing one more character closes it
+  // again with no effect and no stale-state bug.
+  const [addAnywayFor, setAddAnywayFor] = useState("");
   const inputRef = useRef(null);
 
   const query = sanitise(term);
@@ -166,7 +170,37 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
   // A name that slugifies onto an existing row would be silently merged into
   // it by resolveCompany(), so offering "add as new" there would be a lie.
   const slugTwin = rows.find((c) => c.slug === slug);
+
+  // WHETHER A NEW COMPANY *COULD* BE CREATED FROM WHAT IS TYPED.
   const canAddNew = showPanel && slug.length > 0 && !slugTwin;
+
+  // WHETHER TO OFFER IT, WHICH IS A DIFFERENT QUESTION -- and the one this
+  // component got wrong until 24 Nov 2026.
+  //
+  // Rishi found it: typing "wal" showed Walmart with "Add 'wal' as a new
+  // company" directly beneath, one misclick from a permanent company called
+  // "wal". The keyboard path was already safe (Enter requires an empty
+  // result below); the mouse path was not, which is the asymmetry that hid
+  // it. The slug is immutable by design -- migration 001: "a live URL must
+  // never change" -- and recruiters cannot delete, so junk created here
+  // needs an admin to rename it.
+  //
+  // So with matches on screen the create row is NOT rendered. It takes a
+  // deliberate second action to reach.
+  //
+  // WHY IT IS NOT SIMPLY "EMPTY RESULTS ONLY", which was the first
+  // instinct: the search is `ilike %term%`, so a company whose full name is
+  // a proper substring of a listed one can never produce an empty result.
+  // A recruiter at "Sonic" would see "SonicWall", get no way to add their
+  // own, and be unable to post at all -- company_id is NOT NULL. That is a
+  // worse failure than a misnamed company an admin can rename.
+  //
+  // The common case still resolves itself: because the match is on a
+  // substring, typing the FULL company name empties the list, so anyone
+  // whose company is genuinely absent arrives at the prominent offer by
+  // typing the thing they were going to type anyway.
+  const addAnywayOpen = addAnywayFor === query;
+  const offerAddNew = canAddNew && (rows.length === 0 || addAnywayOpen);
 
   // Enter must pick the highlighted company, never submit the form. The form
   // blocks Enter as well; this runs first and is the useful half.
@@ -189,7 +223,7 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
       // whole point of the list.
       event.preventDefault();
       if (highlight >= 0 && rows[highlight]) choose(rows[highlight]);
-      else if (canAddNew && rows.length === 0) addNew();
+      else if (offerAddNew) addNew();
       return;
     }
     if (event.key === "Escape") {
@@ -290,22 +324,50 @@ function CompanyPicker({ value, onChange, error, inputId = "company_name" }) {
             </p>
           ) : null}
 
-          {canAddNew ? (
+          {offerAddNew ? (
+            <>
+              {/* THIS NOTE IS A SPACER AS WELL AS A SENTENCE. Without it the
+                  create button would appear exactly where the recruiter just
+                  clicked "None of these is my company", so a double-click
+                  would reveal and then create in one gesture -- reintroducing
+                  the misclick this whole arrangement exists to stop. */}
+              {rows.length > 0 ? (
+                <p className="border-t border-slate-200 bg-slate-50 px-3 pt-2 text-xs text-slate-600">
+                  Check the list above once more. A new company cannot be
+                  renamed afterwards.
+                </p>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={addNew}
+                className={
+                  "w-full bg-slate-50 px-3 py-2.5 text-left text-sm font-semibold text-blue-800 transition hover:bg-slate-100" +
+                  (rows.length > 0 ? "" : " border-t border-slate-200")
+                }
+              >
+                Add “{term.trim()}” as a new company
+              </button>
+            </>
+          ) : canAddNew ? (
+            /* Matches are on screen, so creating is one deliberate click
+               away rather than the next row down. Muted, lighter than a
+               result, and it creates nothing by itself. */
             <button
               type="button"
-              onClick={addNew}
-              className="w-full border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-sm font-semibold text-blue-800 transition hover:bg-slate-100"
+              onClick={() => setAddAnywayFor(query)}
+              className="w-full border-t border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
             >
-              Add “{term.trim()}” as a new company
+              None of these is my company
             </button>
           ) : null}
         </div>
       ) : null}
 
       <p className="mt-1.5 text-xs text-slate-500">
-        Pick the company from the list if it is there. Adding a new one is
-        permanent — company names cannot be edited afterwards, so only add one
-        when it genuinely is not listed.
+        Pick the company from the list if it is there. Type the full name if
+        it is not — adding a new company is permanent, because the name cannot
+        be edited afterwards.
       </p>
 
       {error ? (
