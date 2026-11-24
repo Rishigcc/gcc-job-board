@@ -2733,10 +2733,43 @@ which is the assertion doing its job: it reads the shell off disk precisely so
 that it fails when the build stops producing one. **Only `npm run build`
 leaves a complete `dist/`.**
 
+### STAGE 10 — SIGNED OFF, BOTH HALVES, 25 Nov 2026
+
+Rishi's result, verbatim: *"Stage 10 passes, both halves."*
+
+| What he confirmed | Result |
+|---|---|
+| Migrations 023 and 024 | both PASS |
+| The company seed | **1,816 total**, Walmart present, both test companies intact, c3's fixture cleaned up |
+| The policy at scale | `set local role anon` sees **2 of 1,816** |
+| Rewrite order, on the preview | `JobPosting` and `index, follow` present on a live role; absent from `/gcc-jobs`; `/jobs` and `/questions` still prerendered with their content |
+| A closed role | **404 on the document while rendering a proper page**, `noindex` present, `JobPosting` absent |
+| Sitemaps | `sitemap-jobs.xml` lists the live roles with production URLs and excludes the closed one; `sitemap.xml` intact; `/api/` still reachable |
+| Description minimum | enforced at 400 on new posts **and on edits to the old roles**; counter trimmed |
+| The picker | `wal` returns five real matches with no create row; the hatch opens and closes; `zzzz` offers create directly; a role posted end to end under a listed company; **no junk company rows** |
+| Overflow | fixed everywhere checked — long titles, descriptions, URLs, skills, resume filenames, the 270px sidebar, the review step, all four Reports tabs, and the community pages unchanged |
+
+**The check worth remembering from this half** is 024's c3, which made its own
+negative fixture. Every company had a public role at the time, so there was
+nothing the new policy would hide; the check inserted a jobless company,
+proved `anon` could not see it, and deleted it. The real proof came later, at
+scale, from his own query: 2 of 1,816.
+
+**And the lesson from the overflow work**, which cost three rounds: a class can
+be present in the compiled CSS, applied to the element, and reported by
+`getComputedStyle` — and still be **inert**. `overflow-wrap: break-word` does
+not reduce a flex item's min-content size, so `break-words` on a flex child
+does nothing without `min-w-0`. Verifying that a class compiles proves that a
+class compiles. `scripts/check-overflow.mjs` now measures the rendered page
+instead.
+
 ### Stage 10 cleanup — created while testing in production
 
 | What | Where | Removed? |
 |---|---|---|
+| **Role 41, "trial job"** | `public.jobs` | Created 24 Nov 14:36 while testing. Delete with the other test roles. |
+| **Role 42, the 180-character-title role** | `public.jobs` | Created 24 Nov 15:03, slug `trial-jobs-agaion`. **This is one row, not two** — Rishi listed "trial jobs againo" and "the 150-character-title role" separately, and they are the same posting. Its title is 180 characters, not 150. It is the fixture `scripts/check-overflow.mjs` drives, so **delete it last**, and expect that script to need a new fixture afterwards. |
+| **The resume on `iworkatgcctest3@gmail.com`** | `public.candidate_resumes` + the object in the `resumes` bucket | Uploaded 24 Nov 18:45. **The stored path is generated** (`<uuid>/<timestamp>-<uuid>.pdf`), so the long filename Rishi typed exists only in the UI — delete by `candidate_id`, not by name. That account also now has **1 application and 2 saved roles**. |
 | `job_saves` rows made while testing the Save button | `public.job_saves` | Add to the pre-merge clearout. Harmless if missed — they are bookmarks on test jobs that are themselves being deleted, and the FK cascades. |
 
 Migration 020's own check `c7` inserts three saves, reads them back and deletes
@@ -2848,7 +2881,51 @@ guard, a live defect), and — if it is wanted sooner — hiding the
 delete-my-job-board-data link from an account with no job board data, which is
 one condition and could ride with any stage.
 
-## Stage 12 — recruiter password reset (SCOPED 24 Nov 2026, NOT BUILT)
+## Stage 12 — BUILD SCOPE, settled 25 Nov 2026
+
+Three deliverables. The constraints, the enforcement design and the proof plan
+were settled on 24 Nov and are in the section below — this is what gets built
+and what has to be true before it starts.
+
+### What gets built
+
+| | |
+|---|---|
+| 1 | **The reset flow.** A request page (email in, one reply whatever the answer) and a landing page (set a new password). Gated server-side: only an account with the recruiter **role** gets an email, and the landing page refuses an ineligible account. |
+| 2 | **The change-password box**, for a signed-in recruiter, requiring `current_password`. `@supabase/supabase-js` is 2.112.3, past the 2.102.0 that added it. |
+| 3 | **`/recruiter/settings`**, inside `RecruiterRoute`. Company name read-only with both names shown and labelled; login email read-only; verification status linked to `/recruiter`, not duplicated. The recruiter header shows **Settings** in place of Profile, with one line linking to the community profile. |
+
+Migration **025** adds the eligibility function: `security definer`, pinned
+`search_path`, granted to **service_role only**, reading `public.user_roles`
+with an eligible-roles list in one place, plus the identity check that stops a
+password being created on an OAuth-only account.
+
+### WHAT IS NEEDED BEFORE IT STARTS, not partway through
+
+| | Prerequisite | Why |
+|---|---|---|
+| A | **Supabase Redirect URLs must allow the reset landing path** — the preview host and `https://www.iworkatgcc.com`. | `resetPasswordForEmail`'s `redirectTo` must be on the allowlist or the link in the email dead-ends. This is a dashboard change only Rishi can make, and without it the flow cannot be tested at all. Do it together with carried item 8 (`http://localhost:5173/**`), so the allowlist is edited once. |
+| B | **Carried item 24: confirm the "Password changed" notification is OFF.** | Otherwise the change-password box ships a third Brevo email on day one. The docs name no dashboard control; the flag is `mailer_notifications_password_changed_enabled` via the Management API, which needs a Personal Access Token Rishi creates. **He runs it; the token is never pasted here.** |
+| C | **A decision on the reset email's template.** | Supabase's default "Reset Password" body is generic and unsigned. Leaving it is fine; editing it is a dashboard change. Either way it is the second and last permitted email. |
+| D | **One Brevo log check after the first test send.** | The only place that shows what was actually sent. The claim under test in the negative cases is an **absence**, and an absence is proved at the sender, not at an inbox that may be slow. |
+
+### Carried items that land in or around stage 12
+
+- **29, before merge** — `/profile`'s Name and Email rows, and
+  `/profile/delete-data` saying there is nothing to delete. Not stage 12, but
+  it touches the same pages, so doing it first avoids two passes over them.
+- **24, before stage 12** — prerequisite B above.
+- **23, now** — the second admin account. Independent, still outstanding.
+- **22, deferred** — the admin-set-password tool. Rishi: *"Revisit when a
+  recruiter actually loses their mailbox."* Not in scope.
+
+### What stage 12 does NOT include
+
+Candidate password reset (candidates have no password — 2,623 of 2,626
+accounts are Google-only), email change, account deletion, and any automated
+email beyond the reset itself.
+
+## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on
 recruiter sign-in.** A recruiter who forgets their password has no way back
@@ -3453,7 +3530,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 16 | ~~**STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.**~~ **DONE in stage 9** — verified 24 Nov 2026 while answering what remains before launch: `AdminReports.jsx` shows `orphaned_files` with a risk tone, and `api/admin-delete-orphan.js` does the deleting, so it reports first and deletes second as decided. Was still shown as open, which would have made the pre-launch list two items longer than it is. Originally: Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
 | 15 | **DONE, BUT NOT AS BUILT — see "the board's placement changed, 24 Nov 2026".** Shipped in round one as an "Apply Directly" nav item and a homepage card; **both removed 24 Nov 2026** and replaced by a single promo card at the top of `/jobs`. The item's requirement — the board must be findable in the same stage that makes it public — is met by that card. D1 (the label) is closed by removal. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
-| 13 | **Partly done by stage 8's own testing, 22 Nov 2026: `candidate_resumes` is empty and the `resumes` bucket is completely empty, so those two lines are closed.** What remains: the anonymised `applications` rows, the 24 `[T5]` jobs, `Test Co A` and `Test Co B`, the two recruiter accounts, and `iworkatgcctest3@gmail.com`. Order still matters — jobs before companies, because of the foreign key. **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
+| 13 | **REOPENED 25 Nov 2026 — the two lines closed on 22 Nov are no longer true.** `candidate_resumes` has one row again and the `resumes` bucket one object, both from testing stage 10 on `iworkatgcctest3@gmail.com` (24 Nov 18:45). They are back in scope for the clearout. Originally: *Partly done by stage 8's own testing, 22 Nov 2026: `candidate_resumes` is empty and the `resumes` bucket is completely empty, so those two lines are closed.* What remains: the anonymised `applications` rows, the 24 `[T5]` jobs, `Test Co A` and `Test Co B`, the two recruiter accounts, and `iworkatgcctest3@gmail.com`. Order still matters — jobs before companies, because of the foreign key. **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
 | 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |
