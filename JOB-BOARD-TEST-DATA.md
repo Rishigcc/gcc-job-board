@@ -2776,7 +2776,112 @@ Migration 020's own check `c7` inserts three saves, reads them back and deletes
 them **before** judging the result, so a failed check cleans up after itself as
 well as a passing one does. `c8` then asserts the table is empty.
 
-## /profile for a recruiter — SCOPED 25 Nov 2026, NOT BUILT
+## DECISION 10 DOES NOT APPLY TO /profile — settled with evidence, 25 Nov 2026
+
+Rishi: *"If recruiter accounts are genuinely separate, decision 10's reasoning
+doesn't apply to this page — there is no dual-use person to protect, because
+the dual-use person has two logins."* He asked for evidence rather than
+reasoning. Here it is, and **he is right**.
+
+### The live data: not one dual-use account in 2,656
+
+| Measured 25 Nov 2026 | |
+|---|---|
+| Accounts | **2,656** |
+| Accounts with **two identities** | **0** |
+| Google accounts holding a password | **0** |
+| Recruiters with a community `profiles` row | **0** |
+| Recruiters with a question or an answer | **0** |
+
+Both recruiter accounts are `providers: ["email"]`, with no `profiles` row, no
+display name, no questions and no saved questions.
+
+### The code: a community account cannot become a recruiter account
+
+`recruiter_profiles` rows are created in **exactly one place** —
+`RecruiterRoute` — and only when `isRecruiterUser(user)` is true, which tests
+`user_metadata.account_type === 'recruiter'`. That metadata is written in
+**exactly one place**: the `signUp` call in `PostAJob.jsx`, which creates a new
+email-and-password account. A Google session carries no such metadata, so
+`RecruiterRoute` returns `not-a-recruiter` and creates nothing.
+
+**And the database blocks the forged path.** `auth.updateUser({ data })` does
+write `user_metadata`, so a community member could forge `account_type` from
+the browser console — `src/lib/accountType.js` says as much: *"this is a
+DISPLAY and ROUTING hint only… a determined person could put anything in it."*
+But `private.handle_new_recruiter()` fires BEFORE INSERT and raises for free
+email domains, and **2,611 of the 2,654 Google accounts are on blocked free
+domains**. The other 43 are on work domains and would pass — and someone on a
+work domain who forges recruiter metadata is a recruiter, not a dual-use
+candidate anyone needs to protect.
+
+**Migration 003's "upgrade a candidate to recruiter" is about the ROLE ROW, not
+the account.** Its body is `on conflict (user_id) do update set role =
+'recruiter' where user_roles.role <> 'admin'` — it upgrades `user_roles` and
+protects an admin from being demoted. It does not turn a Google account into a
+recruiter.
+
+### So the conflation was mine, and it was between PERSON and ACCOUNT
+
+`RecruiterRoute`'s own comment reads *"one person is allowed to be both a
+candidate and a recruiter."* True — **of a person**. That person has two
+logins. Decision 10 protects a person who holds both; it says nothing about
+what a single account should be shown.
+
+**This supersedes part of decision 10 rather than reinterpreting it.** Carried
+item 10 explicitly said *"`/ask` and `/profile` stay reachable for
+recruiters"*, and that half no longer stands. Its other half — that a
+recruiter who deliberately sets a display name is choosing to join the
+community — is now unreachable for a recruiter with no profile page, which is
+a consequence to accept rather than a problem: the recruiter who wants a
+community presence has a Google login for it.
+
+**And it means the argument I used on 25 Nov against conditional rendering was
+wrong on its facts.** The conclusion survives — a separate
+`/recruiter/settings` is still right — but not for the reason I gave. The
+reason is that the candidate blocks have no audience on a recruiter account,
+not that hiding them would hurt a dual-use person.
+
+### What a recruiter should see at /profile: nothing
+
+Recommended, for stage 12:
+
+- **`show: Boolean(session) && !isRecruiter`** on the Profile nav item, so it
+  leaves the recruiter header.
+- **`blockRecruiters` on the candidate-only routes**, which is the mechanism
+  `ProtectedRoute` already has and which sends them to `/recruiter` before
+  anything mounts — no conditional rendering inside the pages at all, and
+  carried item 29's work on `Profile.jsx` becomes redundant for recruiters
+  while still serving community members missing a Google field.
+- The routes that qualify: `/profile`, `/profile/asked`, `/profile/saved`,
+  `/profile/saved-jobs`, `/profile/delete-data`, `/my-applications` and
+  `/ask`. **`/my-applications` and `/ask` carry comments justifying their
+  openness with decision 10's dual-use reasoning**, so those comments rest on
+  the premise just disproved and should be corrected in the same pass.
+
+### The privacy policy sentence: it is already candidate-scoped
+
+*"There is a **Delete my job board data** link on your profile."* It sits
+among the candidate sections — What we collect → When you apply → Who can see
+your application → How long we keep it → **Deleting your data** → Your resume
+→ Can I take an application back? — and recruiters have their own
+`<h2>If you are a recruiter</h2>`. The data it deletes (resume, applications,
+saved roles) is candidate data a recruiter cannot have.
+
+**So the sentence needs no correction for accuracy.** What is missing is on
+the recruiter side: that section says what is stored about a recruiter and
+nothing about access or deletion. Recommended addition, for Rishi's approval
+as policy wording like D3 was:
+
+> Your recruiter account is separate from a community account, even if you use
+> iWorkAtGCC as both — they are two separate logins. You can see and correct
+> what we hold about you from your recruiter settings. To delete a recruiter
+> account and its roles, email jobs@iworkatgcc.com and we will do it by hand.
+
+That is additive, leaves the candidate sentence untouched, and fills a gap
+that exists today regardless of this change.
+
+## /profile for a recruiter — SCOPED 25 Nov 2026, superseded in part by the section above
 
 Rishi: *"/profile makes no sense for a recruiter… The delete control is the
 worst of it: for a recruiter it either does nothing or reads as though it
