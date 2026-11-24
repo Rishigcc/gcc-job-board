@@ -42,9 +42,19 @@ export const NEW_FEATURE_UNTIL = "2027-01-19";
 // Rishi's wording, 24 Nov 2026, as written (heading and first sentence
 // revised by him the same day). Kept here so the card and the
 // test are reading the same strings.
+// The heading is two-tone on screen -- "Exclusive" in navy, "GCC Jobs" in
+// blue -- so it is stored as its two halves AND as the whole sentence. The
+// test asserts the whole is the halves joined, which is what stops the
+// rendered heading drifting from the string everything else reads.
+const HEADING_LEAD = "Exclusive";
+const HEADING_ACCENT = "GCC Jobs";
+
 export const PROMO = {
   badge: "New Feature",
-  heading: "Exclusive GCC jobs",
+  headingLead: HEADING_LEAD,
+  headingAccent: HEADING_ACCENT,
+  heading: `${HEADING_LEAD} ${HEADING_ACCENT}`,
+  illustration: "/exclusive-jobs-illustration.svg",
   body:
     "These jobs are posted directly to our community website. Search, " +
     "save, apply and track your application, all in one place.",

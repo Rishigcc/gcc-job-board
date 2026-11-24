@@ -2061,6 +2061,55 @@ This **supersedes** decision 27 (add the homepage card) rather than undoing it:
 the findability problem 27 named is real, and the promo card is the answer to
 it. **D1 (the nav label) and D2 (a homepage card) are closed by removal.**
 
+#### The card, third version: a feature-announcement banner, 24 Nov 2026
+
+Rishi supplied an illustration and a brief: two columns on desktop, text left
+and artwork right, on a very pale gradient — *"Not a saturated filled panel;
+the last version was too heavy."*
+
+**The illustration was not in the repo.** It arrived attached to the message
+rather than committed, so it was written to
+`public/exclusive-jobs-illustration.svg` **verbatim** — not recoloured, not
+redrawn, as instructed.
+
+| | Second version | Third version |
+|---|---|---|
+| Background | blue-600 → purple-700, filled | white → blue-50 → teal-100, very pale |
+| Text | white on saturated blue | navy heading, blue accent, slate body |
+| Badge | white/20 pill | teal-200 pill, navy text, letter-spaced, megaphone glyph |
+| CTA | text link with arrow | solid blue pill button with arrow |
+| Artwork | none | his SVG, right, bleeding past the edge |
+| Corners | 16px | 24px |
+
+**The CTA is a `<span>`, not a `<button>`.** The whole card is a link, and a
+button inside an anchor is invalid HTML — a nested interactive element, which
+keyboard navigation and screen readers both handle badly. It is styled as a
+button with the card as the click target: one thing to click, one thing to
+announce.
+
+**The illustration is not rendered at all below `md`**, rather than scaled
+down. Rishi: *"I'd rather lose the artwork than squeeze it."* `hidden
+md:block` means a phone never downloads 4KB it will not show.
+
+**Two colour observations, reported rather than fixed** (he asked to be told
+rather than have the file edited):
+
+- The **yellow sparks** (`#FACC15`) are back on the card, in his artwork. He
+  had asked for yellow to go because it read as a warning; three small sparks
+  in the top-right corner read as an accent rather than as caution, so they
+  were left alone — but the earlier note was explicit enough to flag this
+  against.
+- The **laptop base** (`#CFE0FA`, pale blue) lands on the blue-50 part of the
+  gradient, which is nearly the same value. It may look faint. The laptop's
+  navy bezel keeps the screen itself defined, so this is the one element worth
+  a second look.
+
+**Verified rather than assumed**, as with the previous version: every
+arbitrary-value class (`w-[260px]`, `md:grid-cols-[1fr_auto]`,
+`tracking-[0.12em]`) was confirmed in the compiled Tailwind v4 CSS, and the
+prerendered `/jobs` confirmed to carry the badge, the two-tone heading, the
+pill button and the `<img>`.
+
 #### The card's colour and copy, revised 24 Nov 2026
 
 Rishi, after seeing it: *"Drop the yellow. It reads as a warning rather than

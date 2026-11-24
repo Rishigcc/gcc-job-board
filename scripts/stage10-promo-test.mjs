@@ -174,13 +174,23 @@ checkFalse("the badge is gone within a year", isNewFeature(inAYear, NEW_FEATURE_
 // ---------------------------------------------------------------------------
 
 check("the badge reads as approved", PROMO.badge, "New Feature");
-check("the heading reads as approved", PROMO.heading, "Exclusive GCC jobs");
+check("the heading reads as approved", PROMO.heading, "Exclusive GCC Jobs");
+check("the navy half", PROMO.headingLead, "Exclusive");
+check("the blue half", PROMO.headingAccent, "GCC Jobs");
+
+// The card renders the two halves; everything else reads the whole string.
+// If one is edited and not the other, the heading on screen stops matching
+// the heading the rest of the project thinks it has.
+check("the halves compose the whole heading",
+  `${PROMO.headingLead} ${PROMO.headingAccent}`, PROMO.heading);
 check(
   "the body reads as approved",
   PROMO.body,
   "These jobs are posted directly to our community website. Search, save, apply and track your application, all in one place."
 );
 check("the card goes to the board", PROMO.to, "/gcc-jobs");
+check("the illustration is the file in public/", PROMO.illustration,
+  "/exclusive-jobs-illustration.svg");
 
 // The heading is not the body and neither is empty -- the kind of thing a
 // careless edit to one string does to the other.
