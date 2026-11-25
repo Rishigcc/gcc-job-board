@@ -201,15 +201,21 @@ to discover who is registered.
 
 **All four prerequisites are closed.** Nothing is waiting on him.
 
-### One outstanding dashboard fix, not in the repo
+### The dashboard email fixes — ALL CLOSED 25 Nov 2026
 
-The reset email arrived with Supabase's **default** subject, "Reset your
-password". The subject is a **separate dashboard field** and pasting the body
-does not touch it. Fix: Authentication → Emails → Reset Password → the
-**Subject** field → `Reset your iWorkAtGCC recruiter password`. **The signup
-template has the same trap** and should read "Confirm your iWorkAtGCC
-recruiter account". Both are documented in
-`supabase/email-templates/reset-recruiter-password.html`'s header.
+**Nothing about the emails is outstanding.** He has re-pasted **both**
+templates with **both subject lines**, which closed three things at once: the
+default subject trap, the `/recruiter/sign-in` address now in each email, and
+W1's wording, which survived in the signup template until 25 Nov because the
+templates sit **outside every test in this repo**.
+
+The trap, kept because it recurs on every future edit: **the subject is a
+separate dashboard field and pasting the body does not touch it.**
+Authentication → Emails → each template → the **Subject** field above the body
+editor. They should read `Reset your iWorkAtGCC recruiter password` and
+`Confirm your iWorkAtGCC recruiter account`. **Editing a template in the repo
+changes nothing until it is re-pasted**, and nothing in the repo can detect
+that it has not been.
 
 ---
 
