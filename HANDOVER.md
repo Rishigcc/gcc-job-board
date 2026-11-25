@@ -418,8 +418,14 @@ the tracker before quoting an assertion count as reassurance.
   - **`Walmart` must survive the companies step** — job 42 sits under it and
     it is one of the 1,816 real seeded names.
 - **Role 42** (a 180-character unbroken title, **under `Walmart`**) is the
-  fixture `check-overflow.mjs` drives. **Delete it last**, and expect that
-  script to need a new fixture.
+  fixture `check-overflow.mjs` drives, and **since 25 Nov it also carries that
+  word inside a `##` heading and a `- ` list item** (item 27's proof 6, from
+  `supabase/test-fixtures/item27-overflow-fixture.sql`). **Job 13 is the
+  second subject**, the one role with real Markdown. **The clearout deletes
+  both**, so that script needs a new subject — and the replacement must carry
+  the long word in a **heading, a list item AND a title**, because those are
+  three different measurements and a title-only fixture would silently stop
+  testing two of them.
 - **Item 26** — `alter table public.jobs validate constraint
   jobs_description_check;` **after** the clearout. **Confirmed still
   `NOT VALID`** on 25 Nov.

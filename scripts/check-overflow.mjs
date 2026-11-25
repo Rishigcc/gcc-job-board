@@ -33,6 +33,19 @@ const WIDTHS = [1280, 768, 375];
 
 // A role whose title is one unbroken 180-character word, which is the case
 // that found all of this.
+//
+// SINCE 25 Nov 2026 job 42 ALSO carries that word inside a `##` heading and
+// inside a `- ` list item, from
+// supabase/test-fixtures/item27-overflow-fixture.sql. A description has
+// structure now, so a heading, a list item and a paragraph are three
+// different measurements -- the wrap classes live on each block in
+// JobDescription.jsx rather than on one <p>, and a class missing from the
+// list-item branch would show up here and nowhere else.
+//
+// THE REPLACEMENT FIXTURE MUST CARRY ALL THREE. The pre-merge clearout
+// deletes job 42 and job 13, so this script needs a new subject at that
+// point; a title-only long word would silently stop testing two of the three
+// shapes.
 const PAGES = [
   "/",
   "/jobs",

@@ -492,7 +492,24 @@ if (failures.length) {
 }
 
 // PROOF 6 lives in check-overflow.mjs, which measures the rendered page
-// because a class can compile, apply and still do nothing. It needs a fixture
-// whose 180-character unbroken word sits inside a HEADING and inside a LIST
-// ITEM, not only inside a paragraph -- those are three different measurements
-// now that the description has structure.
+// because a class can compile, apply and still do nothing.
+//
+// CLOSED 25 Nov 2026. It needed a fixture whose 180-character unbroken word
+// sits inside a HEADING and inside a LIST ITEM, not only inside a paragraph,
+// because those are three different measurements now that a description has
+// structure. Rishi ran
+// supabase/test-fixtures/item27-overflow-fixture.sql -- six checks, all PASS,
+// job 42 now 968 characters with a longest word of 180.
+//
+// MEASURED IN THE RENDERED DOM, not inferred from the script's "ok":
+//
+//            element     width   scrollWidth   container   page overflow
+//   1280px   h4            512           512         512   no
+//            li            492           492         512   no
+//    375px   h4            293           293         293   no
+//            li            273           273         293   no
+//
+// The word IS in the DOM, in an h4 (from `##`) and in an li, and neither
+// element's scrollWidth exceeds its client width at either size. That is what
+// distinguishes a passing check from a check that never saw the fixture --
+// `ok` on a page whose description had no long word would have meant nothing.

@@ -3901,14 +3901,40 @@ local dependency** — `HANDOVER.md` uses `npx` for exactly that reason — and
 the harness assumed a `node_modules/.bin/esbuild` that does not exist. It now
 bundles from the repo and runs from the copy.
 
-#### WHAT PROOF 6 STILL NEEDS, and it is a one-line data change he runs
+#### PROOF 6 — CLOSED 25 Nov 2026
 
-Job 13 gives the sweep real Markdown, but **its longest description word is 18
-characters**, and job 42's 180-character word is in its **title**, not its
-description. So **no measured page yet has a long unbroken word inside a
-heading or a list item**, which are now two different measurements from a
-paragraph. The SQL is in the reply of 25 Nov; it targets job 42, which the
-clearout deletes anyway.
+Job 13 gave the sweep real Markdown, but its longest description word was 18
+characters, and job 42's 180-character word was in its **title**, not its
+description — so no measured page had a long unbroken word inside a heading
+or a list item, which are now two different measurements from a paragraph.
+
+He ran `supabase/test-fixtures/item27-overflow-fixture.sql`: **six checks, all
+PASS**, job 42 now **968** characters with a longest word of **180**, no other
+role touched. Confirmed independently read-only: both fixtures present,
+`updated_at` 25 Nov 14:26.
+
+**`check-overflow.mjs`: 21 checks, 0 failed.** But a passing overflow check
+only means something if the page it measured actually contained the fixture,
+so the rendered DOM was inspected rather than trusted:
+
+| | element | width | scrollWidth | container | page overflow |
+|---|---|---|---|---|---|
+| 1280px | `h4` | 512 | 512 | 512 | no |
+| | `li` | 492 | 492 | 512 | no |
+| 375px | `h4` | 293 | 293 | 293 | no |
+| | `li` | 273 | 273 | 293 | no |
+
+The word is in the DOM, in an **`h4`** (from `##`, which confirms the heading
+levels start at h3 as designed) and in an **`li`**, and neither element's
+scrollWidth exceeds its client width at either size. **A missing wrap class on
+the heading or list-item branch would have shown here and nowhere else** —
+which is the whole point of measuring rather than reading the CSS.
+
+**CARRY FORWARD TO THE CLEAROUT:** the clearout deletes job 42 **and** job 13,
+so `check-overflow.mjs` loses both of its description subjects. **The
+replacement fixture must carry the long word in a heading, a list item and a
+title** — a title-only fixture would silently stop testing two of the three
+shapes.
 
 **Agreed without reservation: no links.** And a second argument for it beyond
 safety — stage 4 dropped external-apply entirely because a link to someone
