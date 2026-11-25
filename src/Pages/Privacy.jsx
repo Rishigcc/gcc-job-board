@@ -23,7 +23,7 @@ import PolicyLayout from "../components/PolicyLayout";
 // own moved to /profile/delete-data, so "from your profile" was no longer
 // where that control lived. The policy and the button now also use the same
 // name -- "Delete my job board data" -- rather than two names for one thing.
-const LAST_UPDATED = "22 November 2026";
+const LAST_UPDATED = "25 November 2026";
 
 function Privacy() {
   return (

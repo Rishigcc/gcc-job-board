@@ -4245,6 +4245,118 @@ written to the copy while the suite read the real one. It now copies
 root, and runs the suite with its **cwd set to the copy**. **209 assertions,
 80/80 mutations.**
 
+## THE CLEAROUT RAN, THE THREE DATES ARE SET, P4 PASSED — 26 Nov 2026
+
+### Item 29 — CLOSED. Passed, with a correction worth more than the result.
+
+Rishi: *"Item 29 passes — Name and Email populated for a Google account, the
+nothing-to-delete state when there's nothing, and 'your resume has been
+deleted' rather than the empty state when deleting a resume alone."* All three
+behaviours confirmed exactly as built.
+
+**The correction: half the checklist he was handed was already obsolete when
+he ran it.** Four of its steps described what a **recruiter** sees on
+`/profile` and `/profile/delete-data` — and stage 12 had closed both routes
+to recruiters in between. Rishi: *"A checklist written before a change that
+invalidates it is the same stale-list problem as the company seed."*
+
+That is sharper than the company-seed case, and worth stating precisely: a
+**fact** goes stale when the world moves. A **checklist** goes stale when the
+world moves **in the direction the checklist was testing** — so it does not
+look wrong. It still reads as a sensible set of steps; it is only wrong at the
+step that cannot be performed, by then several steps in. The general rule is
+now in `HANDOVER.md` §9: re-derive a checklist against the code as it is,
+not against the code it was written for.
+
+### The clearout — RUN 26 Nov 2026. Complete, with one decision read as a check.
+
+Full procedure and outcome: `CLEAROUT.md`. Steps 1–7 ran clean. **14 of 15
+final-verification rows PASS**; the fifteenth, `c11`, read **FAIL**, and it is
+a decision rather than a defect — it checks for the Google test accounts'
+absence, and Rishi kept both:
+
+> *"I kept both test Google accounts — iworkatgcctest2 and iworkatgcctest3 —
+> because I'll want a candidate account to test v2 with and creating one later
+> is more work than keeping one now."*
+
+**Worth separating, because the two accounts were kept for different
+reasons.** `test3` was always going to be kept on my recommendation — it holds
+one real answer to a real member's question, and `answers.user_id` cascades,
+so deleting the account would delete that reply. `test2` holds nothing of the
+kind; it is kept purely as a convenience for work that has not started. **A
+check reading FAIL for a decision that was made on purpose is the check doing
+its job** — the alternative, a kept account passing silently, would read as
+though nothing had been decided at all.
+
+**Consequence, recorded rather than acted on:** both accounts have real Google
+addresses, so **both will receive the community digest** going forward. The
+digest predates the job board and is out of its scope; this is not a new
+email, only a new recipient of an existing one.
+
+Final figures, as reported: 0 jobs, 0 applications, 0 candidate resumes, 0
+storage objects, 0 saved roles, 0 recruiter profiles, 0 recruiter role rows,
+both test companies gone, 1,814 companies intact, Walmart survived, the admin
+row untouched, `convalidated = true`, and **2,643** profiles — one more than
+`CLEAROUT.md` expected, because someone joined the community while the
+procedure was running. Not a discrepancy; the count was never going to hold
+still for fifteen minutes.
+
+**`check-overflow.mjs` now reports its expected post-clearout state**: 15
+checks, 0 failed, 3 pages skipped with a named-and-explained banner rather
+than a silent drop. The overflow fixture pair
+(`supabase/test-fixtures/overflow-fixture-create.sql` /
+`overflow-fixture-remove.sql`) is unused until `JobDescription.jsx`,
+`descriptionMarkdown.js` or a job-page wrap class changes again.
+
+### Items 1 and 20 — CLOSED. The three dates, set together.
+
+`LAST_UPDATED` in `Privacy.jsx` and `RecruiterTerms.jsx` → **25 November
+2026**. `NEW_FEATURE_UNTIL` in `boardPromo.js` → **2027-01-20**, eight weeks
+from that same date. Same edit, same moment, as carried item 1 required.
+
+**Two suite assertions had to change, not just the code**, because they had
+been written to guard the OPPOSITE state — that the dates must **not** move
+before the merge. `stage12-settings-test.mjs` asserted
+`"LAST_UPDATED is untouched at 22 November 2026"`; it now asserts both files
+carry the **merge** date and that `NEW_FEATURE_UNTIL` is eight weeks past it.
+The matching mutation in the negative run, which used to simulate the date
+being bumped **early**, now simulates it being left on its stale placeholder
+or reverted to it — the real risk once the bump is the correct state rather
+than a violation of it. Both files found by grep, both fixed, both proved to
+fail: **three mutations, all caught.**
+
+**One omission in the old assertion, found while fixing it:**
+`RecruiterTerms.jsx`'s date was never checked at all — only `Privacy.jsx`'s
+was. It now is, and it is checked against a **different** stale value
+(16 November, not 22) than Privacy's, so a mutation that leaves one file
+unedited while fixing the other is caught by name rather than by coincidence.
+
+### P4 — CHECKED, PASSES. One structural note for v2, not for now.
+
+Rishi confirmed every variable production needs is correctly scoped:
+`SUPABASE_SERVICE_ROLE_KEY`, `DEPLOY_HOOK_URL`, `CRON_SECRET`, `BREVO_API_KEY`
+on Production; `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` and
+`VITE_GA_ID` on both.
+
+**Noted, not acted on:** `SUPABASE_SERVICE_ROLE_KEY` exists as **two separate
+entries** — Production added 10 Sep 2026, Preview added 18 Nov 2026 — rather
+than one value scoped to both environments. Both work today. The risk is not
+today's behaviour; it is that **two independent entries under one name can
+diverge silently**. If the key is ever rotated in Supabase, whoever rotates it
+has to remember there are two places to update it in Vercel, and an entry left
+behind fails only the environment nobody was looking at.
+
+**Why this is a v2 item and not a pre-merge one:** Supabase is one shared
+project for both environments (recorded since stage 1 — *"db: Supabase
+(shared, live)"*), so the key is the same secret by definition, and both
+entries authenticating successfully today is itself evidence they already
+hold the same value — Supabase does not serve two live service-role keys at
+once outside a rotation window. There is nothing to reconcile **now**; the
+value is to remove the two-places-to-update structure before it is ever
+tested by a real rotation. **The v2 fix:** delete both entries, re-add one
+value with Production, Preview and Development all ticked in the same add
+action, which is what stops them from ever being two entries again.
+
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on
@@ -4816,7 +4928,7 @@ So nothing about Googlebot, `robots.txt`, `sitemap.xml` or JSON-LD being
 its central claim is only testable after merge**, via Search Console's URL
 inspection on the live site.
 
-### P4 — environment variables are scoped per environment
+### P4 — environment variables are scoped per environment. CHECKED, PASSES.
 
 Every function added by this branch reads `SUPABASE_SERVICE_ROLE_KEY`, and
 `/api/resume-url` also reads `VITE_SUPABASE_PUBLISHABLE_KEY`. A variable set
@@ -4827,6 +4939,11 @@ served it.
 six are ticked for **Production** as well as Preview: `SUPABASE_SERVICE_ROLE_KEY`,
 `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `BREVO_API_KEY`,
 `CRON_SECRET`, `DEPLOY_HOOK_URL`.
+
+**CLOSED 26 Nov 2026.** All confirmed by Rishi. **One structural note carried
+to v2, not acted on now:** `SUPABASE_SERVICE_ROLE_KEY` exists as two separate
+entries rather than one value scoped to both environments — detail in "THE
+CLEAROUT RAN, THE THREE DATES ARE SET, P4 PASSED".
 
 ### P5 — `DEPLOY_HOOK_URL` has never been fired from this branch's code
 
@@ -4981,12 +5098,12 @@ which is why the fix is to re-derive counts rather than to adjust them.
 
 | # | Item | Raised in | Due |
 |---|---|---|---|
-| 1 | Change `LAST_UPDATED` in `src/Pages/Privacy.jsx` and `src/Pages/RecruiterTerms.jsx` to the real launch date | Stage 2 | Before merge |
+| ~~1~~ **DONE 26 Nov 2026** — both set to 25 November 2026, same moment as item 20. See "THE CLEAROUT RAN, THE THREE DATES ARE SET, P4 PASSED". | ~~Change `LAST_UPDATED` in `src/Pages/Privacy.jsx` and `src/Pages/RecruiterTerms.jsx` to the real launch date~~ | Stage 2 | Closed |
 | 2 | Verify in the Microsoft Clarity dashboard that form-input masking is ON. The privacy policy states that text typed into forms is masked. | Stage 2 | Stage 6 |
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
-| 5 | Delete the test Google accounts from Authentication → Users. **There are TWO**, verified live 25 Nov 2026: `iworkatgcctest2@gmail.com` and `iworkatgcctest3@gmail.com`. This row and item 13 both said one. | Stage 1 | Before merge |
-| 29 | ~~**PRE-MERGE, GROUPED: two things a recruiter sees on `/profile` today.**~~ **BUILT 25 Nov 2026, awaiting Rishi's retest.** (a) `/profile`'s Name and Email rows render only when their own value exists — conditioned on the absence of the data, never on `account_type`, because keying off the role is the conditional-render mistake decision 10 rules out. (b) `/profile/delete-data` now has a **nothing-to-delete state**: no resume, no identifiable applications and no saved roles means a panel saying so and no confirmation box. The link itself is untouched, so the policy's sentence stays true. `my_applications()` returns only rows whose `candidate_id` is the caller, and anonymising NULLs that column, so its count is already the count of applications this page could still delete — no new column needed. A `notice` guard keeps the "resume deleted" confirmation visible instead of flipping straight to the empty state. | Rishi, 25 Nov 2026 | **In test** |
+| ~~5~~ **RESOLVED 26 Nov 2026 — NOT by deletion.** Rishi kept **both** deliberately: `test3` for the real answer that cascading deletion would take with it, `test2` as a v2 candidate account. Both now receive the community digest. See the clearout section for the reasoning split between the two. | ~~Delete the test Google accounts from Authentication → Users.~~ | Stage 1 | Closed |
+| ~~29~~ **DONE — PASSED 26 Nov 2026**, with a correction about the checklist itself: see "Item 29 — CLOSED" above. (a) `/profile`'s Name and Email rows render only when their own value exists — conditioned on the absence of the data, never on `account_type`, because keying off the role is the conditional-render mistake decision 10 rules out. (b) `/profile/delete-data` now has a **nothing-to-delete state**: no resume, no identifiable applications and no saved roles means a panel saying so and no confirmation box. The link itself is untouched, so the policy's sentence stays true. `my_applications()` returns only rows whose `candidate_id` is the caller, and anonymising NULLs that column, so its count is already the count of applications this page could still delete — no new column needed. A `notice` guard keeps the "resume deleted" confirmation visible instead of flipping straight to the empty state. | Rishi, 25 Nov 2026 | Closed |
 | 30 | **A PRODUCTION PAGE, NOT A JOB BOARD ONE — for his decision, not a fix.** Below 768px the footer hides four items via hard-coded `hidden md:block`: the whole **Explore** and **Community** columns, and the **My Dashboard** and **Profile** rows. It is **pre-existing and live on `main`** — the classes arrived in `f368c95`, 5 Sept 2026, eight days before this branch began at `4b12dbd`. **Navigation is NOT lost** (measured at 375px: the header's menu carries Explore GCC Jobs, Ask Answer & Connect and Sign In/Out, and signed in it carries My Dashboard and Profile/Settings from the same `navItems` array), so the four hidden items are exactly the four the header menu duplicates, while the two that survive — Privacy Policy and Recruiter Terms — exist nowhere else. **The one real gap:** `Join the Community` (`/signup` in join mode) has no mobile equivalent; the header's Sign In reaches the same route in **sign-in** mode, so a signed-out phone visitor is offered "Sign In" and never "Join". | Rishi at the stage 12 retest, 25 Nov 2026 | **DONE 25 Nov 2026** — he chose showing the column over renaming the header item. Measured cost: the mobile footer 275px → 369px. |
 | 28 | ~~**LIVE DEFECT: a recruiter can upload a resume from `/profile`, and it poisons an admin report.**~~ **WITHDRAWN 25 Nov 2026 — I WAS WRONG, and Rishi agreed to it on the strength of my claim.** Checked against the live `public.admin_report_totals()` rather than the tracker's summary of it: `no_resume` counts *candidates who HAVE applications but NO resume row*, so a resume with no applications never enters it; `orph` counts storage objects with **no** `candidate_resumes` row, and an upload creates both. **Neither risk figure moves.** And the state is not anomalous anyway: any candidate may upload a resume before applying, and `ApplyPanel` blocks only *your own* posting (`job.posted_by === session.user.id`), so **a recruiter can apply to another company's role** — which makes a resume on file legitimate for them under decision 10. The resume block is one of the few on `/profile` that genuinely does apply to a recruiter. | Withdrawn | No action |
 | 27 | **LIVE DEFECT ON A SIGNED-OFF PAGE: pasted Markdown is rendered literally to candidates.** Rishi's correction, 24 Nov 2026: *"a candidate reading job 13 right now sees `# Job Description` and `**bold**` on screen, so item 27 is a live defect on a signed-off page, not just a snippet problem."* He is right, and I had filed it a category too low. **The defect is what a candidate reads**; the Google snippet beginning `# Job Description` is a symptom of the same cause, not the problem. Job 13's description opens `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout, and `/gcc-jobs/:slugId` renders it with `whitespace-pre-wrap`, which deliberately never parses HTML. Options: render a safe Markdown subset; strip the markers for display and for the meta description; or change the field hint and let recruiters paste plain text. Whichever is chosen, note that the markup must keep matching the page — Google requires everything in the markup to be visible on it — so display and markup have to change together. | Found 24 Nov 2026 testing against a real row; severity corrected by Rishi the same day | **Before merge** |
@@ -4996,14 +5113,14 @@ which is why the fix is to re-derive counts rather than to adjust them.
 | ~~23~~ **CLOSED — DEFERRED TO V2, residual resolved 25 Nov 2026.** Rishi: *"you established the Supabase dashboard is a separate way in, so I can't actually be locked out."* **Checked rather than accepted:** `/admin` needs the one `admin` row in `public.user_roles`, which has no write policy — but the Supabase SQL editor can insert one for any account, so losing the Google account costs *the in-app queue until he re-grants it*, which is recoverable, not a lockout. **The residual was whether the two ways in share a mailbox**, since a shared mailbox would collapse them into one. **It does not: the Supabase account is on an Outlook address and the admin row is on a Gmail one** — two different providers, two different mailboxes, confirmed by him on 25 Nov. The admin row's account was separately verified read-only as Google-only with a single identity, so it has no password of its own to lose. **The deferral stands on evidence rather than on reasoning.** (The addresses are deliberately not written here — re-derive the admin row's with `select u.email from public.user_roles r join auth.users u on u.id = r.user_id where r.role = 'admin';`) Original: ~~**Add a second admin account that Rishi alone controls.** `public.user_roles` has exactly one `admin` row, on a Google-only account. Losing that Google account loses the admin role, with no second admin to grant it back. A data change, not a migration. **The real break-glass is the Supabase dashboard**, from which an admin row can always be inserted — so the higher-value action is hardening his Supabase account (2FA, recovery), and the second admin covers the narrower case of losing the Google account. Note both admins would share one failure mode (Google suspending him) but not the common ones. The second account sees all applications, so it must be an account only he controls, never a shared mailbox. | Rishi, 24 Nov 2026 | **Now** |
 | 22 | **An admin-set-password tool, LOGGED NOT BUILT.** `auth.admin.updateUserById(uid, { password })` sets a password with no email — the docs say *"Changes are applied directly without confirmation flows"* — service-role and server-side only. Paired with the phone number already collected and validated at recruiter signup, it is a reset with zero emails. Rishi's decision, 24 Nov 2026: *"log it, don't build it. Revisit when a recruiter actually loses their mailbox."* It is the only thing that helps a recruiter whose **mailbox** is gone, which a reset email by definition cannot fix. | Rishi, 24 Nov 2026 | Deferred |
 | 21 | ~~**`/post-a-job` NEEDS RETESTING — decision 29 touches a signed-off page.**~~ **DONE** — covered in stage 10 round two's sign-off, which records `/post-a-job` showing *"no notice signed out; amber notice for a signed-in community member; \"Your recruiter account is ready\" for a recruiter"*. Row left open by mistake. Original note: `src/Pages/PostAJob.jsx` now shows a signed-in community member a notice that recruiter accounts are separate. The page is stage 3/4 work and signed off. Retest: the recruiter sign-up still works signed out, an already-signed-in recruiter still sees "Your recruiter account is ready", and the new notice appears only for a signed-in non-recruiter. | Rishi, 24 Nov 2026 | **Stage 10 round two** |
-| 20 | **Set `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js` to eight weeks after the real launch date.** Shipped as a placeholder (`2027-01-19`, eight weeks from the day it was written) so the badge is visible on the preview. Eight weeks can only honestly be measured from launch, so this is set at merge **alongside `LAST_UPDATED`** in carried item 1 — same edit, same moment. No code change is needed to remove the badge: it compares the date at render. | Rishi, 24 Nov 2026 | Before merge |
+| ~~20~~ **DONE 26 Nov 2026** — `2027-01-20`, eight weeks from 25 November 2026, set in the same edit as item 1. | ~~**Set `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js` to eight weeks after the real launch date.**~~ | Rishi, 24 Nov 2026 | Closed |
 | ~~19~~ **DEFERRED TO V2 — decided 25 Nov 2026.** Rishi: *"it only affects Google's remote filter and I have no remote roles."* The cost is bounded and known: a fully remote role will not appear in Google's remote-only filter until this is done, and GCC roles are overwhelmingly on-site or hybrid — which is the same evidence that made experience band a filter instead of work mode in stage 5. Original: ~~**STAGE 4 CHANGE, TO BE DECIDED SEPARATELY: tell recruiters that a 100% remote role must say so in the description.** Google requires `jobLocationType: TELECOMMUTE` *and* that the description clearly states the role is remote. v1 does not ask recruiters for that, so a "remote" role whose description never says the word gets markup Google may disregard. Logged rather than built, because it changes a signed-off form. | Rishi, 23 Nov 2026 | **Stage 4 change** |
 | 18 | ~~**THE POSTING FORM NEEDS RETESTING AS PART OF STAGE 10.**~~ **DONE** — covered in stage 10's sign-off, which records the description minimum *"enforced at 400 on new posts and on edits to the old roles; counter trimmed"*. Row left open by mistake. Original note: Raising the description minimum from 50 to 400 characters touches signed-off stage 4: `src/lib/jobFormModel.js`, the field hint, and the CHECK constraint on `jobs.description`. Rishi, 23 Nov 2026: "Raising it touches signed-off stage 4, so record that the posting form needs retesting as part of stage 10." | Rishi, 23 Nov 2026 | **Stage 10 round two** |
 | 17 | ~~**STAGE 9 SCOPE: `purge_expired_applications()` writes an audit row.**~~ **DONE in stage 9** — verified against the live database 24 Nov 2026: the function's body writes an audit row. Was still shown as open. Originally: A nightly retention purge is an administrative action, and on Hobby a log line is unreadable an hour later. An audit row turns "did the sweep run" into a SQL query that is answerable forever rather than within the hour after 02:00 UTC. | Rishi, 23 Nov 2026 | **Stage 9** |
 | 16 | ~~**STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.**~~ **DONE in stage 9** — verified 24 Nov 2026 while answering what remains before launch: `AdminReports.jsx` shows `orphaned_files` with a risk tone, and `api/admin-delete-orphan.js` does the deleting, so it reports first and deletes second as decided. Was still shown as open, which would have made the pre-launch list two items longer than it is. Originally: Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
 | 15 | **DONE, BUT NOT AS BUILT — see "the board's placement changed, 24 Nov 2026".** Shipped in round one as an "Apply Directly" nav item and a homepage card; **both removed 24 Nov 2026** and replaced by a single promo card at the top of `/jobs`. The item's requirement — the board must be findable in the same stage that makes it public — is met by that card. D1 (the label) is closed by removal. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
-| 13 | **RE-INVENTORIED AGAINST THE LIVE DATABASE, 25 Nov 2026.** The figures below replace every earlier count in this row, two of which had gone stale in both directions. **Read-only verified:** `candidate_resumes` **0 rows** and the `resumes` bucket **0 objects** — so the 25 Nov "REOPENED" note is no longer true, both were removed again by the delete-resume testing in the consolidation sign-off. `applications` **18 rows, all 18 already anonymised** (`candidate_id` null), so no personal data remains in them, but the rows still block the jobs they point at. `jobs` **27, not 24** — the 24 `[T5]` roles **plus three the old wording missed**: job **13** `Program manager` (Test Co B, 18 Nov, 1 application, **and the one carrying the Markdown of item 27**), job **41** `trial job` (Test Co A, 24 Nov), and job **42**, the 180-character title (**under `Walmart`**, 24 Nov). `recruiter_profiles` 2. **TWO** test Google accounts, not one: `iworkatgcctest2@gmail.com` **and** `iworkatgcctest3@gmail.com`. **THE ORDER, CORRECTED:** `applications` rows → **all 27 jobs** (role 42 last, it is `check-overflow.mjs`'s fixture) → `Test Co A` and `Test Co B` **only** → the two recruiter accounts → **both** test Google accounts. `candidate_resumes` and the storage objects are already clear, so those two steps are no-ops unless more testing recreates them — **check, do not assume**. **`Walmart` MUST NOT BE DELETED** with the companies step: job 42 sits under it and it is one of the 1,816 real seeded names. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
+| ~~13~~ **DONE 26 Nov 2026 — CLEAROUT RUN.** Full procedure in `CLEAROUT.md`, outcome in "THE CLEAROUT RAN, THE THREE DATES ARE SET, P4 PASSED": 14 of 15 verification rows PASS, the one FAIL a deliberate decision (kept both test Google accounts, see item 5). | ~~RE-INVENTORIED AGAINST THE LIVE DATABASE~~ — superseded by the run itself. | Stage 6 sign-off | Closed |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | ~~**Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL.**~~ **DONE 25 Nov 2026** — closed by stage 12's prerequisite A, which added it alongside the preview host and `https://www.iworkatgcc.com/**`. The row was left open by mistake; the allowlist edit is recorded in the stage 12 prerequisites. | Stage 3 review | Closed |
 | 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |

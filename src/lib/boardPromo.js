@@ -37,7 +37,7 @@
 // PLACEHOLDER -- eight weeks from the day this was written, so the badge is
 // visible on the preview. CARRIED ITEM: reset at merge, same as LAST_UPDATED.
 // The launch date is the only date eight weeks can honestly be measured from.
-export const NEW_FEATURE_UNTIL = "2027-01-19";
+export const NEW_FEATURE_UNTIL = "2027-01-20";
 
 // Rishi's wording, 24 Nov 2026, as written (heading and first sentence
 // revised by him the same day). Kept here so the card and the

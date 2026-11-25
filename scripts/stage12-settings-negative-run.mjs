@@ -690,10 +690,26 @@ const MUTANTS = [
     "the paragraph sits inside the recruiter section",
   ],
   [
-    "LAST_UPDATED bumped early",
+    // CLOSED 25 Nov 2026: the clearout ran and he set the merge date, so the
+    // real risk flipped from "bumped too early" to "reverted to stale" --
+    // e.g. by a merge of main that still carries the old placeholder. The
+    // mutation now simulates exactly that.
+    "LAST_UPDATED reverted to its pre-merge placeholder",
     "Pages/Privacy.jsx",
-    (s) => s.replace('const LAST_UPDATED = "22 November 2026";', 'const LAST_UPDATED = "25 November 2026";'),
-    "LAST_UPDATED is untouched at 22 November 2026",
+    (s) => s.replace('const LAST_UPDATED = "25 November 2026";', 'const LAST_UPDATED = "22 November 2026";'),
+    "Privacy's LAST_UPDATED is the merge date",
+  ],
+  [
+    "RecruiterTerms' LAST_UPDATED left on its OWN stale date, missed in the edit",
+    "Pages/RecruiterTerms.jsx",
+    (s) => s.replace('const LAST_UPDATED = "25 November 2026";', 'const LAST_UPDATED = "16 November 2026";'),
+    "RecruiterTerms' LAST_UPDATED is the SAME merge date",
+  ],
+  [
+    "NEW_FEATURE_UNTIL left on its placeholder, not recomputed from the merge date",
+    "lib/boardPromo.js",
+    (s) => s.replace('export const NEW_FEATURE_UNTIL = "2027-01-20";', 'export const NEW_FEATURE_UNTIL = "2027-01-19";'),
+    "boardPromo's NEW_FEATURE_UNTIL is eight weeks after that SAME date",
   ],
 ];
 

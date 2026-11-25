@@ -982,12 +982,29 @@ ok(
   `heading at ${recruiterHeading}, paragraph at ${paragraphAt}, next heading at ${nextHeading}`,
 );
 
-// Carried items 1 and 20: LAST_UPDATED moves at the merge, with
-// NEW_FEATURE_UNTIL, and not before.
+// Carried items 1 and 20, CLOSED 25 Nov 2026 -- the clearout ran and he set
+// the merge date. LAST_UPDATED now moves WITH NEW_FEATURE_UNTIL, same edit,
+// same moment, which is why both are asserted together below rather than
+// each in its own file.
 ok(
-  "LAST_UPDATED is untouched at 22 November 2026",
-  /const LAST_UPDATED = "22 November 2026";/.test(privacy),
-  "it moves at the merge, together with NEW_FEATURE_UNTIL in src/lib/boardPromo.js",
+  "Privacy's LAST_UPDATED is the merge date",
+  /const LAST_UPDATED = "25 November 2026";/.test(privacy),
+  "it was 22 November until the merge; it moves with NEW_FEATURE_UNTIL",
+);
+ok(
+  "RecruiterTerms' LAST_UPDATED is the SAME merge date",
+  /const LAST_UPDATED = "25 November 2026";/.test(
+    stripComments(read("Pages/RecruiterTerms.jsx")),
+  ),
+  "it was 16 November until the merge -- a different stale date is how a " +
+    "missed file would be caught",
+);
+ok(
+  "boardPromo's NEW_FEATURE_UNTIL is eight weeks after that SAME date",
+  /export const NEW_FEATURE_UNTIL = "2027-01-20";/.test(
+    read("lib/boardPromo.js"),
+  ),
+  "25 Nov 2026 + 8 weeks = 20 Jan 2027",
 );
 
 // The candidate delete-link sentence is already candidate-scoped and was

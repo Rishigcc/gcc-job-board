@@ -1,5 +1,9 @@
 # The pre-merge clearout
 
+**RUN 25 November 2026. Complete.** Steps 1 to 7 ran clean, nothing errored,
+and the storage bucket was already empty. The outcome is recorded at the
+bottom, under "What actually happened."
+
 **Every test row, file and account created while building the job board against
 the live database, removed in the order the foreign keys require.**
 
@@ -139,7 +143,8 @@ Paste **`supabase/clearout/02-companies.sql`** and run it.
 It has a `profiles` row, a `candidate` role row and one activity row, and
 **no community content at all** — 0 questions, 0 answers. Nothing is lost.
 
-**`iworkatgcctest3@gmail.com` — my recommendation is to KEEP it.**
+**`iworkatgcctest3@gmail.com` — my recommendation was to KEEP it, and he
+decided to keep BOTH.**
 
 It has **no job-board data left**: no applications, no resume, no saved roles.
 The clearout list named it because it once had a resume row and applications,
@@ -151,13 +156,18 @@ member — posted under the display name **hitesh1**.
 cascades. A real member's question would lose a reply, and there is no way to
 keep the answer and delete the account.
 
-- **Keep it** → it is indistinguishable from any other community account, and
-  it holds nothing the clearout is for.
-- **Delete it** → the answer goes too. Look at the answer first and decide
-  whether it is worth keeping; if it is a test reply with no value to the
-  person who asked, deleting is reasonable.
+**DECIDED: he kept `iworkatgcctest2@gmail.com` too**, for a reason this
+procedure did not anticipate — *"I'll want a candidate account to test v2
+with and creating one later is more work than keeping one now."* That is not
+the same reason as keeping `test3`, and worth separating: `test3` is kept
+because deleting it costs a real member their answer; `test2` is kept because
+it is a convenience for work that has not started yet.
 
-Either choice is recorded by step 7, which reports which one you made.
+**The consequence of keeping either:** both have real Google addresses, so
+both will receive the **community digest** going forward — the weekly email
+`user_activity`-tracked members get, which predates the job board and is out
+of its scope. Neither account posts, answers or applies, so the digest is the
+only thing that treats them as live members from here on.
 
 ---
 
@@ -186,6 +196,29 @@ This is the statement that the job board carries no test data into production.
 **Keep the output.**
 
 ---
+
+## What actually happened — 25 November 2026
+
+Step 7's final verification: **14 of 15 rows PASS.** The one that read FAIL
+was `c11`, and it is a decision, not a problem:
+
+| | |
+|---|---|
+| c11 the recruiter and candidate test accounts are gone | **FAIL** — `iworkatgcctest2@gmail.com` |
+| Everything else | PASS |
+
+He kept both test Google accounts deliberately — see the decision above.
+**`c11` checks for the Google accounts' absence, so keeping one was always
+going to read FAIL there.** That is the check doing its job: it would be worse
+for a kept account to pass silently as though nothing had been decided.
+
+The other fourteen, as reported: **0 jobs, 0 applications, 0 candidate
+resumes, 0 storage objects, 0 saved roles, 0 recruiter profiles, 0 recruiter
+role rows**, both test companies gone, **1,814** companies intact, Walmart
+survived, the admin row untouched, `convalidated = true`, and **2,643**
+profiles — one more than the 2,642 this file expected, because someone joined
+the community while the clearout was running. That is not a discrepancy to
+chase; the count was never going to be perfectly still.
 
 ## After the clearout: the overflow fixture
 

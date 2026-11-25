@@ -1,8 +1,8 @@
 # HANDOVER — iWorkAtGCC job board, stage 12
 
-Written 25 November 2026 and **refreshed the same day**, after the
-consolidation and the reset flow were signed off. For someone picking this
-up with no prior context.
+Written 25 November 2026, **refreshed 26 November** after the clearout ran
+and the three merge-date edits landed. For someone picking this up with no
+prior context.
 
 Read this file, then `JOB-BOARD-TEST-DATA.md` — that is the project's real
 memory and it is long. This file is the map; that file is the territory.
@@ -82,7 +82,7 @@ https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
 | 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
 | 12 (recruiter password reset, settings) | **SIGNED OFF 25 Nov. FINAL.** Both retests pass, including the two decisions taken after the sign-off. Nothing in stage 12 is open |
 
-Then: the design pass, the pre-merge clearout, and one merge.
+**The clearout has already run** (26 Nov). What is left before the merge: the design pass, and one deliberate merge.
 
 **Nothing is outstanding inside stage 12.** Every stage is signed off except
 11, which is deferred to v2. Two decisions were taken after the sign-off and
@@ -91,9 +91,11 @@ recruiter (hearts deliberately untouched), and **carried item 30** — the
 footer's Community column now shows at every width, because
 `Join the Community` is the one footer link with no mobile equivalent.
 
-**What is left is not a stage.** See section 9 and the carried-items table in
-the tracker: the design pass, the live Markdown defect (item 27), the
-clearout, and the production-dependent checks.
+**What is left is not a stage, and most of it is done.** See section 9: only
+the design pass and the production-dependent P-checks remain as live work.
+The clearout ran, the three merge dates are set, item 27 and item 29 are
+built and passed, and P4 is checked. One structural note (the duplicate
+`SUPABASE_SERVICE_ROLE_KEY` entry) is logged for v2.
 
 **THE WORDING PASS IS DONE.** W1, W2, W5 and W6 all shipped on 25 Nov, and
 **W7 was closed as superseded** — `Apply Directly` no longer exists anywhere,
@@ -443,56 +445,64 @@ the tracker before quoting an assertion count as reassurance.
 
 ## 9. Before the merge
 
-**`CLEAROUT.md` is the procedure**, written 25 Nov 2026 with every figure
-derived from live rather than copied from the tracker. It is seven numbered
-steps with the SQL in `supabase/clearout/` and the dashboard steps spelled
-out. The rest of this section is the reasoning behind it.
+**THE CLEAROUT HAS RUN.** 26 Nov 2026, `CLEAROUT.md`'s procedure, 14 of 15
+final-verification rows PASS. The fifteenth is a deliberate decision — Rishi
+kept both test Google accounts — not a defect. Full outcome in
+`JOB-BOARD-TEST-DATA.md` under "THE CLEAROUT RAN, THE THREE DATES ARE SET, P4
+PASSED". **`CLEAROUT.md` itself now documents its own outcome** at the bottom
+and does not need re-running.
 
-`JOB-BOARD-TEST-DATA.md` has the full list.
+**Item 1 and 20 (the three dates) are DONE.** `LAST_UPDATED` in
+`Privacy.jsx` and `RecruiterTerms.jsx` is **25 November 2026**;
+`NEW_FEATURE_UNTIL` in `boardPromo.js` is **`2027-01-20`**, eight weeks past
+it. Two suite assertions that had guarded the OLD placeholder values were
+rewritten to guard the new ones, because they had been written to fail if the
+date moved before the merge — and it has now moved, correctly.
 
-> **COUNTS IN THAT FILE ARE A RECORD, NOT A SOURCE OF TRUTH.** Every figure
-> below was re-derived read-only against live on **25 Nov 2026**, after a
-> pre-merge list quoted this file and got the company seed wrong — it had
-> been run the day before and a heading still said `NOT YET RUN`. Two other
-> figures were stale **in opposite directions**. **Re-derive before acting;
-> never adjust a written count.**
+**Item 29 is DONE, passed 26 Nov**, with a lesson worth carrying: half its
+checklist was already obsolete when handed over, because stage 12 had closed
+the routes it described in between. See the entry two bullets below.
 
-- **The clearout** (carried item 13), verified 25 Nov — in order:
-  `applications` (**18 rows, all already anonymised**) → **all 27 jobs**, not
-  24 → `Test Co A`/`Test Co B` **only** → the two recruiter accounts →
-  **both** test Google accounts (`iworkatgcctest2@` *and*
-  `iworkatgcctest3@gmail.com`). `candidate_resumes` and the `resumes` bucket
-  are **already empty**, so those two steps are no-ops — but check, because
-  more testing recreates them.
-  - The 27 is the 24 `[T5]` roles **plus three**: job **13**
-    `Program manager`, job **41** `trial job`, and job **42**.
-  - **`Walmart` must survive the companies step** — job 42 sits under it and
-    it is one of the 1,816 real seeded names.
-- **Role 42** (a 180-character unbroken title, **under `Walmart`**) is the
-  fixture `check-overflow.mjs` drives, and **since 25 Nov it also carries that
-  word inside a `##` heading and a `- ` list item** (item 27's proof 6, from
-  `supabase/test-fixtures/item27-overflow-fixture.sql`). **Job 13 is the
-  second subject**, the one role with real Markdown. **The clearout deletes
-  both**, so that script needs a new subject — and the replacement must carry
-  the long word in a **heading, a list item AND a title**, because those are
-  three different measurements and a title-only fixture would silently stop
-  testing two of them.
+**P4 is checked and passes.** One structural note, not a blocker: see the
+entry below.
+
+**What that leaves, as of 26 Nov 2026:**
+
 - **Item 26** — `alter table public.jobs validate constraint
-  jobs_description_check;` **after** the clearout. **Confirmed still
-  `NOT VALID`** on 25 Nov.
-- **Items 1 and 20 — THREE dates, not two.** `LAST_UPDATED` in
-  `src/Pages/Privacy.jsx` (22 Nov) **and in `src/Pages/RecruiterTerms.jsx`
-  (16 Nov)**, plus `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js`
-  (`2027-01-19`). Same moment, or the site contradicts itself.
-- **Item 27** — a **live defect**: recruiters paste Markdown and
-  `/gcc-jobs/:slugId` renders it literally. **One job carries it today**: job
-  13, `Program manager`.
-- **Item 23** — add a second admin account. **Confirmed exactly one `admin`
-  row** on 25 Nov, on a Google-only account.
+  jobs_description_check;`. **DONE as part of the clearout run** —
+  `CLEAROUT.md` step 6, `convalidated = true`, confirmed in step 7's final
+  verification.
+- **Item 27** — the Markdown-rendering defect itself is **DONE**, built and
+  proved (see item 27 in the tracker). The data it was found on is gone after
+  the clearout; the fix is in the code, not the row.
+- **Item 23** — the second admin account, **deferred to v2**. The Supabase
+  SQL editor is an independent way to re-grant the one admin row, and the
+  account holding it was confirmed on a different mailbox from the Supabase
+  dashboard login, so losing the Google account is recoverable rather than a
+  lockout.
 - **Item 14** — `supabase/post-merge/drop_question_authors.sql`, **after**
-  the merge is deployed and verified. **The view is confirmed still present.**
-- **The company seed is DONE** — run 24 Nov, 1,816 companies, picker tested
-  end to end. Do not re-report it as outstanding.
+  the merge is deployed and a live question page is confirmed to still show
+  author names. Not before.
+- **A checklist goes stale the same way a fact does, more invisibly.** A fact
+  is stale when the world moves. A checklist is stale when the world moves
+  **in the direction the checklist was testing** — so it still reads as
+  plausible, right up to the step that cannot be performed. Item 29's
+  checklist described a recruiter on `/profile`, which stage 12 had closed to
+  recruiters in between. **Re-derive a checklist against the code as it is
+  now before handing it over**, not against the code it was written for, and
+  say which steps were dropped so the gap is visible rather than silent.
+- **`SUPABASE_SERVICE_ROLE_KEY` is two separate Vercel entries**, Production
+  (10 Sep) and Preview (18 Nov), rather than one value scoped to both. Both
+  work today — Supabase is one shared project, so the key is one secret by
+  definition, and both entries authenticating is itself evidence they already
+  match. **The risk is prospective**: a future rotation updated in only one
+  place would fail the environment nobody was looking at. **Deferred to v2**:
+  delete both, re-add one value with Production, Preview and Development all
+  ticked in the same action.
+- **Nothing else is outstanding.** The company seed is done (run 24 Nov,
+  1,816 companies). `check-overflow.mjs` reports its expected post-clearout
+  state — 15 checks, 0 failed, 3 pages skipped with a named banner — and the
+  overflow fixture pair is unused until a job-page wrap class changes again.
 
 ---
 

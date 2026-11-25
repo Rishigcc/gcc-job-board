@@ -2,7 +2,7 @@ import PolicyLayout from "../components/PolicyLayout";
 
 // NOTE: these terms describe the finished job board. They must not reach
 // production before the recruiter and applicant stages exist.
-const LAST_UPDATED = "16 November 2026";
+const LAST_UPDATED = "25 November 2026";
 
 function RecruiterTerms() {
   return (
