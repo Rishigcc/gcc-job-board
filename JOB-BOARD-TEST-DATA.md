@@ -3163,7 +3163,7 @@ it is the case covering 2,652 accounts. Both are the check-the-check rule from
 | A | **Supabase Redirect URLs must allow the reset landing path** — the preview host and `https://www.iworkatgcc.com`. | `resetPasswordForEmail`'s `redirectTo` must be on the allowlist or the link in the email dead-ends. This is a dashboard change only Rishi can make, and without it the flow cannot be tested at all. Do it together with carried item 8 (`http://localhost:5173/**`), so the allowlist is edited once. |
 | B | **Carried item 24: confirm the "Password changed" notification is OFF.** | Otherwise the change-password box ships a third Brevo email on day one. The docs name no dashboard control; the flag is `mailer_notifications_password_changed_enabled` via the Management API, which needs a Personal Access Token Rishi creates. **He runs it; the token is never pasted here.** |
 | C | ~~A decision on the reset email's template.~~ **DECIDED AND DRAFTED 25 Nov 2026: `supabase/email-templates/reset-recruiter-password.html`.** Rishi: *"A generic unsigned Supabase default arriving alongside it looks like phishing, and that's the worst possible thing for a password email to look like."* It reuses `confirm-recruiter-signup.html`'s styling exactly, so the two emails a recruiter can receive look like they come from the same place. Anti-phishing is the copy's purpose rather than a footnote: it says nothing has changed yet, that ignoring it is the correct response if unrequested, and that we never ask for a password — with no urgency language, which is what a real phish uses. It also carries a paragraph for someone who signs in with Google, because Supabase's `/auth/v1/recover` is reachable by anyone holding the publishable key, so a community member could receive it; that paragraph is what makes it harmless if they do. Paste path: **Authentication → Emails → Reset Password**.
-| D | ~~One Brevo log check after the first test send.~~ **CLOSED 26 Nov 2026** — one send at 11:57, `jobs@iworkatgcc.com` to the recruiter address, with his template; **nothing** for the nonsense address and **nothing** for the Google account. | The only place that shows what was actually sent. The claim under test in the negative cases is an **absence**, and an absence is proved at the sender, not at an inbox that may be slow. |
+| D | ~~One Brevo log check after the first test send.~~ **CLOSED 25 Nov 2026** — one send at 11:57, `jobs@iworkatgcc.com` to the recruiter address, with his template; **nothing** for the nonsense address and **nothing** for the Google account. | The only place that shows what was actually sent. The claim under test in the negative cases is an **absence**, and an absence is proved at the sender, not at an inbox that may be slow. |
 
 ### Carried items that land in or around stage 12
 
@@ -3795,7 +3795,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 11 | ~~**Stale unconfirmed `auth.users` rows / pre-account-takeover.**~~ **CLOSED 18 Nov 2026 by test T2 — outcome B.** A pre-registered unconfirmed password account was merged into the same user id when the real owner signed in with Google, and Supabase wiped **both** the attacker's password (`has_password` false, `providers` google only) **and** the attacker's `user_metadata`. `signInWithPassword` with the attacker's password returned 400 "Invalid login credentials". No cleanup cron is needed. | Stage 3 review | Closed |
 | 12 | **`user_activity` now skips recruiters.** `ActivityTracker` is mounted at the app root and ran `record_activity()` for every signed-in user, recruiters included — proven by the one row `community@iworkatgcc.com` had accumulated. That table feeds the digest's active-user set and the community stats, so recruiters were inflating both. Guarded in stage 3. The guard keys off `account_type` metadata; if one account ever needs to be both candidate and recruiter, change it to key off the presence of a `profiles` row instead. | Rishi, stage 3 retest | Closed (guard shipped); stray row listed above for cleanup |
 
-## SIGNED OFF 26 Nov 2026 — the consolidation and the reset flow
+## SIGNED OFF 25 Nov 2026 — the consolidation and the reset flow
 
 Rishi's result, verbatim: *"The consolidation and the reset flow both pass."*
 
@@ -3844,6 +3844,39 @@ trap**.
 **To fix, in the dashboard:** Authentication → Emails → Reset Password → the
 **Subject** field above the body editor →
 `Reset your iWorkAtGCC recruiter password`. Nothing in the repo changes.
+
+### THE DATE WAS WRONG BY ONE DAY — corrected 25 Nov 2026
+
+Rishi: *"Today is 25 November. Check where that date came from and fix it — a
+wrong date in the tracker will outlive the mistake."*
+
+**Everything this section describes happened on 25 November 2026**, not the
+26th. Seven references across three files said 26 Nov and are now corrected:
+five in `HANDOVER.md`, this section's heading and prerequisite D here, and one
+comment in `supabase/email-templates/reset-recruiter-password.html`.
+
+**The proof is in the commit timestamps**, which no one typed:
+
+| | |
+|---|---|
+| `ed0dd49` HANDOVER.md | 2026-11-25 11:39 +0530, and its text says "Written 25 November" |
+| `212ea8d` the sign-off | 2026-11-25 12:26 +0530, and its text says "26 Nov 2026" |
+
+**Two commits 47 minutes apart, dated a day apart in their own prose.** The
+Brevo send at 11:57 sits between them, so that was 25 Nov too.
+
+**Where it came from: a session that ran across midnight and counted the
+rollover twice.** Commits `fc51c2b` and `36865b1` are stamped 00:58 and 01:06
+on 25 Nov, so the session began on the 24th while already calling the date the
+25th; when the real midnight passed it advanced to the 26th. The error is not
+a typo, which matters — **a long session cannot tell the date from the inside,
+so it must read it rather than increment it.**
+
+**`212ea8d`'s commit message still says 26 Nov and was deliberately left
+alone.** It is pushed to `origin/job-board`, and rewriting a pushed commit to
+fix a message is a worse trade than one wrong date in the log. **The commit
+log is therefore the one place the wrong date survives** — which is why it is
+written down here instead.
 
 ## CONSOLIDATION — 14 serverless functions to 10, Hobby's limit is 12
 

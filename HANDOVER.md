@@ -1,6 +1,6 @@
 # HANDOVER — iWorkAtGCC job board, stage 12
 
-Written 25 November 2026, **refreshed 26 November** after the
+Written 25 November 2026 and **refreshed the same day**, after the
 consolidation and the reset flow were signed off. For someone picking this
 up with no prior context.
 
@@ -80,7 +80,7 @@ https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
 | 1–9b | **Signed off** |
 | 10 (SEO, findability, saved roles) | **Signed off 25 Nov**, both halves |
 | 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
-| 12 (recruiter password reset, settings) | **In progress.** The reset flow and the function consolidation were **signed off 26 Nov**; deliverables 2–6 remain |
+| 12 (recruiter password reset, settings) | **In progress.** The reset flow and the function consolidation were **signed off 25 Nov**; deliverables 2–6 remain |
 
 Then: the design pass, the pre-merge clearout, and one merge.
 
@@ -92,7 +92,7 @@ Then: the design pass, the pre-merge clearout, and one merge.
 |---|---|---|
 | 1 | **Migration 025** — `public.reset_eligibility_for_email(text)`, the reset gate | **DONE**, run by him, 7 checks + verdict all PASS |
 | 1a | **`api/password.js`** — the request endpoint and the landing-page gate | **DONE**, 69 assertions |
-| 1b | **`/recruiter/forgot-password`** and **`/recruiter/reset-password`** | **SIGNED OFF 26 Nov** — full flow tested end to end |
+| 1b | **`/recruiter/forgot-password`** and **`/recruiter/reset-password`** | **SIGNED OFF 25 Nov** — full flow tested end to end |
 | 2 | **The change-password box** (requires `current_password`) | **NOT BUILT — start here** |
 | 3 | **`/recruiter/settings`** | **NOT BUILT** |
 | 4 | **Close seven candidate-only routes to recruiters** | **NOT BUILT** |
@@ -137,7 +137,7 @@ to discover who is registered.
 | **A** | Supabase Redirect URLs | **DONE.** Four entries: the preview host, `https://www.iworkatgcc.com/**`, `http://localhost:5173/**`, and the existing per-deployment wildcard. Site URL untouched. This also closed carried item 8. |
 | **B** | "Password changed" notification off | **DONE.** **Authentication → Emails → Security section**, seven toggles, all already off. The docs name no dashboard control and claim the Management API is the only route — that is wrong, and the dashboard path above is correct. |
 | **C** | The reset email template | **DONE.** `supabase/email-templates/reset-recruiter-password.html`, pasted and saved with its subject line. |
-| **D** | Brevo log check after the first real send | **DONE 26 Nov.** One send at 11:57, `jobs@iworkatgcc.com` to the recruiter address, with his template. **Nothing** for the nonsense address and **nothing** for the Google account — the identical-reply rule proved where only the sender can prove it. |
+| **D** | Brevo log check after the first real send | **DONE 25 Nov.** One send at 11:57, `jobs@iworkatgcc.com` to the recruiter address, with his template. **Nothing** for the nonsense address and **nothing** for the Google account — the identical-reply rule proved where only the sender can prove it. |
 
 **All four prerequisites are closed.** Nothing is waiting on him.
 
@@ -158,7 +158,7 @@ recruiter account". Both are documented in
 **Vercel's Hobby plan allows 12 serverless functions per deployment.** The
 project reached 14 on 25 Nov and **the build stopped**. He will not upgrade.
 
-Four merges brought it to **10**, and all four were **signed off on 26 Nov**
+Four merges brought it to **10**, and all four were **signed off on 25 Nov**
 — including the two with no automated test, which he verified in the browser
 in exactly the way that mattered: he typed one admin action's confirmation
 into the other's box to prove they had not crossed.
