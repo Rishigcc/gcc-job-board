@@ -246,6 +246,26 @@ for features.
 function's filesystem. **Re-key it wrong and every job page answers 503 while
 nothing else on the site looks wrong.**
 
+**It also carries `X-Robots-Tag: noindex, nofollow` on `/recruiter` and
+`/recruiter/(.*)`**, because **none of `/recruiter/*` is prerendered** — each
+is served as the bare `app.html` with no head tags, so the `noindex` was
+client-side only while `robots.txt` says `Allow: /`. Added 25 Nov 2026 after
+Rishi found that `view-source:` on `/recruiter/sign-in` had no `noindex` at
+all.
+
+- **THE SLASH IS LOAD-BEARING.** `/recruiter-terms` is a **public** page and
+  matches `/recruiter(.*)` but **not** `/recruiter/(.*)`, so the two patterns
+  must never be merged into one.
+- **Keep `robots.txt` allowing these paths.** Disallowing them would hide the
+  header from the crawler that needs to read it, and a disallowed URL can
+  still be indexed as a bare link. Allow the crawl, serve the refusal.
+- **NEVER PUT A COMMENT KEY IN `vercel.json`.** A header entry's keys are
+  `source`, `headers`, `has`, `missing`. Vercel validates the schema and an
+  unknown key risks failing the deployment. Reasoning goes in the tracker.
+- **`vite preview` does not read `vercel.json`**, so headers and rewrites
+  cannot be tested locally at all. The suite asserts the configuration;
+  verify the live response with `curl -sI <url> | grep -i x-robots`.
+
 ---
 
 ## 7. How to run the tests
@@ -273,8 +293,8 @@ npx esbuild scripts/stage4-validation-test.mjs --bundle --format=esm \
 Two more run directly, added 25 Nov:
 
 ```sh
-node scripts/stage12-settings-test.mjs          # 192 — static, reads src/
-node scripts/stage12-settings-negative-run.mjs  # 75 mutations, all must be caught
+node scripts/stage12-settings-test.mjs          # 209 — static, reads src/
+node scripts/stage12-settings-negative-run.mjs  # 80 mutations, all must be caught
 node scripts/item27-markdown-negative-run.mjs   # 16 mutations, all must be caught
 node scripts/sql-reserved-words-test.mjs        # 64 — scans every .sql file
 ```
@@ -293,7 +313,7 @@ the code is fine.
 
 Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **60**,
 stage8 **44**, stage9 **90**, stage10 **116 + 111 + 62 + 121**, stage12
-**69 + 192**, item 27 **133**, check-overflow **21**. **stage7 is 60, not 56** — W6 added four. **eslint has exactly 8 pre-existing
+**69 + 209**, item 27 **133**, sql-reserved **64**, check-overflow **21**. **stage7 is 60, not 56** — W6 added four. **eslint has exactly 8 pre-existing
 errors** — 2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the
 baseline, not a problem to fix.
 
