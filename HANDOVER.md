@@ -80,9 +80,16 @@ https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
 | 1–9b | **Signed off** |
 | 10 (SEO, findability, saved roles) | **Signed off 25 Nov**, both halves |
 | 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
-| 12 (recruiter password reset, settings) | **In progress.** The reset flow and the consolidation were **signed off 25 Nov**. Deliverables 2–6 are **BUILT and pushed 25 Nov, awaiting his sign-off** |
+| 12 (recruiter password reset, settings) | **SIGNED OFF 25 Nov** — *"Stage 12 passes."* **Contingent on two fixes he found afterwards** (the footer's Profile link and the Save control), pushed at `86ba72c` and **not re-tested yet** |
 
 Then: the design pass, the pre-merge clearout, and one merge.
+
+**The one thing outstanding inside stage 12** is his re-test of `86ba72c`.
+**One decision is open**, and it is the same defect class: a recruiter who
+opens `/questions` by URL still sees the heart and **Save** controls on each
+question card, and `/profile/saved` is closed, so a saved question has nowhere
+to be seen. Same rule as decision F, one condition away, deliberately not
+done because it changes a page 2,520 community members use.
 
 ---
 
@@ -116,6 +123,20 @@ applies and does nothing**, the same shape as the inert `break-words`. The
 sign-in call is the half that is certain to run. `reauthenticate()` is
 deliberately unused: it emails a one-time code, which would be a third
 transactional email.
+
+**THE RULE DELIVERABLE 4 IS REALLY ABOUT, and it was applied incompletely
+twice.** Closing the seven routes is half of it; the other half is that
+**nothing offers a recruiter a link to one**. That half was applied at the
+header and missed at the **footer**, then applied at the job pages and missed
+at **`/questions`** — both found by Rishi or by sweeping after he asked for
+one, not by the build. The cause was that three public pages each resolved the
+viewer themselves, so the rule lived in whoever remembered it.
+**`src/lib/useViewer.js` resolves it once**, `showsCandidateControls()` is the
+only question such a control asks, and
+`scripts/stage12-settings-test.mjs` now holds a table classifying **every file
+that links to one of the seven**. A new link that is not classified fails the
+suite. Read that table before adding any link to `/profile`, `/ask` or
+`/my-applications`.
 
 **Deliverable 4's trap, and how it went.** `blockRecruiters` already existed
 on `ProtectedRoute`; the seven routes are `/profile`, `/profile/asked`,
@@ -228,8 +249,8 @@ npx esbuild scripts/stage4-validation-test.mjs --bundle --format=esm \
 Two more run directly, added 25 Nov:
 
 ```sh
-node scripts/stage12-settings-test.mjs          # 48 — static, reads src/
-node scripts/stage12-settings-negative-run.mjs  # 38 mutations, all must be caught
+node scripts/stage12-settings-test.mjs          # 97 — static, reads src/
+node scripts/stage12-settings-negative-run.mjs  # 46 mutations, all must be caught
 ```
 
 The negative run is the check-the-check rule made executable: it breaks one
@@ -241,7 +262,7 @@ the code is fine.
 
 Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **56**,
 stage8 **44**, stage9 **90**, stage10 **116 + 111 + 62 + 121**, stage12
-**69 + 48**, check-overflow **18**. **eslint has exactly 8 pre-existing
+**69 + 97**, check-overflow **18**. **eslint has exactly 8 pre-existing
 errors** — 2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the
 baseline, not a problem to fix.
 

@@ -3347,6 +3347,140 @@ says `./Pages/`. macOS resolves `src/pages` to it as well, so a lower-case
 import would build locally and **fail on Vercel's Linux**. The suite asserts
 the import spelling for this reason.
 
+## STAGE 12 — SIGNED OFF 25 Nov 2026, with two fixes pushed after
+
+Rishi's result, verbatim: *"Stage 12 passes."* He confirmed, in order: the
+header showing My Dashboard and Settings with no Profile; both company rows
+separately labelled; everything plain text except the three password fields;
+the verification line correctly **not** stating his status; all seven routes
+bouncing a recruiter to `/recruiter` with no flash; all seven still working
+normally for a Google account; the password box refusing a wrong current
+password, accepting the right one and keeping him signed in; the old password
+refused and the new one working; **Brevo showing no email from the change**;
+the policy paragraph in; the date still 22 November; and Settings and
+`/privacy` clean at 375px.
+
+**The sign-off is contingent on the two fixes below**, which were found by him
+and pushed afterwards at `86ba72c`. They are not re-tested yet.
+
+### HE FOUND THE FOOTER, AND IT WAS THE SECOND INCOMPLETE APPLICATION
+
+Rishi: *"The header item was hidden, the footer one wasn't — so a recruiter
+clicking it gets bounced to /recruiter. Check the footer against the same rule
+as the header, and tell me whether anything else links to those seven routes
+that we've missed. **A sweep, not a one-line fix** — this is the second place
+the same rule was applied incompletely."*
+
+**He was right that it was a pattern, and the sweep found a third.**
+
+`Footer.jsx` **already computed `isRecruiter`** — it uses it to choose between
+a three-column and a five-column grid — and simply did not ask it on the
+Account list. The value was there; the question was not asked.
+
+### THE SWEEP, file by file
+
+Every file in `src/` that references one of the seven, and what it is:
+
+| File | Links to | Verdict |
+|---|---|---|
+| `components/Footer.jsx` | `/profile` | **DEFECT — FIXED.** On every page of the site |
+| `Pages/Questions.jsx` | `/ask` × 2 | **DEFECT — FIXED.** Public page, no session awareness at all |
+| `components/SiteHeader.jsx` | `/profile` | gated in this stage |
+| `Pages/GccJobDetail.jsx` | `/my-applications` | **clear — provenance.** The back-link renders only when router state says the visitor came from `/my-applications`, which a recruiter cannot reach |
+| `Pages/AskQuestion.jsx` | itself | clear — contained |
+| `Pages/AskedQuestions.jsx` | `/profile`, `/ask` | clear — contained |
+| `Pages/SavedQuestions.jsx` | `/profile` | clear — contained |
+| `Pages/SavedJobs.jsx` | `/profile`, itself | clear — contained |
+| `Pages/DeleteMyData.jsx` | `/profile` × 3 | clear — contained |
+| `Pages/MyApplications.jsx` | `/profile` | clear — contained |
+| `Pages/Profile.jsx` | three sub-routes | clear — contained |
+| `components/ProfileJobBoard.jsx` | `/my-applications`, `/profile/delete-data` | clear — rendered only by `Profile.jsx` |
+| `Pages/Welcome.jsx` | `/ask` | clear — `/welcome` is itself behind `blockRecruiters` |
+
+**`/questions` is the find worth dwelling on.** The header hides the link to
+it for a recruiter, which reads like the rule was applied — but **hiding a
+nav item does not close a URL**, and `Questions.jsx` contained no reference to
+a session, a user or an account type. A signed-in recruiter who typed the
+address was offered the page's primary button, and `/ask` had been closed
+since earlier the same day.
+
+**Deliberately left as it is:** the footer's **My Dashboard**, which points at
+`/welcome` for everyone. `/welcome` is behind `blockRecruiters`, so a
+recruiter is redirected to `/recruiter` — but that is a redirect **to a
+useful place they were asking for**, not a bounce away from one they cannot
+have. The header does the same and it was signed off that way.
+
+### DECISION F — the Save control is withheld from a recruiter
+
+Rishi: *"With /profile/saved-jobs closed they can save a role and then have
+nowhere to see it. A control that silently does nothing visible is worse than
+no control."* Done on the board list and the job detail page.
+
+### THE CAUSE, fixed rather than patched: THE RULE LIVED IN WHOEVER REMEMBERED IT
+
+Three public pages each resolved the viewer for themselves — `getUser()`,
+keep the id, discard the rest — so "a recruiter is shown no candidate-only
+control" had to be remembered separately at every one. It was remembered at
+the header and forgotten at the footer, then remembered at the job pages and
+forgotten at `/questions`. **Twice is not two accidents; the pattern is
+per-page duplication.**
+
+`src/lib/useViewer.js` now resolves the viewer once and
+`showsCandidateControls(viewer)` is the single question such a control asks.
+It is a **named function rather than an inline `!isRecruiter`** specifically
+so the sweep can find every call site.
+
+**It requires the viewer to be RESOLVED**, not merely not-a-recruiter. Before
+resolution `isRecruiter` is false, so the shorter test would draw the control
+and then take it away — the same flash that moving the recruiter redirect out
+of `Welcome.jsx` into `ProtectedRoute` existed to remove. The cost is that the
+control appears a moment after the page for everyone, which was already true
+of its state: a bookmark cannot know it is filled until the session resolves.
+**The prerendered `/questions` still carries the Ask button**, because the
+snapshot is taken signed-out and resolved.
+
+### THE CHECK THAT STOPS A THIRD OCCURRENCE
+
+The suite now holds a **table classifying every file in `src/` that links to
+one of the seven**, as `contained`, `gated`, `provenance` or `allowed` with a
+reason. A file that links to a closed route **and is not in the table fails**,
+and the failure says what to decide. A `gated` entry must import
+`isRecruiterUser` or `useViewer`. **A stale entry fails too** — which is how
+the four files that name a path only in prose were established not to need
+one, since the pattern matches a *quoted* path and not a path in a sentence.
+
+**The mutation that matters is a brand-new file that links to a closed route**
+without being classified, and it is caught. That is the difference between
+this being written down and it being enforced.
+
+**48 assertions to 97. The negative run, 38 mutations to 46, all caught.**
+
+### Counts after the sweep
+
+stage4 **52**, stage5 **42**, stage6 **62**, stage7 **56**, stage8 **44**,
+stage9 **90**, stage10 **121 + 62 + 111 + 116**, stage12 reset gate **69**,
+stage12 settings **97**, check-overflow **18**, negative run **46/46**.
+eslint still exactly **8**. Two now-unused `supabase` imports were removed
+from the two job pages, which is why their import lists shrank.
+
+### STILL OPEN — the same defect class, one decision away
+
+**A recruiter who opens `/questions` by URL still sees the heart and Save
+controls on every question card.** `QuestionCard.jsx` has no recruiter
+gating, and `/profile/saved` — where a saved question would be seen — is one
+of the seven now closed. **By Rishi's own rule this is the same defect as the
+Save button on a role**, and the fix is the same one condition.
+
+It was **not** done, because it changes a page 2,520 community members use and
+that is his decision rather than a tidy-up inside stage 12's scope. Hearts are
+a different case: a heart is a public reaction with no personal list to view,
+so it leads nowhere and dead-ends nothing.
+
+**Also noted, not a defect:** `NotificationsBell` renders for any session,
+including a recruiter's, and will always be empty for one (0 recruiters have a
+question or an answer). It navigates to `/questions/:slug`, never to one of
+the seven, so nothing bounces.
+
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on
