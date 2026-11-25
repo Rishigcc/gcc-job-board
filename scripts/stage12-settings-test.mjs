@@ -634,6 +634,129 @@ ok(
 );
 
 // ---------------------------------------------------------------------------
+// The recruiter sign-in entrance — 25 Nov 2026
+// ---------------------------------------------------------------------------
+//
+// A returning recruiter had no entrance: the only one was /post-a-job's Sign
+// in tab, which you find only if you already know that posting and signing in
+// are the same page. The tab was pure internal state, so EVERY link to that
+// page opened on "Create account" -- a link labelled "Recruiter sign in"
+// would have landed a returning recruiter on a form asking them to create a
+// second account. That is what made a named route necessary rather than nice.
+
+const postAJob = stripComments(read("Pages/PostAJob.jsx"));
+const signupPage = stripComments(read("Pages/Signup.jsx"));
+const footerSrc = stripComments(read("components/Footer.jsx"));
+
+ok(
+  "the route exists and opens the Sign in tab",
+  /path="\/recruiter\/sign-in"/.test(main) &&
+    /<PostAJob initialMode="signin" \/>/.test(main),
+);
+
+// It must NOT be inside RecruiterRoute: a sign-in page is for someone with
+// no session, and the guard would bounce them to /post-a-job before it
+// rendered. The two reset routes are the precedent.
+ok(
+  "the sign-in route is outside RecruiterRoute",
+  routes.get("/recruiter/sign-in") === undefined,
+  "it appeared in the guarded-route table, which means a guard wraps it",
+);
+ok(
+  "and so are the two reset routes, for the same reason",
+  routes.get("/recruiter/forgot-password") === undefined &&
+    routes.get("/recruiter/reset-password") === undefined,
+);
+
+ok(
+  "PostAJob takes initialMode and defaults to signup",
+  /function PostAJob\(\{ initialMode = "signup" \}\)/.test(postAJob),
+  "the default is what keeps /post-a-job behaving exactly as before",
+);
+ok(
+  "the tab honours it instead of hardcoding signup",
+  /useState\(initialMode === "signin" \? "signin" : "signup"\)/.test(postAJob),
+  'this was `useState("signup")`, which is the whole defect',
+);
+ok(
+  "the head follows the route rather than the component",
+  /initialMode === "signin" \? \(/.test(postAJob) &&
+    /path="\/recruiter\/sign-in"/.test(postAJob) &&
+    /path="\/post-a-job"/.test(postAJob),
+  "two routes rendering one component must not claim the same canonical path",
+);
+// Read each <Seo> element from its `path` to the tag that closes it, rather
+// than guessing a character window -- the first version of this check used
+// `slice(at, at + 40)` and missed `noindex` by a few characters, failing on
+// correct code. A check that cannot pass is the same fault as one that
+// cannot fail.
+function seoAttributes(source, path) {
+  const at = source.indexOf(`path="${path}"`);
+  if (at === -1) return null;
+  const end = source.indexOf("/>", at);
+  return end === -1 ? null : source.slice(at, end);
+}
+
+ok(
+  "the sign-in route is noindex",
+  /noindex/.test(seoAttributes(postAJob, "/recruiter/sign-in") || ""),
+  "an entrance for people who already have an account does not belong in search",
+);
+ok(
+  "and /post-a-job is still indexable",
+  !/noindex/.test(seoAttributes(postAJob, "/post-a-job") || "x noindex"),
+  "it is the recruiter pitch and the one page that should rank",
+);
+ok(
+  "the heading does not promise posting to someone who came to sign in",
+  /Sign in to your recruiter account/.test(postAJob),
+);
+
+// Entrance 1 of 2: the community sign-in page.
+ok(
+  "the community sign-in page links to the recruiter entrance",
+  /to="\/recruiter\/sign-in"/.test(signupPage),
+);
+ok(
+  "and it says WHY, not just where",
+  /Recruiter accounts are separate from community accounts/.test(signupPage),
+  "the confusion is not 'where do I sign in' but 'why won't my password work'",
+);
+
+// Entrance 2 of 2: the footer, signed out only.
+ok(
+  "the footer links to the recruiter entrance",
+  /to="\/recruiter\/sign-in"/.test(footerSrc),
+);
+ok(
+  "the footer's recruiter link is SIGNED-OUT ONLY",
+  (() => {
+    // IT MUST BE INSIDE THE ELSE BRANCH of `{session ? (...) : (...)}`.
+    //
+    // The first version of this check compared the link's position to
+    // `handleSignOut`'s and the negative run caught it: moving the link into
+    // the SIGNED-IN branch still left it later in the file, so the mutation
+    // passed. Position is not structure. This finds the `) : (` that closes
+    // the signed-in branch and requires the link to come after it.
+    const ternary = footerSrc.indexOf("{session ? (");
+    if (ternary === -1) return false;
+    const elseBranch = footerSrc.indexOf(") : (", ternary);
+    if (elseBranch === -1) return false;
+    const link = footerSrc.indexOf('to="/recruiter/sign-in"');
+    return link > elseBranch;
+  })(),
+  "a signed-in recruiter already has Settings and My Dashboard in the header",
+);
+
+// NOT in the header, on his decision.
+ok(
+  "there is no recruiter sign-in item in the header",
+  !/recruiter\/sign-in/.test(stripComments(read("components/SiteHeader.jsx"))),
+  "the header is for the community; a permanent recruiter link is clutter " +
+    "for 2,520 people who will never use it",
+);
+
+// ---------------------------------------------------------------------------
 // Deliverable 5 — the three disproved comments, gone and replaced
 // ---------------------------------------------------------------------------
 //

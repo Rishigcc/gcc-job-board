@@ -215,15 +215,38 @@ function Footer() {
                   </li>
                 </>
               ) : (
-                <li>
-                  <button
-                    type="button"
-                    onClick={handleSignIn}
-                    className="text-slate-600 transition hover:text-blue-600"
-                  >
-                    Sign In
-                  </button>
-                </li>
+                <>
+                  <li>
+                    <button
+                      type="button"
+                      onClick={handleSignIn}
+                      className="text-slate-600 transition hover:text-blue-600"
+                    >
+                      Sign In
+                    </button>
+                  </li>
+
+                  {/* ENTRANCE 2 OF 2 for a returning recruiter, 25 Nov 2026.
+                      SIGNED-OUT ONLY, which is the whole design: a recruiter
+                      who is already signed in has Settings and My Dashboard
+                      in the header, and a candidate who is signed in has no
+                      use for it. It appears for exactly the visitor who
+                      might need it and for nobody else.
+
+                      NOT IN THE HEADER, on Rishi's decision: the header is
+                      for the community, and a permanent recruiter link there
+                      is clutter for 2,520 people who will never use it.
+                      The footer is where a returning visitor looks for the
+                      thing the header does not offer. */}
+                  <li>
+                    <Link
+                      to="/recruiter/sign-in"
+                      className="text-slate-600 transition hover:text-blue-600"
+                    >
+                      Recruiter sign in
+                    </Link>
+                  </li>
+                </>
               )}
             </ul>
           </div>

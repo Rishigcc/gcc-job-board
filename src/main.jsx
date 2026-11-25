@@ -281,6 +281,27 @@ function AppRoutes() {
         element={<RecruiterResetPassword />}
       />
 
+      {/* Recruiter sign-in, 25 Nov 2026. A returning recruiter had no
+          entrance: the only one was /post-a-job's Sign in tab, which you
+          find only if you already know that posting and signing in are the
+          same page.
+
+          OUTSIDE RecruiterRoute, deliberately and like the two routes above
+          it: a sign-in page is for someone with no session, and the guard
+          would bounce them to /post-a-job before it rendered.
+
+          It renders PostAJob with the Sign in tab open rather than a second
+          page, because the form, the free-provider block and the
+          already-signed-in notice are all there and must not be duplicated.
+          Rishi ruled out a header item: the header is for the community, and
+          a permanent recruiter link is clutter for 2,520 people who will
+          never use it. The entrances are the community sign-in page and the
+          footer. */}
+      <Route
+        path="/recruiter/sign-in"
+        element={<PostAJob initialMode="signin" />}
+      />
+
       {/* Recruiter area. RecruiterRoute proves there is a confirmed session
           and a recruiter_profiles row before any of these render. */}
       <Route

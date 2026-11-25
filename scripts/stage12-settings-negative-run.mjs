@@ -523,6 +523,113 @@ const MUTANTS = [
     (s) => s.replace("Closing a role, or letting one expire, frees a slot.", ""),
     "the unverified slot counter is untouched",
   ],
+  // --- the recruiter sign-in entrance ------------------------------------
+  [
+    "the sign-in route is removed",
+    "main.jsx",
+    (s) => s.replace('path="/recruiter/sign-in"', 'path="/recruiter/sign-in-x"'),
+    "the route exists and opens the Sign in tab",
+  ],
+  [
+    "the route stops preselecting the Sign in tab",
+    "main.jsx",
+    (s) => s.replace('<PostAJob initialMode="signin" />', "<PostAJob />"),
+    "the route exists and opens the Sign in tab",
+  ],
+  [
+    "the sign-in route is wrapped in RecruiterRoute",
+    "main.jsx",
+    (s) =>
+      s.replace(
+        '        path="/recruiter/sign-in"\n        element={<PostAJob initialMode="signin" />}',
+        '        path="/recruiter/sign-in"\n        element={\n          <RecruiterRoute>\n            <PostAJob initialMode="signin" />\n          </RecruiterRoute>\n        }',
+      ),
+    "the sign-in route is outside RecruiterRoute",
+  ],
+  [
+    "the tab goes back to hardcoded signup",
+    "Pages/PostAJob.jsx",
+    (s) =>
+      s.replace(
+        'const [mode, setMode] = useState(initialMode === "signin" ? "signin" : "signup");',
+        'const [mode, setMode] = useState("signup");',
+      ),
+    "the tab honours it instead of hardcoding signup",
+  ],
+  [
+    "initialMode defaults to signin, changing /post-a-job",
+    "Pages/PostAJob.jsx",
+    (s) =>
+      s.replace(
+        'function PostAJob({ initialMode = "signup" })',
+        'function PostAJob({ initialMode = "signin" })',
+      ),
+    "PostAJob takes initialMode and defaults to signup",
+  ],
+  [
+    "the sign-in route loses its noindex",
+    "Pages/PostAJob.jsx",
+    (s) =>
+      s.replace(
+        '          path="/recruiter/sign-in"\n          noindex\n',
+        '          path="/recruiter/sign-in"\n',
+      ),
+    "the sign-in route is noindex",
+  ],
+  [
+    "/post-a-job becomes noindex",
+    "Pages/PostAJob.jsx",
+    (s) =>
+      s.replace(
+        '          path="/post-a-job"\n        />',
+        '          path="/post-a-job"\n          noindex\n        />',
+      ),
+    "and /post-a-job is still indexable",
+  ],
+  [
+    "both routes claim the same canonical path",
+    "Pages/PostAJob.jsx",
+    (s) => s.replace('path="/recruiter/sign-in"\n          noindex', 'path="/post-a-job"\n          noindex'),
+    "the head follows the route rather than the component",
+  ],
+  [
+    "the community sign-in page loses the recruiter line",
+    "Pages/Signup.jsx",
+    (s) =>
+      s.replace(
+        /\s*Recruiter accounts are separate from community accounts\.\{" "\}/,
+        "",
+      ),
+    "and it says WHY, not just where",
+  ],
+  [
+    "the footer's recruiter link moves to the signed-IN branch",
+    "components/Footer.jsx",
+    (s) => {
+      const link = s.match(
+        /\n                  <li>\n                    <Link\n                      to="\/recruiter\/sign-in"[\s\S]*?<\/li>\n/,
+      );
+      if (!link) throw new Error("footer recruiter link not found");
+      return s
+        .replace(link[0], "\n")
+        .replace(
+          '                  <li className="hidden md:block">\n                    {isRecruiter ? (',
+          link[0].trimEnd() +
+            '\n                  <li className="hidden md:block">\n                    {isRecruiter ? (',
+        );
+    },
+    "the footer's recruiter link is SIGNED-OUT ONLY",
+  ],
+  [
+    "a recruiter sign-in item is added to the header",
+    "components/SiteHeader.jsx",
+    (s) =>
+      s.replace(
+        '      key: "settings",',
+        '      key: "recruiter-signin",\n      label: "Recruiter sign in",\n      to: "/recruiter/sign-in",\n      show: true,\n      icon: <circle cx="12" cy="12" r="3" />,\n    },\n    {\n      key: "settings",',
+      ),
+    "there is no recruiter sign-in item in the header",
+  ],
   // --- deliverable 6: the policy ----------------------------------------
   [
     "the approved paragraph reworded",

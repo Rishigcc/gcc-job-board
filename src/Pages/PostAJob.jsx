@@ -38,8 +38,22 @@ function normaliseWebsite(value) {
   return `https://${trimmed}`;
 }
 
-function PostAJob() {
-  const [mode, setMode] = useState("signup");
+// `initialMode` exists so /recruiter/sign-in can render this page with the
+// Sign in tab already open, 25 Nov 2026.
+//
+// WHY A PROP AND NOT A SECOND PAGE. The form, the free-provider block, the
+// already-signed-in notice and the confirmation-sent state are all here and
+// all needed by both entrances. A second page would be a copy of the one
+// thing on the site that must not drift -- the account creation and sign-in
+// path. The route decides which tab opens; everything below is shared.
+//
+// THE DEFECT THIS CLOSES. The tab used to be pure internal state, so EVERY
+// link to this page opened on "Create account". A returning recruiter
+// following a link labelled "Recruiter sign in" would have landed on a form
+// asking them to make a second account -- worse than no link at all, which
+// is what decided the route. Rishi: *"that's worse than no link."*
+function PostAJob({ initialMode = "signup" }) {
+  const [mode, setMode] = useState(initialMode === "signin" ? "signin" : "signup");
   const [session, setSession] = useState(undefined);
 
   // Sign-up form
@@ -220,11 +234,26 @@ function PostAJob() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <Seo
-        title="Post a GCC Job — iWorkAtGCC"
-        description="Post a role directly to professionals working at India's Global Capability Centres. Free to post, live immediately, and candidates apply with a resume."
-        path="/post-a-job"
-      />
+      {/* The head follows the route, not the component. Reached at
+          /recruiter/sign-in this is a sign-in page and says so; reached at
+          /post-a-job it is the pitch. One canonical path each, or the two
+          routes would compete for the same one. The sign-in route is
+          noindex: it is an entrance for people who already have an account,
+          and nothing about it belongs in a search result. */}
+      {initialMode === "signin" ? (
+        <Seo
+          title="Recruiter Sign In — iWorkAtGCC"
+          description="Sign in to your iWorkAtGCC recruiter account to post roles and see who applied."
+          path="/recruiter/sign-in"
+          noindex
+        />
+      ) : (
+        <Seo
+          title="Post a GCC Job — iWorkAtGCC"
+          description="Post a role directly to professionals working at India's Global Capability Centres. Free to post, live immediately, and candidates apply with a resume."
+          path="/post-a-job"
+        />
+      )}
 
       <SiteHeader />
 
@@ -234,13 +263,15 @@ function PostAJob() {
           {/* ---------- Pitch ---------- */}
           <div>
             <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">
-              Post a role to India's GCC community
+              {initialMode === "signin"
+                ? "Sign in to your recruiter account"
+                : "Post a role to India's GCC community"}
             </h1>
 
             <p className="mt-4 text-[17px] leading-relaxed text-slate-700">
-              iWorkAtGCC is a community of professionals working at Global
-              Capability Centres in India. Post a role here and it reaches them
-              directly.
+              {initialMode === "signin"
+                ? "Your recruiter account is separate from a community account — they are two separate logins. Sign in on the right to post roles and see who applied."
+                : "iWorkAtGCC is a community of professionals working at Global Capability Centres in India. Post a role here and it reaches them directly."}
             </p>
 
             <ul className="mt-6 space-y-3 text-[15px] text-slate-700">

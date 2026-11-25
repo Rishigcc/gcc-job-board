@@ -3917,6 +3917,104 @@ clickable link in a description works against what the board is for, not just
 against vouching for it. A pasted URL stays **visible as text**, which is the
 right amount of support.
 
+## A RETURNING RECRUITER HAD NO WAY IN — BUILT 25 Nov 2026
+
+Rishi: *"There's no way for a returning recruiter to sign in. The only
+entrance is /post-a-job's Sign in tab, which you only find if you know that
+posting and signing in are the same page. A recruiter who comes back a month
+later has nowhere obvious to go."*
+
+### The question he asked turned out to answer itself
+
+He asked whether a dedicated route was worth it or whether linking to the Sign
+in tab would do. **Linking to the tab was not possible.** `PostAJob.jsx` held
+it in `useState("signup")` with nothing in the URL, so **every** link to that
+page opened on *Create account* — a link labelled "Recruiter sign in" would
+have landed a returning recruiter on a form asking them to create a second
+account. His reply: *"that's worse than no link."*
+
+So something had to change either way, and the choice was only about naming.
+
+### `/recruiter/sign-in`, and why a route rather than a query parameter
+
+| | |
+|---|---|
+| **The address has to match the label** | a link called "Recruiter sign in" pointing at `/post-a-job` is W7's problem in reverse, and it is the URL a recruiter bookmarks |
+| **It is the destination for both transactional emails** | the signup confirmation and the password reset now both name it, so it is in the inbox of every recruiter who has one |
+| **The family already exists outside `RecruiterRoute`** | `/recruiter/forgot-password` and `/recruiter/reset-password` are `/recruiter/*` paths rendered **without** the session guard. A sign-in page must be reachable with no session, so this fits a pattern rather than inventing one |
+| **It costs nothing** | client routing only, rendering the existing page with the tab preset |
+
+**It renders `PostAJob` with `initialMode="signin"` rather than being a second
+page.** The form, the free-provider block, the already-signed-in notice and
+the confirmation-sent state are all there, and a copy of them would be a copy
+of the one path on the site that must not drift. **The default is `"signup"`,
+which is what keeps `/post-a-job` behaving exactly as before.**
+
+**The head follows the route, not the component.** Two routes rendering one
+component must not claim the same canonical path, so `/recruiter/sign-in`
+carries its own title, description and **`noindex`** — an entrance for people
+who already have an account does not belong in a search result — while
+`/post-a-job` stays indexable as the pitch. The H1 changes with it: *"Sign in
+to your recruiter account"* rather than promising posting to someone who came
+to sign in.
+
+### The two entrances, and the one he ruled out
+
+**No header item**, on his decision: *"the header is for the community, and a
+permanent recruiter link there is clutter for 2,520 people who'll never use
+it."* A test asserts the header has no such item, so adding one later is a
+decision rather than a drift.
+
+| | Entrance | Why there |
+|---|---|---|
+| 1 | **The community sign-in page**, a quiet line under the join/sign-in toggle | A recruiter who has forgotten where to sign in tries the sign-in page first, and it told them nothing. It **states the separation** rather than only linking, because the common confusion is not "where do I sign in" but "why won't my recruiter password work here" — the same sentence as the privacy policy's recruiter paragraph |
+| 2 | **The footer**, in the Account column | **Signed-out only**, which is the whole design: a signed-in recruiter already has Settings and My Dashboard in the header, and a signed-in candidate has no use for it |
+
+**Measured rendered, signed out:** `/recruiter/sign-in` opens with the **Sign
+in tab selected**, titled "Recruiter Sign In", `noindex`, no overflow at
+375px; `/post-a-job` unchanged with *Create account* selected and still
+indexable. **The footer at 375px is now 395px**, up from 369 — the new link
+costs 26px. On `/signup` both entrances are visible at once, which is
+intended rather than accidental.
+
+### W1 reached the emails too — the thirteenth and fourteenth occurrences
+
+Both templates had to be re-pasted for the sign-in address anyway, so the
+verification wording went with them: `confirm-recruiter-signup.html` said
+*"we verify the company"* and *"While your company is unverified"*. **Nothing
+in `src/` would ever have caught those** — the suite scans `.jsx` files, and
+these are HTML pasted into a dashboard. A string that lives outside the
+repository's test surface needs a human to remember it, which is why it is
+written down here.
+
+**He must re-paste both templates** for any of this to reach a recruiter.
+
+### Proof 6's fixture — `supabase/test-fixtures/item27-overflow-fixture.sql`
+
+**The MCP connection refused the UPDATE**, as it should: *cannot execute
+UPDATE in a read-only transaction*. So it is a file he runs, with a result
+table, like a migration.
+
+**Dry-run completed read-only, both ways** — the row as it stands and as it
+would stand, simulated in a `SELECT`:
+
+| check | now | after | |
+|---|---|---|---|
+| c2 heading carries the word | 0 | 1 | **can fail**, will pass |
+| c3 list item carries it | 0 | 1 | **can fail**, will pass |
+| c4 longest unbroken word | 4 | 180 | **can fail**, will pass |
+| c6 only this role touched | 0 | 1 | **can fail**, will pass |
+| c1 row exists | 1 | 1 | passes both, deliberately |
+| c5 description length | 599 | 968 | passes both, deliberately |
+| the idempotence guard | matches | does not | re-running is a no-op |
+
+**c1 and c5 pass before and after on purpose**, and the file says so: they do
+not assert the fixture, they guard the two things that would make it
+meaningless — the row still existing, and the description still clearing the
+400-character minimum. **A check that cannot fail in this run is fine when
+what it guards can change in another; what is not fine is a check nobody has
+evaluated.**
+
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on
