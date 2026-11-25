@@ -438,6 +438,110 @@ ok(
 );
 
 // ---------------------------------------------------------------------------
+// The question-card Save control, and carried item 30 — decided 25 Nov 2026
+// ---------------------------------------------------------------------------
+
+const questionCard = read("components/QuestionCard.jsx");
+const questionCardCode = stripComments(questionCard);
+const questionDetail = stripComments(read("Pages/QuestionDetail.jsx"));
+
+// `canSave` must have NO DEFAULT. An omitted prop is then undefined and
+// falsy, so a new call site that forgets it hides the control rather than
+// showing one that leads nowhere — a visible bug instead of an invisible one.
+ok(
+  "QuestionCard takes canSave with no default",
+  /\n\s*canSave,\n/.test(questionCardCode),
+  /canSave\s*=/.test(questionCardCode)
+    ? "it has a default, so a forgetful call site would SHOW the control"
+    : "the prop is missing",
+);
+
+ok(
+  "QuestionCard renders its Save control only when canSave",
+  /\{canSave \? \(/.test(questionCardCode),
+);
+
+// Exactly one conditional, because hearts must stay. A heart is a public
+// reaction with no personal list behind it, so it dead-ends nothing.
+ok(
+  "only the Save control is gated, not the hearts",
+  (questionCardCode.match(/\{canSave \? \(/g) || []).length === 1 &&
+    /handleHeartToggle\(e, question\.id\)/.test(questionCardCode),
+  "the heart toggle must stay outside the canSave conditional",
+);
+
+// Every call site passes it, and the right value.
+const CARD_CALLERS = {
+  "Pages/Questions.jsx": "canAsk",
+  "Pages/AskedQuestions.jsx": true,
+  "Pages/SavedQuestions.jsx": true,
+};
+
+const cardCallers = walk("").filter((rel) => /<QuestionCard\b/.test(read(rel)));
+
+ok(
+  "the QuestionCard call sites are the three expected ones",
+  JSON.stringify(cardCallers.sort()) ===
+    JSON.stringify(Object.keys(CARD_CALLERS).sort()),
+  `found ${JSON.stringify(cardCallers)} — a new one must pass canSave and be listed here`,
+);
+
+for (const [rel, expected] of Object.entries(CARD_CALLERS)) {
+  const source = stripComments(read(rel));
+  ok(
+    `${rel} passes canSave to QuestionCard`,
+    expected === true
+      ? /\n\s*canSave\n/.test(source)
+      : new RegExp(`canSave=\\{${expected}\\}`).test(source),
+    expected === true
+      ? "this page is behind blockRecruiters, so it passes canSave outright"
+      : `expected canSave={${expected}}`,
+  );
+}
+
+// The detail page has its own Save control, separate markup, same rule.
+ok(
+  "the question detail page gates its Save control",
+  /showsCandidateControls\(/.test(questionDetail) &&
+    /\{canSave \? \(/.test(questionDetail),
+);
+ok(
+  "the question detail page leaves its hearts alone",
+  /useQuestionHearts\(/.test(questionDetail) &&
+    (questionDetail.match(/\{canSave \? \(/g) || []).length === 1,
+);
+
+// CARRIED ITEM 30. The Community column shows at every width; Explore stays
+// desktop-only. The asymmetry is the point, so both halves are asserted.
+const footerCode = stripComments(read("components/Footer.jsx"));
+
+function columnOpeningTag(heading) {
+  // The tag that opens the <div> whose <h4> is this heading.
+  const at = footerCode.indexOf(`>\n              ${heading}\n`);
+  if (at === -1) return null;
+  const before = footerCode.slice(0, at);
+  const open = before.lastIndexOf("<div");
+  return before.slice(open, before.indexOf(">", open) + 1);
+}
+
+ok(
+  "the Community column is visible at every width",
+  columnOpeningTag("Community") === "<div>",
+  `its opening tag is ${JSON.stringify(columnOpeningTag("Community"))}`,
+);
+ok(
+  "the Explore column stays desktop-only",
+  /hidden md:block/.test(columnOpeningTag("Explore") || ""),
+  "it is in the header's menu on mobile, so hiding it loses nothing — " +
+    "if this changed deliberately, change the assertion and say why",
+);
+ok(
+  "the footer's community link still asks for JOIN mode",
+  /to="\/signup"[\s\S]{0,80}mode: "join"/.test(footerCode),
+  "without it the link lands in sign-in mode, which is the gap item 30 closed",
+);
+
+// ---------------------------------------------------------------------------
 // Deliverable 5 — the three disproved comments, gone and replaced
 // ---------------------------------------------------------------------------
 //

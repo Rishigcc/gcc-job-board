@@ -144,6 +144,10 @@ function SavedQuestions() {
               subtitle="Fetching the questions you've saved."
             />
           ) : questions.length > 0 ? (
+            // canSave is passed unconditionally: this page is behind
+            // blockRecruiters, so the viewer is a community member by
+            // construction. QuestionCard has no default for it, so an
+            // omitted prop would hide the control rather than mis-show it.
             paginatedQuestions.map((question) => (
               <QuestionCard
                 key={question.id}
@@ -151,6 +155,7 @@ function SavedQuestions() {
                 interactions={interactions}
                 answerCount={answerCounts[question.id]}
                 currentUserId={userId}
+                canSave
                 onDeleted={(id) =>
                   setQuestions((prev) => prev.filter((q) => q.id !== id))
                 }

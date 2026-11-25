@@ -3347,7 +3347,7 @@ says `./Pages/`. macOS resolves `src/pages` to it as well, so a lower-case
 import would build locally and **fail on Vercel's Linux**. The suite asserts
 the import spelling for this reason.
 
-## STAGE 12 — SIGNED OFF 25 Nov 2026, with two fixes pushed after
+## STAGE 12 — SIGNED OFF 25 Nov 2026 (UNCONDITIONAL)
 
 Rishi's result, verbatim: *"Stage 12 passes."* He confirmed, in order: the
 header showing My Dashboard and Settings with no Profile; both company rows
@@ -3360,8 +3360,17 @@ refused and the new one working; **Brevo showing no email from the change**;
 the policy paragraph in; the date still 22 November; and Settings and
 `/privacy` clean at 375px.
 
-**The sign-off is contingent on the two fixes below**, which were found by him
-and pushed afterwards at `86ba72c`. They are not re-tested yet.
+**Retested and confirmed.** The two fixes he found — the footer's Profile
+link and the Save control — were pushed at `86ba72c` and he walked steps 1 to
+6: no Profile in a recruiter's footer and Settings going straight through; no
+Ask button on `/questions` for a recruiter; no Save on the board cards or the
+detail page; everything restored for a Google account; and, signed out, Save
+still opening the sign-in popup and the Ask button still present.
+
+**Step 7 of that retest failed and is NOT a stage 12 regression** — the
+footer's narrow-width behaviour is pre-existing production behaviour, proved
+below. **So the sign-off is unconditional**, on his word: *"Make the stage 12
+record unconditional… Nothing outstanding against `86ba72c`."*
 
 ### HE FOUND THE FOOTER, AND IT WAS THE SECOND INCOMPLETE APPLICATION
 
@@ -3557,6 +3566,81 @@ be false — so fixing something would mean changing the live community site on
 a false alarm. **Carried item 30**, for him to decide. The options, if he wants
 one: show the Community column on mobile too; or make the signed-out header
 item read *Join* and let `/signup` handle both, which it already does.
+
+## TWO DECISIONS AFTER THE SIGN-OFF — 25 Nov 2026
+
+Both were open questions handed to him rather than things built on a hunch.
+Neither is part of stage 12; both are recorded here because they came out of
+it.
+
+### 1. The Save control on a question card is withheld from a recruiter
+
+Rishi: *"Same rule as the role Save button — `/profile/saved` is closed, so a
+recruiter saving a question has nowhere to see it. Leave hearts alone, for
+your reason: a heart is a public reaction with no list behind it, so it
+dead-ends nothing."*
+
+**Two surfaces, not one.** `QuestionCard` is one of them; the other is
+`QuestionDetail.jsx`, which has **its own save markup** rather than reusing
+the card, and `/questions/:slug` is public. `TrendingQuestionCard` was checked
+and has **no** save control, so it needed nothing.
+
+**`canSave` has no default, deliberately.** An omitted prop is `undefined` and
+therefore falsy, so a new call site that forgets it **hides** the control
+rather than showing one that leads nowhere. Hiding a control that should be
+there is a visible bug the next person fixes; showing one that dead-ends is
+invisible unless you happen to be signed in as a recruiter. **The fail-safe
+direction is the one that fails loudly.**
+
+Call sites and what each passes: `Questions.jsx` → `canSave={canAsk}`, the
+same viewer answer the Ask button uses; `AskedQuestions.jsx` and
+`SavedQuestions.jsx` → `canSave` outright, because both are behind
+`blockRecruiters` and the viewer is a community member by construction.
+
+**Hearts are untouched, and the suite asserts that** — exactly one
+`{canSave ?` in each file, with the heart toggle outside it. A later pass that
+"tidied" the hearts into the same conditional would fail.
+
+### 2. Carried item 30 — the Community column shows at every width
+
+Rishi: *"Show the Community column on mobile. Not the rename. Adding a link
+costs nothing; renaming "Sign In" to "Join" fixes the new visitor and confuses
+the 2,520 members who already know where Sign In is."*
+
+**He asked for the length cost before it was built**, which was the right
+question to ask of a footer that is on every page:
+
+| At 375px on `/questions` | Footer height |
+|---|---|
+| Before | **275px** |
+| The whole Community column | **369px** — **+94px** |
+| Only `Join the Community` | 349px — +74px |
+
+Built as he decided: the whole column, which brings `Ask, Answer & Connect`
+along with it. **That second link duplicates the header's menu**, and dropping
+it would save 20px of the 94 — noted so the trim stays a one-word change.
+
+**The asymmetry with Explore is deliberate and both halves are asserted.**
+Explore stays desktop-only because its one link is in the header's menu, so
+hiding it loses nothing. Community shows everywhere because
+`Join the Community` carries `state={{ mode: "join" }}` and **nothing else on
+a phone reaches `/signup` in join mode** — the header's signed-out item is
+`Sign In`, same route, sign-in mode. A test asserts Explore is still hidden,
+so showing it later is a decision rather than a drift.
+
+**Verified rendered, both widths, signed out:** desktop unchanged at five
+headings; 375px now reads iWorkAtGCC, **Community**, Legal, Account, with the
+footer at the predicted 369px and no horizontal overflow at either width. The
+recruiter case is unchanged by construction — both columns sit inside
+`{!isRecruiter && (…)}`, so a recruiter never saw Community at any width.
+
+### Counts after both decisions
+
+stage12 settings **109** (from 97), negative run **56/56** (from 46).
+Everything else unchanged and passing: stage4 **52**, stage5 **42**, stage6
+**62**, stage7 **56**, stage8 **44**, stage9 **90**, stage10
+**121 + 62 + 111 + 116**, stage12 reset gate **69**, check-overflow **18**,
+eslint **8**.
 
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
@@ -4148,7 +4232,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
 | 29 | ~~**PRE-MERGE, GROUPED: two things a recruiter sees on `/profile` today.**~~ **BUILT 25 Nov 2026, awaiting Rishi's retest.** (a) `/profile`'s Name and Email rows render only when their own value exists — conditioned on the absence of the data, never on `account_type`, because keying off the role is the conditional-render mistake decision 10 rules out. (b) `/profile/delete-data` now has a **nothing-to-delete state**: no resume, no identifiable applications and no saved roles means a panel saying so and no confirmation box. The link itself is untouched, so the policy's sentence stays true. `my_applications()` returns only rows whose `candidate_id` is the caller, and anonymising NULLs that column, so its count is already the count of applications this page could still delete — no new column needed. A `notice` guard keeps the "resume deleted" confirmation visible instead of flipping straight to the empty state. | Rishi, 25 Nov 2026 | **In test** |
-| 30 | **A PRODUCTION PAGE, NOT A JOB BOARD ONE — for his decision, not a fix.** Below 768px the footer hides four items via hard-coded `hidden md:block`: the whole **Explore** and **Community** columns, and the **My Dashboard** and **Profile** rows. It is **pre-existing and live on `main`** — the classes arrived in `f368c95`, 5 Sept 2026, eight days before this branch began at `4b12dbd`. **Navigation is NOT lost** (measured at 375px: the header's menu carries Explore GCC Jobs, Ask Answer & Connect and Sign In/Out, and signed in it carries My Dashboard and Profile/Settings from the same `navItems` array), so the four hidden items are exactly the four the header menu duplicates, while the two that survive — Privacy Policy and Recruiter Terms — exist nowhere else. **The one real gap:** `Join the Community` (`/signup` in join mode) has no mobile equivalent; the header's Sign In reaches the same route in **sign-in** mode, so a signed-out phone visitor is offered "Sign In" and never "Join". | Rishi at the stage 12 retest, 25 Nov 2026 | **His decision** |
+| 30 | **A PRODUCTION PAGE, NOT A JOB BOARD ONE — for his decision, not a fix.** Below 768px the footer hides four items via hard-coded `hidden md:block`: the whole **Explore** and **Community** columns, and the **My Dashboard** and **Profile** rows. It is **pre-existing and live on `main`** — the classes arrived in `f368c95`, 5 Sept 2026, eight days before this branch began at `4b12dbd`. **Navigation is NOT lost** (measured at 375px: the header's menu carries Explore GCC Jobs, Ask Answer & Connect and Sign In/Out, and signed in it carries My Dashboard and Profile/Settings from the same `navItems` array), so the four hidden items are exactly the four the header menu duplicates, while the two that survive — Privacy Policy and Recruiter Terms — exist nowhere else. **The one real gap:** `Join the Community` (`/signup` in join mode) has no mobile equivalent; the header's Sign In reaches the same route in **sign-in** mode, so a signed-out phone visitor is offered "Sign In" and never "Join". | Rishi at the stage 12 retest, 25 Nov 2026 | **DONE 25 Nov 2026** — he chose showing the column over renaming the header item. Measured cost: the mobile footer 275px → 369px. |
 | 28 | ~~**LIVE DEFECT: a recruiter can upload a resume from `/profile`, and it poisons an admin report.**~~ **WITHDRAWN 25 Nov 2026 — I WAS WRONG, and Rishi agreed to it on the strength of my claim.** Checked against the live `public.admin_report_totals()` rather than the tracker's summary of it: `no_resume` counts *candidates who HAVE applications but NO resume row*, so a resume with no applications never enters it; `orph` counts storage objects with **no** `candidate_resumes` row, and an upload creates both. **Neither risk figure moves.** And the state is not anomalous anyway: any candidate may upload a resume before applying, and `ApplyPanel` blocks only *your own* posting (`job.posted_by === session.user.id`), so **a recruiter can apply to another company's role** — which makes a resume on file legitimate for them under decision 10. The resume block is one of the few on `/profile` that genuinely does apply to a recruiter. | Withdrawn | No action |
 | 27 | **LIVE DEFECT ON A SIGNED-OFF PAGE: pasted Markdown is rendered literally to candidates.** Rishi's correction, 24 Nov 2026: *"a candidate reading job 13 right now sees `# Job Description` and `**bold**` on screen, so item 27 is a live defect on a signed-off page, not just a snippet problem."* He is right, and I had filed it a category too low. **The defect is what a candidate reads**; the Google snippet beginning `# Job Description` is a symptom of the same cause, not the problem. Job 13's description opens `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout, and `/gcc-jobs/:slugId` renders it with `whitespace-pre-wrap`, which deliberately never parses HTML. Options: render a safe Markdown subset; strip the markers for display and for the meta description; or change the field hint and let recruiters paste plain text. Whichever is chosen, note that the markup must keep matching the page — Google requires everything in the markup to be visible on it — so display and markup have to change together. | Found 24 Nov 2026 testing against a real row; severity corrected by Rishi the same day | **Before merge** |
 | 26 | **`alter table public.jobs validate constraint jobs_description_check;` after the pre-merge clearout.** Migration 023 added it `NOT VALID` because 24 of 25 existing rows are under 400 characters — all of them `[T5]` test jobs deleted by carried item 13. Once those are gone, validate it, and confirm `convalidated` is true. The statement is at the bottom of the migration file. It fails loudly if anything short remains, which is the point. | Migration 023 | **After carried item 13, before merge** |
@@ -4156,17 +4240,17 @@ hook and then sweeps. P1's curl covers both in one request.
 | 24 | ~~**The "Password changed" security notification must be confirmed OFF before stage 12 ships.**~~ **DONE 25 Nov 2026, and MY ANSWER WAS WRONG ABOUT WHERE.** I said the docs name no dashboard control and the only mechanism was the Management API flag `mailer_notifications_password_changed_enabled`, needing a Personal Access Token. The docs do not name it — **the dashboard does have it.** Rishi found it: **Authentication → Emails**, a **Security** section below the templates list, with toggles for Password changed, Email address changed, Phone number changed, Sign-in method linked/removed and MFA method added/removed. **All seven were already off.** No API call and no token. Recorded here as the location, because the next person will look where I told them to look and not find it. | Rishi, 25 Nov 2026 | Closed |
 | 23 | **Add a second admin account that Rishi alone controls.** `public.user_roles` has exactly one `admin` row, on a Google-only account. Losing that Google account loses the admin role, with no second admin to grant it back. A data change, not a migration. **The real break-glass is the Supabase dashboard**, from which an admin row can always be inserted — so the higher-value action is hardening his Supabase account (2FA, recovery), and the second admin covers the narrower case of losing the Google account. Note both admins would share one failure mode (Google suspending him) but not the common ones. The second account sees all applications, so it must be an account only he controls, never a shared mailbox. | Rishi, 24 Nov 2026 | **Now** |
 | 22 | **An admin-set-password tool, LOGGED NOT BUILT.** `auth.admin.updateUserById(uid, { password })` sets a password with no email — the docs say *"Changes are applied directly without confirmation flows"* — service-role and server-side only. Paired with the phone number already collected and validated at recruiter signup, it is a reset with zero emails. Rishi's decision, 24 Nov 2026: *"log it, don't build it. Revisit when a recruiter actually loses their mailbox."* It is the only thing that helps a recruiter whose **mailbox** is gone, which a reset email by definition cannot fix. | Rishi, 24 Nov 2026 | Deferred |
-| 21 | **`/post-a-job` NEEDS RETESTING — decision 29 touches a signed-off page.** `src/Pages/PostAJob.jsx` now shows a signed-in community member a notice that recruiter accounts are separate. The page is stage 3/4 work and signed off. Retest: the recruiter sign-up still works signed out, an already-signed-in recruiter still sees "Your recruiter account is ready", and the new notice appears only for a signed-in non-recruiter. | Rishi, 24 Nov 2026 | **Stage 10 round two** |
+| 21 | ~~**`/post-a-job` NEEDS RETESTING — decision 29 touches a signed-off page.**~~ **DONE** — covered in stage 10 round two's sign-off, which records `/post-a-job` showing *"no notice signed out; amber notice for a signed-in community member; \"Your recruiter account is ready\" for a recruiter"*. Row left open by mistake. Original note: `src/Pages/PostAJob.jsx` now shows a signed-in community member a notice that recruiter accounts are separate. The page is stage 3/4 work and signed off. Retest: the recruiter sign-up still works signed out, an already-signed-in recruiter still sees "Your recruiter account is ready", and the new notice appears only for a signed-in non-recruiter. | Rishi, 24 Nov 2026 | **Stage 10 round two** |
 | 20 | **Set `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js` to eight weeks after the real launch date.** Shipped as a placeholder (`2027-01-19`, eight weeks from the day it was written) so the badge is visible on the preview. Eight weeks can only honestly be measured from launch, so this is set at merge **alongside `LAST_UPDATED`** in carried item 1 — same edit, same moment. No code change is needed to remove the badge: it compares the date at render. | Rishi, 24 Nov 2026 | Before merge |
 | 19 | **STAGE 4 CHANGE, TO BE DECIDED SEPARATELY: tell recruiters that a 100% remote role must say so in the description.** Google requires `jobLocationType: TELECOMMUTE` *and* that the description clearly states the role is remote. v1 does not ask recruiters for that, so a "remote" role whose description never says the word gets markup Google may disregard. Logged rather than built, because it changes a signed-off form. | Rishi, 23 Nov 2026 | **Stage 4 change** |
-| 18 | **THE POSTING FORM NEEDS RETESTING AS PART OF STAGE 10.** Raising the description minimum from 50 to 400 characters touches signed-off stage 4: `src/lib/jobFormModel.js`, the field hint, and the CHECK constraint on `jobs.description`. Rishi, 23 Nov 2026: "Raising it touches signed-off stage 4, so record that the posting form needs retesting as part of stage 10." | Rishi, 23 Nov 2026 | **Stage 10 round two** |
+| 18 | ~~**THE POSTING FORM NEEDS RETESTING AS PART OF STAGE 10.**~~ **DONE** — covered in stage 10's sign-off, which records the description minimum *"enforced at 400 on new posts and on edits to the old roles; counter trimmed"*. Row left open by mistake. Original note: Raising the description minimum from 50 to 400 characters touches signed-off stage 4: `src/lib/jobFormModel.js`, the field hint, and the CHECK constraint on `jobs.description`. Rishi, 23 Nov 2026: "Raising it touches signed-off stage 4, so record that the posting form needs retesting as part of stage 10." | Rishi, 23 Nov 2026 | **Stage 10 round two** |
 | 17 | ~~**STAGE 9 SCOPE: `purge_expired_applications()` writes an audit row.**~~ **DONE in stage 9** — verified against the live database 24 Nov 2026: the function's body writes an audit row. Was still shown as open. Originally: A nightly retention purge is an administrative action, and on Hobby a log line is unreadable an hour later. An audit row turns "did the sweep run" into a SQL query that is answerable forever rather than within the hour after 02:00 UTC. | Rishi, 23 Nov 2026 | **Stage 9** |
 | 16 | ~~**STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.**~~ **DONE in stage 9** — verified 24 Nov 2026 while answering what remains before launch: `AdminReports.jsx` shows `orphaned_files` with a risk tone, and `api/admin-delete-orphan.js` does the deleting, so it reports first and deletes second as decided. Was still shown as open, which would have made the pre-launch list two items longer than it is. Originally: Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
 | 15 | **DONE, BUT NOT AS BUILT — see "the board's placement changed, 24 Nov 2026".** Shipped in round one as an "Apply Directly" nav item and a homepage card; **both removed 24 Nov 2026** and replaced by a single promo card at the top of `/jobs`. The item's requirement — the board must be findable in the same stage that makes it public — is met by that card. D1 (the label) is closed by removal. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
 | 13 | **REOPENED 25 Nov 2026 — the two lines closed on 22 Nov are no longer true.** `candidate_resumes` has one row again and the `resumes` bucket one object, both from testing stage 10 on `iworkatgcctest3@gmail.com` (24 Nov 18:45). They are back in scope for the clearout. Originally: *Partly done by stage 8's own testing, 22 Nov 2026: `candidate_resumes` is empty and the `resumes` bucket is completely empty, so those two lines are closed.* What remains: the anonymised `applications` rows, the 24 `[T5]` jobs, `Test Co A` and `Test Co B`, the two recruiter accounts, and `iworkatgcctest3@gmail.com`. Order still matters — jobs before companies, because of the foreign key. **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
-| 8 | **Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL**, or local `npm run dev` sign-in breaks. Localhost is currently allowed only because it *is* the Site URL. | Stage 3 review | Before changing Site URL |
+| 8 | ~~**Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL.**~~ **DONE 25 Nov 2026** — closed by stage 12's prerequisite A, which added it alongside the preview host and `https://www.iworkatgcc.com/**`. The row was left open by mistake; the allowlist edit is recorded in the stage 12 prerequisites. | Stage 3 review | Closed |
 | 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |
 | 9 | ~~**`auth.signUp` is not domain-restricted.**~~ **DEFERRED by Rishi, 18 Nov 2026.** The free-provider blocklist lives in the client form and in the `handle_new_recruiter` trigger, but the trigger only fires when the `recruiter_profiles` row is inserted, so a scripted call to `/auth/v1/signup` can still create an **unconfirmed** `auth.users` row on any domain and burn one Brevo send. Rishi's call: the trigger still stops them becoming a recruiter, so it is a junk account that can do nothing. Not worth a Before User Created auth hook. Revisit only if junk signups or send quota ever become a real problem. | Stage 3 review | Deferred — no action |
 | 10 | **HALF SUPERSEDED 25 Nov 2026 — see "Decision 10 does not apply to /profile".** The half that said *"`/ask` and `/profile` stay reachable for recruiters"* **no longer stands**: stage 12 blocks both, because the dual-use account that reasoning protected does not exist and cannot be created (0 of 2,656 accounts have two identities; `recruiter_profiles` rows are only ever created from `PostAJob.jsx`'s signUp metadata, and `handle_new_recruiter()` raises for free email domains). Decision 10 protects a **person** who holds two logins, not one account. The consequence accepted with it: a recruiter can no longer set a display name, so the "recruiter chooses to join the community" path closes — that person uses their Google login instead. The rest of the item stands as the record of what was decided on 18 Nov. Originally: **A recruiter can create a community `profiles` row — and that is now intended.** `saveDisplayName()` in `src/lib/useDisplayName.js` upserts one, reachable from `/profile`, `/ask` and any question page. **Rishi's decision, 18 Nov 2026: leave the behaviour as it is.** Someone who deliberately sets a display name is choosing to join the community, which matches the "one person can be both" decision. `/ask` and `/profile` stay reachable for recruiters. **The guard is the invariant below, not a code change.** | Stage 3 review | Decided — see the invariant |

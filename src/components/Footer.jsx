@@ -98,8 +98,23 @@ function Footer() {
           </div>
           )}
 
+          {/* CARRIED ITEM 30, decided 25 Nov 2026: this column shows at every
+              width, unlike Explore above, which stays desktop-only.
+              Not symmetry — a reason. Every other item the footer hides below
+              768px is also in the header's menu, so hiding it loses nothing.
+              `Join the Community` is the exception: it points at /signup in
+              JOIN mode, and the header's signed-out item is `Sign In`, which
+              reaches the same route in SIGN-IN mode. So a signed-out visitor
+              on a phone was offered "Sign In" and never "Join" — a funnel gap
+              on the live site, found while checking a different complaint.
+              Renaming the header item was the alternative and was rejected:
+              it fixes the new visitor and confuses the 2,520 members who
+              already know where Sign In is.
+              MEASURED COST: the mobile footer goes 275px to 369px on
+              /questions at 375px. The second link here duplicates the
+              header's menu; dropping it would save 20px of that. */}
           {!isRecruiter && (
-          <div className="hidden md:block">
+          <div>
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
               Community
             </h4>

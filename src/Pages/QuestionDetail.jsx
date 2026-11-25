@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useDisplayName } from "../lib/useDisplayName";
 import { fetchAuthorNames } from "../lib/authors";
 import { useQuestionSaves } from "../lib/useQuestionSaves";
+import { useViewer, showsCandidateControls } from "../lib/useViewer";
 import { useQuestionHearts } from "../lib/useQuestionHearts";
 import { useAnswerHearts } from "../lib/useAnswerHearts";
 import { TAG_OPTIONS } from "../lib/tags";
@@ -67,6 +68,15 @@ function QuestionDetail() {
     setDisplayNameInput,
     ensureDisplayName,
   } = useDisplayName();
+
+  // /questions/:slug is public, so a recruiter can reach it by URL even
+  // though the header's link to the community is hidden from them. The Save
+  // control is withheld for the same reason it is on a role: /profile/saved
+  // is behind blockRecruiters, so a saved question would have nowhere to be
+  // seen. Hearts stay — a heart is a public reaction with no personal list
+  // behind it, so it dead-ends nothing.
+  const viewer = useViewer();
+  const canSave = showsCandidateControls(viewer);
 
   const [question, setQuestion] = useState(null);
   // "loading" | "ok" | "missing" | "error" — two booleans cannot express the
@@ -850,6 +860,7 @@ function QuestionDetail() {
                       )}
                     </div>
 
+                    {canSave ? (
                     <div className="relative">
                       <button
                         type="button"
@@ -892,6 +903,7 @@ function QuestionDetail() {
                         />
                       )}
                     </div>
+                    ) : null}
 
                   </div>
 

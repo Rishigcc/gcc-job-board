@@ -80,16 +80,20 @@ https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
 | 1–9b | **Signed off** |
 | 10 (SEO, findability, saved roles) | **Signed off 25 Nov**, both halves |
 | 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
-| 12 (recruiter password reset, settings) | **SIGNED OFF 25 Nov** — *"Stage 12 passes."* **Contingent on two fixes he found afterwards** (the footer's Profile link and the Save control), pushed at `86ba72c` and **not re-tested yet** |
+| 12 (recruiter password reset, settings) | **SIGNED OFF 25 Nov, unconditional.** *"Stage 12 passes."* The two fixes he found afterwards were retested and pass; the one retest step that failed was pre-existing production behaviour, not a regression |
 
 Then: the design pass, the pre-merge clearout, and one merge.
 
-**The one thing outstanding inside stage 12** is his re-test of `86ba72c`.
-**One decision is open**, and it is the same defect class: a recruiter who
-opens `/questions` by URL still sees the heart and **Save** controls on each
-question card, and `/profile/saved` is closed, so a saved question has nowhere
-to be seen. Same rule as decision F, one condition away, deliberately not
-done because it changes a page 2,520 community members use.
+**Nothing is outstanding inside stage 12.** Every stage is signed off except
+11, which is deferred to v2. Two decisions were taken after the sign-off and
+are built: the **Save control on a question card** is withheld from a
+recruiter (hearts deliberately untouched), and **carried item 30** — the
+footer's Community column now shows at every width, because
+`Join the Community` is the one footer link with no mobile equivalent.
+
+**What is left is not a stage.** See section 9 and the carried-items table in
+the tracker: the design pass, the wording pass, the live Markdown defect
+(item 27), the clearout, and the production-dependent checks.
 
 ---
 
@@ -249,8 +253,8 @@ npx esbuild scripts/stage4-validation-test.mjs --bundle --format=esm \
 Two more run directly, added 25 Nov:
 
 ```sh
-node scripts/stage12-settings-test.mjs          # 97 — static, reads src/
-node scripts/stage12-settings-negative-run.mjs  # 46 mutations, all must be caught
+node scripts/stage12-settings-test.mjs          # 109 — static, reads src/
+node scripts/stage12-settings-negative-run.mjs  # 56 mutations, all must be caught
 ```
 
 The negative run is the check-the-check rule made executable: it breaks one
@@ -262,7 +266,7 @@ the code is fine.
 
 Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **56**,
 stage8 **44**, stage9 **90**, stage10 **116 + 111 + 62 + 121**, stage12
-**69 + 97**, check-overflow **18**. **eslint has exactly 8 pre-existing
+**69 + 109**, check-overflow **18**. **eslint has exactly 8 pre-existing
 errors** — 2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the
 baseline, not a problem to fix.
 
@@ -295,6 +299,14 @@ the tracker before quoting an assertion count as reassurance.
 - **A multi-statement script in the Supabase SQL editor is one implicit
   transaction**, so a failure part-way rolls back the whole file, DDL
   included. Say so when a migration fails — it is his first question.
+- **A candidate-only control asks `showsCandidateControls(useViewer())`**, and
+  `QuestionCard`'s `canSave` has **no default on purpose**: a forgetful call
+  site then hides the control rather than showing one that leads nowhere. The
+  fail-safe direction is the one that fails loudly.
+- **The footer hides four things below 768px** via `hidden md:block`, which is
+  **pre-existing and on `main`** (from `f368c95`, eight days before this
+  branch). It is not a bug — the header's menu carries all four. The
+  **Community** column was the exception and now shows at every width.
 - **The pages directory is `src/Pages`, capital P**, and every import says
   `./Pages/`. macOS resolves `src/pages` to it too, so a lower-case import
   builds locally and **fails on Vercel's Linux**.

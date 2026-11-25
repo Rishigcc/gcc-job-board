@@ -4,6 +4,17 @@ import { supabase } from "../lib/supabase";
 import { formatRelativeTime } from "../lib/relativeTime";
 import SignInPopup from "./SignInPopup";
 
+// `canSave` HAS NO DEFAULT, DELIBERATELY. An omitted prop is undefined and
+// therefore falsy, so a new call site that forgets it HIDES the Save control
+// rather than showing it to someone who cannot use it. Hiding a control that
+// should be there is a visible bug the next person fixes; showing one that
+// leads nowhere is the fault this prop exists to prevent, and it is invisible
+// unless you happen to be signed in as a recruiter.
+//
+// Added 25 Nov 2026, with the same reasoning as the Save control on a role:
+// /profile/saved is closed to recruiters, so a recruiter saving a question
+// would have nowhere to see it. Hearts are untouched — a heart is a public
+// reaction with no personal list behind it, so it dead-ends nothing.
 function QuestionCard({
   question,
   interactions,
@@ -12,6 +23,7 @@ function QuestionCard({
   cardRef,
   currentUserId,
   onDeleted,
+  canSave,
 }) {
   const navigate = useNavigate();
 
@@ -217,6 +229,7 @@ function QuestionCard({
           )}
         </div>
 
+        {canSave ? (
         <div className="relative">
           <button
             type="button"
@@ -254,6 +267,7 @@ function QuestionCard({
             />
           )}
         </div>
+        ) : null}
 
       </div>
 

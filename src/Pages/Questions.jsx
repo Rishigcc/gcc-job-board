@@ -421,6 +421,7 @@ function Questions() {
                   if (el) cardRefs.current[question.id] = el;
                 }}
                 currentUserId={userId}
+                canSave={canAsk}
                 onDeleted={(id) =>
                   setQuestions((prev) => prev.filter((q) => q.id !== id))
                 }

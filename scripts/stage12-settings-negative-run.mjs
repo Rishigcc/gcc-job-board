@@ -383,6 +383,86 @@ const MUTANTS = [
       ),
     "showsCandidateControls requires the viewer to be resolved",
   ],
+  // --- the question-card Save control, and carried item 30 --------------
+  [
+    "canSave given a default of true",
+    "components/QuestionCard.jsx",
+    (s) => s.replace("\n  canSave,\n", "\n  canSave = true,\n"),
+    "QuestionCard takes canSave with no default",
+  ],
+  [
+    "the Save control un-gated on a question card",
+    "components/QuestionCard.jsx",
+    (s) => s.replace("{canSave ? (\n        <div className=\"relative\">", '<div className="relative">'),
+    "QuestionCard renders its Save control only when canSave",
+  ],
+  [
+    "the hearts gated too",
+    "components/QuestionCard.jsx",
+    (s) =>
+      s.replace(
+        '          <button\n            type="button"\n            onClick={(e) => handleHeartToggle(e, question.id)}',
+        '          {canSave ? (\n          <button\n            type="button"\n            onClick={(e) => handleHeartToggle(e, question.id)}',
+      ),
+    "only the Save control is gated, not the hearts",
+  ],
+  [
+    "/questions stops passing canSave",
+    "Pages/Questions.jsx",
+    (s) => s.replace("                canSave={canAsk}\n", ""),
+    "Pages/Questions.jsx passes canSave to QuestionCard",
+  ],
+  [
+    "/questions passes canSave unconditionally",
+    "Pages/Questions.jsx",
+    (s) => s.replace("canSave={canAsk}", "canSave"),
+    "Pages/Questions.jsx passes canSave to QuestionCard",
+  ],
+  [
+    "a NEW page renders QuestionCard without canSave",
+    "+Pages/TopQuestions.jsx",
+    () =>
+      'import QuestionCard from "../components/QuestionCard";\n' +
+      'function TopQuestions({ question, interactions }) {\n' +
+      '  return <QuestionCard question={question} interactions={interactions} />;\n' +
+      '}\n' +
+      'export default TopQuestions;\n',
+    "the QuestionCard call sites are the three expected ones",
+  ],
+  [
+    "the detail page's Save control un-gated",
+    "Pages/QuestionDetail.jsx",
+    (s) => s.replace('{canSave ? (\n                    <div className="relative">', '<div className="relative">'),
+    "the question detail page gates its Save control",
+  ],
+  [
+    "the Community column hidden on mobile again",
+    "components/Footer.jsx",
+    (s) => {
+      const at = s.indexOf("              Community\n");
+      const before = s.slice(0, at);
+      const open = before.lastIndexOf("<div>");
+      return s.slice(0, open) + '<div className="hidden md:block">' + s.slice(open + "<div>".length);
+    },
+    "the Community column is visible at every width",
+  ],
+  [
+    "the Explore column shown on mobile without a decision",
+    "components/Footer.jsx",
+    (s) => {
+      const at = s.indexOf("              Explore\n");
+      const before = s.slice(0, at);
+      const open = before.lastIndexOf('<div className="hidden md:block">');
+      return s.slice(0, open) + "<div>" + s.slice(open + '<div className="hidden md:block">'.length);
+    },
+    "the Explore column stays desktop-only",
+  ],
+  [
+    "the join-mode state dropped from the community link",
+    "components/Footer.jsx",
+    (s) => s.replace('state={{ mode: "join" }}', ""),
+    "the footer's community link still asks for JOIN mode",
+  ],
   // --- deliverable 6: the policy ----------------------------------------
   [
     "the approved paragraph reworded",
