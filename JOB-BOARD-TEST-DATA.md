@@ -4357,6 +4357,102 @@ tested by a real rotation. **The v2 fix:** delete both entries, re-add one
 value with Production, Preview and Development all ticked in the same add
 action, which is what stops them from ever being two entries again.
 
+## THE MERGE PROCEDURE — `MERGE.md`, written 26 Nov 2026
+
+Rishi: *"Correction: you've listed the design pass as 'the only piece of real
+work left' before the merge. I dropped it from v1 — it's a v2 item. Nothing is
+blocking the merge."*
+
+**He is right and I contradicted this file.** The design pass was recorded here
+on 25 Nov as *"V2, NOT OUTSTANDING"* on his explicit decision, and I then
+listed it as the last piece of work before the merge — a stale read of a
+decision recorded in the same file I was summarising. **Nothing is blocking
+the merge.**
+
+### What the derivation found, and what changed in the procedure because of it
+
+| Finding | Where it came from | Effect |
+|---|---|---|
+| **`main` has 12 commits the branch lacks**, all "Weekly GCC jobs update", all touching **only** `public/data/jobs.json`, which the branch never modifies | `git diff --name-only job-board...origin/main` | The merge is **not** a fast-forward, and makes a merge commit. **No conflicts**, confirmed with `git merge-tree`, which writes nothing |
+| **`main`'s `api/` is a strict subset of the branch's** — `rebuild`, `send-digest`, `send-welcome-email`, all three already on the branch | `git ls-tree` both sides | The merge adds **no** functions from `main`. Final count **10** of Hobby's 12 |
+| **`main`'s `vercel.json` already carries both crons on identical schedules** | `git show origin/main:vercel.json` | Cron **registration** does not change at merge. What changes is `api/rebuild.js`'s **behaviour** — it now sweeps as well as firing the hook |
+| **`send-digest.js` differs by comments only** | diff with comment and blank lines stripped — empty | The 03:30 send to ~2,500 people is byte-for-byte the code that has been working for months. The one change that would have been worst is not a change |
+| **`/gcc-jobs` is in neither sitemap** | `STATIC_SITEMAP_PATHS` is six paths plus questions; `sitemap-jobs.xml` lists roles | The board index is reachable by **link** from `/jobs`'s promo card — and that card is hidden while `live_job_count()` is 0. **Merging does not make the board findable. The first posting does.** |
+| **`sitemap-jobs.xml` returns a valid empty `<urlset>` at 200** with 0 rows, not the 503 it returns on error | read the handler | Expected post-merge state, not a fault |
+
+### The sweep writes an audit row ONLY when it deletes something
+
+`purge_expired_applications()` ends with
+`if v_count > 0 then perform private.audit(...)`. **With 0 applications it
+will delete nothing and write no audit row, every night, for at least twelve
+months.**
+
+**So the absence of a `retention_purge` row is not evidence of anything** — it
+does not distinguish "ran and found nothing" from "never ran". That matters
+because P1's whole problem was Hobby's one-hour log retention, and the audit
+row looked like the durable answer. It is not.
+
+**The durable answer is the deployment list.** The sweep and the deploy hook
+are the *same request*, so a production deployment created around 02:00 UTC
+that nobody triggered **is** the cron having fired — and Vercel keeps
+deployments indefinitely. Plus `api/rebuild.js` returns the sweep's result in
+its own response body, so calling it by hand proves the whole chain with no
+log dependency at all.
+
+**I nearly contradicted carried item 17 over this.** Grepping the function's
+definition for `admin_audit` returned nothing, which looked like item 17's
+*"verified: the function's body writes an audit row"* being wrong. It is not —
+the write goes through the `private.audit()` helper, which the grep could not
+see through. **The record was right and my check was the wrong check.**
+
+### THE CHECK ORDER IS NOT THE ORDER HE ASKED FOR, and the reason is the rollback
+
+He asked for P2, P5, P6, P3. **P5 is last of the four in `MERGE.md`.**
+
+**Vercel's Instant Rollback on Hobby reaches only the immediately previous
+deployment** (Pro and Enterprise can pick any). **P5 fires the deploy hook,
+and the hook creates a production deployment** — so running P5 early spends
+the single rollback slot before the checks that might make you want it. Every
+read-only check therefore comes first, and the one step that creates a
+deployment comes last.
+
+**The window also closes on its own at 02:00 UTC**, when the nightly cron
+fires the same hook. After that the rollback path is `git revert -m 1` plus a
+rebuild — plan-independent, but minutes rather than a second.
+
+**Two more Instant Rollback facts worth having before they are needed:** it
+**switches off auto-assignment of the production domain**, so a later push to
+`main` builds but does not take over until **Undo Rollback** is pressed; and
+it **does not touch the repository**, so `main` still holds the merge and the
+next push would ship it again. A rollback buys time; it is not the fix.
+
+### Item 14 is the only step that makes a rollback destructive
+
+`main`'s `src/lib/authors.js` does `.from("question_authors")`. The branch's
+does not — it uses a function, and only mentions the view in comments.
+**Dropping the view and then rolling back breaks author names on every
+question page for all 2,643 members.** Recreate it from
+`supabase/migrations/010_author_names.sql` first if that ever happens.
+
+That is why item 14's own instruction has always been *"after the merge is
+deployed and verified"*, and why it is the last step rather than an early one.
+
+### A recorded "before" for P6
+
+The step 8 loop was run against production on 26 Nov while it still served
+`main`: **every path returned `(none)`** — no `X-Robots-Tag` anywhere. So the
+production check is a before-and-after rather than a judgement: the four
+`/recruiter/*` paths must **change** to `noindex, nofollow` and every public
+path must **stay** `(none)`. Any public page that changes is caused by the
+merge and nothing else.
+
+### Carried item 2 is a POST-merge item, not a pre-merge one
+
+Verifying Clarity's form-input masking **could never have been done before
+the merge** — Clarity's loader is behind the same hostname guard as analytics
+and cannot run on a preview by construction. It is folded into P2 in
+`MERGE.md` step 6, which is the first moment it becomes possible.
+
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on

@@ -82,7 +82,9 @@ https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
 | 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
 | 12 (recruiter password reset, settings) | **SIGNED OFF 25 Nov. FINAL.** Both retests pass, including the two decisions taken after the sign-off. Nothing in stage 12 is open |
 
-**The clearout has already run** (26 Nov). What is left before the merge: the design pass, and one deliberate merge.
+**The clearout has already run** (26 Nov), and **nothing is blocking the
+merge.** The design pass is a **v2 item**, decided on 25 Nov — not
+outstanding work. `MERGE.md` is the procedure.
 
 **Nothing is outstanding inside stage 12.** Every stage is signed off except
 11, which is deferred to v2. Two decisions were taken after the sign-off and
@@ -91,11 +93,16 @@ recruiter (hearts deliberately untouched), and **carried item 30** — the
 footer's Community column now shows at every width, because
 `Join the Community` is the one footer link with no mobile equivalent.
 
-**What is left is not a stage, and most of it is done.** See section 9: only
-the design pass and the production-dependent P-checks remain as live work.
-The clearout ran, the three merge dates are set, item 27 and item 29 are
-built and passed, and P4 is checked. One structural note (the duplicate
-`SUPABASE_SERVICE_ROLE_KEY` entry) is logged for v2.
+**NOTHING IS BLOCKING THE MERGE.** The clearout ran, the three merge dates
+are set, items 27 and 29 are built and passed, and P4 is checked. **The
+design pass is a v2 item**, decided on 25 Nov — I listed it once as the last
+piece of work before the merge, which contradicted the decision recorded in
+this file, and Rishi corrected it. The remaining P-checks (P1, P2, P3, P5, P6)
+are **post-merge by definition** — they cannot run on a preview.
+
+**`MERGE.md` is the procedure**: eleven numbered steps, the post-merge checks
+in the order they have to run, and the rollback paths. Written 26 Nov with
+every fact derived from the repo and the live database.
 
 **THE WORDING PASS IS DONE.** W1, W2, W5 and W6 all shipped on 25 Nov, and
 **W7 was closed as superseded** — `Apply Directly` no longer exists anywhere,
@@ -444,6 +451,25 @@ the tracker before quoting an assertion count as reassurance.
 ---
 
 ## 9. Before the merge
+
+**`MERGE.md` IS THE PROCEDURE.** Eleven steps, derived 26 Nov 2026. Read it
+rather than reconstructing the merge from this section, which is now only the
+reasoning behind it. Three things in it are load-bearing and easy to miss:
+
+1. **The checks are deliberately NOT in the order they were asked for.** P5
+   fires the deploy hook, the hook creates a production deployment, and **on
+   Hobby, Vercel's Instant Rollback reaches only the immediately previous
+   deployment** — so firing the hook early spends the one rollback slot
+   before you have finished looking for reasons to use it. Every read-only
+   check comes first.
+2. **The instant-rollback window closes by itself at 02:00 UTC**, when the
+   nightly cron fires the same hook. After that, rolling back is
+   `git revert -m 1` and a rebuild, which is plan-independent but takes
+   minutes rather than a second.
+3. **Item 14 is last, and it is the only step that makes a rollback
+   destructive.** `main`'s `src/lib/authors.js` reads
+   `public.question_authors`; the branch's does not. Drop the view and a
+   rollback breaks author names for all 2,643 members.
 
 **THE CLEAROUT HAS RUN.** 26 Nov 2026, `CLEAROUT.md`'s procedure, 14 of 15
 final-verification rows PASS. The fifteenth is a deliberate decision — Rishi
