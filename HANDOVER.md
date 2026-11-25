@@ -1,6 +1,8 @@
 # HANDOVER — iWorkAtGCC job board, stage 12
 
-Written 25 November 2026, for someone picking this up with no prior context.
+Written 25 November 2026, **refreshed 26 November** after the
+consolidation and the reset flow were signed off. For someone picking this
+up with no prior context.
 
 Read this file, then `JOB-BOARD-TEST-DATA.md` — that is the project's real
 memory and it is long. This file is the map; that file is the territory.
@@ -78,7 +80,7 @@ https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
 | 1–9b | **Signed off** |
 | 10 (SEO, findability, saved roles) | **Signed off 25 Nov**, both halves |
 | 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
-| 12 (recruiter password reset, settings) | **In progress — this is the current stage** |
+| 12 (recruiter password reset, settings) | **In progress.** The reset flow and the function consolidation were **signed off 26 Nov**; deliverables 2–6 remain |
 
 Then: the design pass, the pre-merge clearout, and one merge.
 
@@ -90,12 +92,26 @@ Then: the design pass, the pre-merge clearout, and one merge.
 |---|---|---|
 | 1 | **Migration 025** — `public.reset_eligibility_for_email(text)`, the reset gate | **DONE**, run by him, 7 checks + verdict all PASS |
 | 1a | **`api/password.js`** — the request endpoint and the landing-page gate | **DONE**, 69 assertions |
-| 1b | **`/recruiter/forgot-password`** and **`/recruiter/reset-password`** | **DONE**, untested in a browser |
-| 2 | **The change-password box** (requires `current_password`) | **NOT BUILT** |
+| 1b | **`/recruiter/forgot-password`** and **`/recruiter/reset-password`** | **SIGNED OFF 26 Nov** — full flow tested end to end |
+| 2 | **The change-password box** (requires `current_password`) | **NOT BUILT — start here** |
 | 3 | **`/recruiter/settings`** | **NOT BUILT** |
 | 4 | **Close seven candidate-only routes to recruiters** | **NOT BUILT** |
 | 5 | **Correct two comments** resting on a disproved premise | **NOT BUILT** |
 | 6 | **The privacy policy's recruiter paragraph** (approved wording) | **NOT BUILT** |
+
+**The reset half of stage 12 is finished and signed off.** What remains is
+deliverables 2 to 6, none of which touches the reset flow, the database or a
+serverless function. The detail for each — including the three settings-page
+decisions already settled so they are not reopened, and the seven route names
+— is in `JOB-BOARD-TEST-DATA.md` under "Stage 12 — BUILD SCOPE".
+
+**Deliverable 4 is the one with a trap.** `blockRecruiters` already exists on
+`ProtectedRoute`; the seven routes are `/profile`, `/profile/asked`,
+`/profile/saved`, `/profile/saved-jobs`, `/profile/delete-data`,
+`/my-applications` and `/ask`. Two of those carry comments *justifying* their
+openness with reasoning that was disproved on 25 November — correcting those
+comments is deliverable 5, and doing it in the same pass is the point, because
+a wrong premise left in a comment is how the next person re-derives the error.
 
 **Nothing left in stage 12 needs a new serverless function.** The
 change-password box is a client call; settings reads through RLS; the blocked
@@ -121,7 +137,19 @@ to discover who is registered.
 | **A** | Supabase Redirect URLs | **DONE.** Four entries: the preview host, `https://www.iworkatgcc.com/**`, `http://localhost:5173/**`, and the existing per-deployment wildcard. Site URL untouched. This also closed carried item 8. |
 | **B** | "Password changed" notification off | **DONE.** **Authentication → Emails → Security section**, seven toggles, all already off. The docs name no dashboard control and claim the Management API is the only route — that is wrong, and the dashboard path above is correct. |
 | **C** | The reset email template | **DONE.** `supabase/email-templates/reset-recruiter-password.html`, pasted and saved with its subject line. |
-| **D** | Brevo log check after the first real send | **OUTSTANDING.** Cannot happen until a reset is actually sent. |
+| **D** | Brevo log check after the first real send | **DONE 26 Nov.** One send at 11:57, `jobs@iworkatgcc.com` to the recruiter address, with his template. **Nothing** for the nonsense address and **nothing** for the Google account — the identical-reply rule proved where only the sender can prove it. |
+
+**All four prerequisites are closed.** Nothing is waiting on him.
+
+### One outstanding dashboard fix, not in the repo
+
+The reset email arrived with Supabase's **default** subject, "Reset your
+password". The subject is a **separate dashboard field** and pasting the body
+does not touch it. Fix: Authentication → Emails → Reset Password → the
+**Subject** field → `Reset your iWorkAtGCC recruiter password`. **The signup
+template has the same trap** and should read "Confirm your iWorkAtGCC
+recruiter account". Both are documented in
+`supabase/email-templates/reset-recruiter-password.html`'s header.
 
 ---
 
@@ -130,7 +158,10 @@ to discover who is registered.
 **Vercel's Hobby plan allows 12 serverless functions per deployment.** The
 project reached 14 on 25 Nov and **the build stopped**. He will not upgrade.
 
-Four merges brought it to **10**:
+Four merges brought it to **10**, and all four were **signed off on 26 Nov**
+— including the two with no automated test, which he verified in the browser
+in exactly the way that mattered: he typed one admin action's confirmation
+into the other's box to prove they had not crossed.
 
 | File | Actions |
 |---|---|

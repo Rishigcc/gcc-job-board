@@ -3163,7 +3163,7 @@ it is the case covering 2,652 accounts. Both are the check-the-check rule from
 | A | **Supabase Redirect URLs must allow the reset landing path** — the preview host and `https://www.iworkatgcc.com`. | `resetPasswordForEmail`'s `redirectTo` must be on the allowlist or the link in the email dead-ends. This is a dashboard change only Rishi can make, and without it the flow cannot be tested at all. Do it together with carried item 8 (`http://localhost:5173/**`), so the allowlist is edited once. |
 | B | **Carried item 24: confirm the "Password changed" notification is OFF.** | Otherwise the change-password box ships a third Brevo email on day one. The docs name no dashboard control; the flag is `mailer_notifications_password_changed_enabled` via the Management API, which needs a Personal Access Token Rishi creates. **He runs it; the token is never pasted here.** |
 | C | ~~A decision on the reset email's template.~~ **DECIDED AND DRAFTED 25 Nov 2026: `supabase/email-templates/reset-recruiter-password.html`.** Rishi: *"A generic unsigned Supabase default arriving alongside it looks like phishing, and that's the worst possible thing for a password email to look like."* It reuses `confirm-recruiter-signup.html`'s styling exactly, so the two emails a recruiter can receive look like they come from the same place. Anti-phishing is the copy's purpose rather than a footnote: it says nothing has changed yet, that ignoring it is the correct response if unrequested, and that we never ask for a password — with no urgency language, which is what a real phish uses. It also carries a paragraph for someone who signs in with Google, because Supabase's `/auth/v1/recover` is reachable by anyone holding the publishable key, so a community member could receive it; that paragraph is what makes it harmless if they do. Paste path: **Authentication → Emails → Reset Password**.
-| D | **One Brevo log check after the first test send.** | The only place that shows what was actually sent. The claim under test in the negative cases is an **absence**, and an absence is proved at the sender, not at an inbox that may be slow. |
+| D | ~~One Brevo log check after the first test send.~~ **CLOSED 26 Nov 2026** — one send at 11:57, `jobs@iworkatgcc.com` to the recruiter address, with his template; **nothing** for the nonsense address and **nothing** for the Google account. | The only place that shows what was actually sent. The claim under test in the negative cases is an **absence**, and an absence is proved at the sender, not at an inbox that may be slow. |
 
 ### Carried items that land in or around stage 12
 
@@ -3794,6 +3794,56 @@ hook and then sweeps. P1's curl covers both in one request.
 | 10 | **HALF SUPERSEDED 25 Nov 2026 — see "Decision 10 does not apply to /profile".** The half that said *"`/ask` and `/profile` stay reachable for recruiters"* **no longer stands**: stage 12 blocks both, because the dual-use account that reasoning protected does not exist and cannot be created (0 of 2,656 accounts have two identities; `recruiter_profiles` rows are only ever created from `PostAJob.jsx`'s signUp metadata, and `handle_new_recruiter()` raises for free email domains). Decision 10 protects a **person** who holds two logins, not one account. The consequence accepted with it: a recruiter can no longer set a display name, so the "recruiter chooses to join the community" path closes — that person uses their Google login instead. The rest of the item stands as the record of what was decided on 18 Nov. Originally: **A recruiter can create a community `profiles` row — and that is now intended.** `saveDisplayName()` in `src/lib/useDisplayName.js` upserts one, reachable from `/profile`, `/ask` and any question page. **Rishi's decision, 18 Nov 2026: leave the behaviour as it is.** Someone who deliberately sets a display name is choosing to join the community, which matches the "one person can be both" decision. `/ask` and `/profile` stay reachable for recruiters. **The guard is the invariant below, not a code change.** | Stage 3 review | Decided — see the invariant |
 | 11 | ~~**Stale unconfirmed `auth.users` rows / pre-account-takeover.**~~ **CLOSED 18 Nov 2026 by test T2 — outcome B.** A pre-registered unconfirmed password account was merged into the same user id when the real owner signed in with Google, and Supabase wiped **both** the attacker's password (`has_password` false, `providers` google only) **and** the attacker's `user_metadata`. `signInWithPassword` with the attacker's password returned 400 "Invalid login credentials". No cleanup cron is needed. | Stage 3 review | Closed |
 | 12 | **`user_activity` now skips recruiters.** `ActivityTracker` is mounted at the app root and ran `record_activity()` for every signed-in user, recruiters included — proven by the one row `community@iworkatgcc.com` had accumulated. That table feeds the digest's active-user set and the community stats, so recruiters were inflating both. Guarded in stage 3. The guard keys off `account_type` metadata; if one account ever needs to be both candidate and recruiter, change it to key off the presence of a `profiles` row instead. | Rishi, stage 3 retest | Closed (guard shipped); stray row listed above for cleanup |
+
+## SIGNED OFF 26 Nov 2026 — the consolidation and the reset flow
+
+Rishi's result, verbatim: *"The consolidation and the reset flow both pass."*
+
+| What he confirmed | Result |
+|---|---|
+| The build | ready at `ed0dd49`, **10 functions** |
+| **Merge 2** (`public`) | job page renders with `JobPosting`; `sitemap-jobs.xml` lists roles with production URLs; `sitemap.xml` intact; a closed role renders with `noindex` and no markup. **"The includeFiles key is right."** |
+| **Merge 3** (`admin`) | **typing `ANONYMISE` into the orphan-delete box does not enable it** — the two confirmations have not crossed. Both actions work, and a candidate opening `/admin` is still refused, **so the guard is still before the branch** |
+| **Merge 4** (`my-data`) | download, delete-resume, re-upload, and the untouched full delete-my-job-board-data flow all work |
+| **The reset flow** | the link is on the sign-in tab; nonsense, Google and recruiter addresses all return the **identical panel**; the link sets a new password, the old one is refused, the link is single-use; and `/recruiter/reset-password` as a Google account says "This account has no password" with no password field |
+| 375px | forgot, reset and sign-in all clean; `/questions` unchanged |
+
+**He verified the two merges that have no automated test in exactly the way
+that mattered.** Merge 3's real risk was the two confirmations crossing now
+that they share a file — he tested it directly by typing one action's
+confirmation into the other's box. Merge 4's risk was three response shapes
+read field by field, and he walked all of them.
+
+### PREREQUISITE D — CLOSED
+
+*"Brevo shows exactly one send at 11:57, jobs@iworkatgcc.com → the recruiter
+address, with my template. Nothing for the nonsense address, nothing for the
+Google account."*
+
+**That is the identical-reply rule proved where it can only be proved.** The
+claim under test for the refused addresses is an **absence**, and an absence
+is provable at the sender, not at an inbox that might simply be slow. One
+send, two silences.
+
+All four prerequisites are now closed: A (redirect URLs), B (the Security
+toggles, all off), C (the template), D (the Brevo log).
+
+### THE ONE FIX HE FOUND: the subject line
+
+The email arrived with Supabase's default subject, **"Reset your password"**,
+not the one in the template file. Rishi: *"Generic is both harder to find in
+an inbox and easier to imitate"* — the two things a password email must not
+be.
+
+**Cause: the subject is a separate dashboard field and pasting the body does
+not touch it.** My template file documented the subject in its header, but as
+one line among many, and it was missed. The header now says so in terms that
+cannot be skimmed past, and notes that **the signup template has the same
+trap**.
+
+**To fix, in the dashboard:** Authentication → Emails → Reset Password → the
+**Subject** field above the body editor →
+`Reset your iWorkAtGCC recruiter password`. Nothing in the repo changes.
 
 ## CONSOLIDATION — 14 serverless functions to 10, Hobby's limit is 12
 
