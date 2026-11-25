@@ -269,8 +269,17 @@ all.
   `source`, `headers`, `has`, `missing`. Vercel validates the schema and an
   unknown key risks failing the deployment. Reasoning goes in the tracker.
 - **`vite preview` does not read `vercel.json`**, so headers and rewrites
-  cannot be tested locally at all. The suite asserts the configuration;
-  verify the live response with `curl -sI <url> | grep -i x-robots`.
+  cannot be tested locally at all. The suite asserts the configuration; the
+  live response has to be read in DevTools — **`curl` is 302'd by deployment
+  protection** on the preview.
+- **VERCEL PUTS `X-Robots-Tag: noindex` ON EVERY PREVIEW DEPLOYMENT ITSELF.**
+  So on a preview every page carries a noindex, and "this page has no header"
+  is unobservable there. **The VALUE is the discriminator:** ours is
+  `noindex, nofollow`, Vercel's is a bare `noindex`, so `nofollow` appears
+  only where our pattern matched. **That is a second reason the configured
+  value keeps `nofollow`** — collapsing it would make the rule
+  indistinguishable from Vercel's and the check unrunnable before production.
+  The production-only half is **P6** in the launch checklist.
 
 ---
 

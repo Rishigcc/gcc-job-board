@@ -805,10 +805,28 @@ ok(
   "the bare path and the subtree are two patterns; one without the other " +
     "leaves half the family indexable",
   );
+// `nofollow` IS LOAD-BEARING FOR A SECOND REASON, found 25 Nov 2026 while
+// Rishi was testing this on the preview.
+//
+// VERCEL ADDS `X-Robots-Tag: noindex` TO EVERY PREVIEW DEPLOYMENT ITSELF, to
+// keep previews out of search. So on a preview, every page carries a noindex
+// whether our rule matched it or not -- and "the terms page has no header"
+// cannot be observed there at all.
+//
+// The VALUE is what separates them: ours emits `noindex, nofollow`, Vercel's
+// emits a bare `noindex`. `nofollow` is therefore present only where OUR
+// pattern matched, which makes `/recruiter-terms` returning a bare `noindex`
+// a conclusive proof that our pattern does not reach it.
+//
+// Collapsing this to a bare `noindex` would be defensible policy and would
+// make the two indistinguishable, so the check could not be run before
+// production. It stays.
 ok(
-  "both say nofollow as well, matching the client-side tag",
+  "both say nofollow as well",
   /nofollow/.test(robotsHeaderFor("/recruiter") || "") &&
     /nofollow/.test(robotsHeaderFor("/recruiter/(.*)") || ""),
+  "nofollow matches the client-side tag AND is what distinguishes our header " +
+    "from the noindex Vercel injects on every preview deployment",
 );
 
 // THE SLASH IS THE WHOLE POINT. `/recruiter-terms` is a PUBLIC page that must

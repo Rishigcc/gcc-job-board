@@ -4835,6 +4835,82 @@ been doing so nightly from `main`, so the hook works. What has not been
 exercised is `api/rebuild.js` **as the branch now writes it**, which fires the
 hook and then sweeps. P1's curl covers both in one request.
 
+### P6 — the recruiter area's `X-Robots-Tag`, and what a preview CAN prove
+
+Rishi checked the three paths in DevTools (`curl` is 302'd by deployment
+protection) and found:
+
+| Path | `X-Robots-Tag` on the preview |
+|---|---|
+| `/recruiter/sign-in` | `noindex, nofollow` |
+| `/recruiter/reset-password` | `noindex, nofollow` |
+| `/recruiter-terms` | **`noindex`** — a header, but a different one |
+
+**He was right about what it is.** Vercel adds `X-Robots-Tag: noindex` to
+**every** preview deployment automatically, to keep previews out of search.
+Confirmed against Vercel's own documentation, which also notes that the header
+is dropped once a production domain is assigned, that an outdated production
+deployment gets it too, and that `vercel.json` can override it — which is why
+our value wins where our pattern matches.
+
+**BUT THE CHECK IS NOT UNTESTABLE, AND HE ALMOST SAID SO HIMSELF:** *"the
+difference in values is itself evidence."* It is better than evidence — it is
+the test.
+
+**THE VALUE IS THE DISCRIMINATOR:**
+
+| | emits |
+|---|---|
+| Our rule | `noindex, nofollow` |
+| Vercel's preview header | `noindex` |
+
+So `nofollow` is present **only** where our pattern matched. `/recruiter-terms`
+returning a **bare** `noindex` proves our pattern did **not** catch it —
+because if it had, `nofollow` would be in the value. **That is a conclusive
+negative result for the question that actually matters**, which was never "does
+the terms page have any header" but "does our recruiter pattern reach a public
+page". It does not.
+
+**What genuinely waits for production** is only the cosmetic half: whether
+`/recruiter-terms` ends up with **no** `X-Robots-Tag` at all. On the preview it
+will always have Vercel's. **At production, after the merge:**
+
+| Path | Expected |
+|---|---|
+| `/recruiter/sign-in` | `noindex, nofollow` |
+| `/recruiter/forgot-password` | `noindex, nofollow` |
+| `/recruiter/reset-password` | `noindex, nofollow` |
+| `/recruiter` and the signed-in area | `noindex, nofollow` |
+| `/recruiter-terms` | **no `X-Robots-Tag` at all** |
+| `/post-a-job`, `/gcc-jobs`, `/jobs`, `/` | **no `X-Robots-Tag` at all** |
+
+**This is why the configured value keeps `nofollow`.** It is not only correct
+policy for an auth page — it is what makes the rule distinguishable from
+Vercel's injected one on every preview from now on. Collapsing it to a bare
+`noindex` would make the two indistinguishable and this check unrunnable
+before production.
+
+#### `X-Vercel-Cache: HIT` — his question, and the check for it
+
+He asked whether a response cached before the rule existed could be served
+with the old headers. **Vercel's cache is keyed per deployment**, so a new
+deployment cannot serve a previous deployment's cached responses, and the rule
+shipped in a new deployment — a HIT there is a hit on a response that
+deployment produced. **That is the mechanism, not a measurement**, so the
+measurement is worth taking:
+
+Add any query string to force a distinct cache key, and compare. `source`
+patterns match the **path**, so the rule still applies:
+
+```
+/recruiter/sign-in?cachebust=1     -> expect MISS, and noindex, nofollow
+/recruiter-terms?cachebust=1       -> expect MISS, and a bare noindex
+```
+
+**If the values are the same on a MISS as on a HIT, the cache is not masking
+anything.** If they differ, the cache is serving pre-rule responses and the
+fix is a redeploy rather than a config change.
+
 ### Checked and found to be a non-issue
 
 - **`api/send-digest.js`** shows 24 added lines on this branch and runs only
