@@ -630,6 +630,42 @@ const MUTANTS = [
       ),
     "there is no recruiter sign-in item in the header",
   ],
+  // --- the recruiter area's X-Robots-Tag ---------------------------------
+  //
+  // These mutate vercel.json and public/robots.txt, which live OUTSIDE src/.
+  // The harness copies only src/, so each of these is applied to the copy's
+  // own root -- see the `root` note on the mutant runner.
+  [
+    "the X-Robots-Tag is dropped from the recruiter subtree",
+    "../vercel.json",
+    (s) => s.replace('      "source": "/recruiter/(.*)",', '      "source": "/recruiter/never-matches",'),
+    "/recruiter/(.*) carries it too",
+  ],
+  [
+    "the two patterns are 'simplified' into one that catches /recruiter-terms",
+    "../vercel.json",
+    (s) =>
+      s.replace('      "source": "/recruiter",', '      "source": "/recruiter(.*)",'),
+    "/recruiter-terms is indexable",
+  ],
+  [
+    "nofollow is dropped, leaving only noindex",
+    "../vercel.json",
+    (s) => s.replace(/"noindex, nofollow"/g, '"noindex"'),
+    "both say nofollow as well",
+  ],
+  [
+    "robots.txt disallows the recruiter area, hiding the header",
+    "../public/robots.txt",
+    (s) => s.replace("Disallow: /app.html", "Disallow: /app.html\nDisallow: /recruiter"),
+    "robots.txt does not disallow the recruiter area",
+  ],
+  [
+    "the client-side noindex is removed from the reset page",
+    "Pages/RecruiterResetPassword.jsx",
+    (s) => s.replace(/\n\s*noindex\n/, "\n"),
+    "reset-password still sets noindex client-side too",
+  ],
   // --- deliverable 6: the policy ----------------------------------------
   [
     "the approved paragraph reworded",
@@ -669,11 +705,24 @@ for (const [label, file, mutate, expected] of MUTANTS) {
   const src = join(dir, "src");
   cpSync(join(REPO, "src"), src, { recursive: true });
 
+  // SOME ASSERTIONS READ FILES OUTSIDE src/ -- vercel.json and
+  // public/robots.txt -- and the suite reads those by a RELATIVE path, so
+  // they are copied here and the suite is run with its cwd set to this copy.
+  // Without that, a mutation of vercel.json was written to the copy while the
+  // suite read the real one, and reported "SUITE STILL PASSED" on a break
+  // that was genuinely there.
+  cpSync(join(REPO, "vercel.json"), join(dir, "vercel.json"));
+  cpSync(join(REPO, "public"), join(dir, "public"), { recursive: true });
+
   // A leading "+" means the mutation CREATES this file rather than editing
   // one, which is how the sweep is proved against a link that does not exist
-  // yet -- the case it is really there to catch.
+  // yet -- the case it is really there to catch. A leading "../" targets the
+  // copy's ROOT rather than its src/, for the two files above.
   const creating = file.startsWith("+");
-  const path = join(src, creating ? file.slice(1) : file);
+  const atRoot = file.startsWith("../");
+  const path = atRoot
+    ? join(dir, file.slice(3))
+    : join(src, creating ? file.slice(1) : file);
   const before = creating ? "" : readFileSync(path, "utf8");
   let after;
   try {
@@ -696,6 +745,9 @@ for (const [label, file, mutate, expected] of MUTANTS) {
   let failed = false;
   try {
     output = execFileSync("node", [SUITE], {
+      // cwd is the COPY, so the suite's relative reads -- vercel.json,
+      // public/robots.txt -- resolve to the mutated versions.
+      cwd: dir,
       env: { ...process.env, SRC_ROOT: src },
       encoding: "utf8",
     });

@@ -4140,6 +4140,111 @@ check that asserted the right thing in a file that could not run.** The
 remedy is the same shape as all of them — execute it — but applied to a
 different object: **the artefact, not the assertion.**
 
+## THE RECRUITER AREA WAS CRAWLABLE WITH NO SERVER-SIDE noindex — 25 Nov 2026
+
+Rishi, testing the sign-in route: *"Step 4 fails. view-source: on
+/recruiter/sign-in finds no noindex — 0 matches. The page is the bare SPA
+shell… So the noindex is presumably set client-side after React mounts, which
+View Source can't see."* And the question that mattered: *"What else is in the
+same position? /recruiter/forgot-password and /recruiter/reset-password are the
+same family… a password reset page in Google's index is worse than a sign-in
+page."*
+
+**All three of his points were right, and the third was the one worth having.**
+
+### 1. Is it actually being set? YES — read from the rendered DOM
+
+| Route | rendered `robots` | rendered title | prerendered |
+|---|---|---|---|
+| `/recruiter/sign-in` | `noindex, nofollow` | Recruiter Sign In — iWorkAtGCC | **no** |
+| `/recruiter/forgot-password` | `noindex, nofollow` | Forgot your recruiter password | **no** |
+| `/recruiter/reset-password` | `noindex, nofollow` | Set a new password | **no** |
+
+Each also carries a correct canonical. **So nothing was broken — it was
+weaker than it looked.**
+
+### 2. Which did I intend? SERVER-SIDE. The step was written for a check the page could not pass
+
+I wrote *"View source and it should be there"*, which is a server-side test,
+against a page that is not prerendered. **The step was right and the
+implementation did not meet it** — the inverse of the usual fault here, and
+the reason it surfaced at all.
+
+**Client-side is *usually* enough**: Googlebot renders JavaScript, and it would
+see this on its rendering pass. It is not enough **here**, for three reasons
+that compound:
+
+1. **`robots.txt` is `Allow: /`**, with only `/app.html` disallowed. Every
+   `/recruiter/*` path is fully crawlable.
+2. **The SPA fallback serves `dist/app.html`**, which has **no head tags at
+   all** — no title, no description, no robots. The first fetch of any
+   recruiter page yields a document with nothing in it.
+3. **`/recruiter/sign-in` is now linked from the footer of every page**, which
+   I added in the same session. It went from undiscoverable to as
+   discoverable as a URL on this site gets, in one commit.
+
+### THE FIX: `X-Robots-Tag` on the whole family, not three names on a list
+
+```
+"source": "/recruiter",        -> X-Robots-Tag: noindex, nofollow
+"source": "/recruiter/(.*)",   -> X-Robots-Tag: noindex, nofollow
+```
+
+**A header rather than three more prerendered routes, deliberately.** A
+prerender list is a list somebody has to remember to add to, and **that is the
+failure mode this project keeps meeting** — the seven blocked routes, the
+footer link, `/questions`, and now this. The header covers the three unguarded
+routes, the entire signed-in recruiter area, and **every route added later**,
+without anyone remembering anything.
+
+**THE SLASH IS LOAD-BEARING, and it is why there are two patterns.**
+`/recruiter-terms` is a **public** page that must stay indexable, and it
+matches `/recruiter(.*)` but **not** `/recruiter/(.*)`. A later
+"simplification" to one pattern would quietly deindex the terms of service. A
+test asserts ten paths on the right side of that line.
+
+**`robots.txt` must stay `Allow: /` for these paths.** Disallowing them would
+stop Google fetching the page and therefore stop it seeing the header — and a
+disallowed URL can still be indexed as a bare link. **Allow the crawl, serve
+the refusal.** A test asserts no `Disallow: /recruiter` appears.
+
+**The client-side tag stays** as the belt to the header's braces, and is
+asserted present in all three pages: the header is what a crawler sees, the
+meta tag is what a human reading the page sees.
+
+### A `_comment` key was written into `vercel.json` and then removed
+
+The first version explained all of the above inside the headers entry as a
+`_comment` array. **Removed before committing:** Vercel validates this file's
+schema, a header entry's keys are `source`, `headers`, `has` and `missing`,
+and an unknown key risks **failing the deployment**. JSON has no comments, so
+the reasoning lives here instead. **An invalid `vercel.json` is the one
+mistake in this file that takes the whole site down**, and the existing trap
+note about re-keying `functions` wrongly is about the same file.
+
+### IT CANNOT BE VERIFIED LOCALLY
+
+`vite preview` does not read `vercel.json`, so the assertions check the
+**configuration** and the response header itself is a step on his checklist
+against the deployed preview:
+
+```sh
+curl -sI https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app/recruiter/sign-in | grep -i x-robots
+curl -sI https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app/recruiter-terms | grep -i x-robots
+```
+
+The first must print `noindex, nofollow`; the second must print **nothing**.
+
+### The harness had the same shape of bug, and the mutations found it
+
+The first run of the new mutations reported **"SUITE STILL PASSED"** on
+breaks that were genuinely there. The harness copies `src/` and ran the suite
+with the **repo** as its working directory, so a mutated `vercel.json` was
+written to the copy while the suite read the real one. It now copies
+`vercel.json` and `public/`, supports a `../` prefix to target the copy's
+root, and runs the suite with its **cwd set to the copy**. **209 assertions,
+80/80 mutations.**
+
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on

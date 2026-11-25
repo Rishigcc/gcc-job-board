@@ -757,6 +757,122 @@ ok(
 );
 
 // ---------------------------------------------------------------------------
+// THE RECRUITER AREA IS noindex AT THE HTTP LEVEL — 25 Nov 2026
+// ---------------------------------------------------------------------------
+//
+// Rishi: *"view-source: on /recruiter/sign-in finds no noindex — the page is
+// the bare SPA shell… A password reset page in Google's index is worse than a
+// sign-in page."* Right on both counts.
+//
+// NONE of /recruiter/* is prerendered, so each is served as `dist/app.html`
+// with no head tags at all, and the `noindex` was set CLIENT-SIDE by the Seo
+// component after React mounts. It was genuinely there — confirmed in the
+// rendered DOM as `noindex, nofollow` on all three routes — but it needs
+// Googlebot to execute JavaScript to see it, and `robots.txt` is `Allow: /`
+// with only `/app.html` disallowed, so these pages are fully crawlable.
+// `/recruiter/sign-in` is now linked from the footer of EVERY page.
+//
+// A HEADER RATHER THAN THREE MORE PRERENDERED ROUTES, deliberately: a
+// prerender list is a list somebody has to remember to add to, and that is
+// the failure mode this project keeps meeting. The pattern covers the three
+// unguarded routes, the whole signed-in recruiter area, and every route added
+// later.
+//
+// IT CANNOT BE VERIFIED LOCALLY — `vite preview` does not read vercel.json —
+// so these assertions check the CONFIGURATION, and the response header itself
+// is a step on his checklist against the deployed preview.
+
+const vercelConfig = JSON.parse(readFileSync("vercel.json", "utf8"));
+const headerEntries = vercelConfig.headers || [];
+
+function robotsHeaderFor(source) {
+  const entry = headerEntries.find((h) => h.source === source);
+  if (!entry) return null;
+  const tag = (entry.headers || []).find(
+    (h) => h.key.toLowerCase() === "x-robots-tag",
+  );
+  return tag ? tag.value : null;
+}
+
+ok(
+  "/recruiter carries X-Robots-Tag: noindex",
+  /noindex/.test(robotsHeaderFor("/recruiter") || ""),
+  `found ${JSON.stringify(robotsHeaderFor("/recruiter"))}`,
+);
+ok(
+  "/recruiter/(.*) carries it too",
+  /noindex/.test(robotsHeaderFor("/recruiter/(.*)") || ""),
+  "the bare path and the subtree are two patterns; one without the other " +
+    "leaves half the family indexable",
+  );
+ok(
+  "both say nofollow as well, matching the client-side tag",
+  /nofollow/.test(robotsHeaderFor("/recruiter") || "") &&
+    /nofollow/.test(robotsHeaderFor("/recruiter/(.*)") || ""),
+);
+
+// THE SLASH IS THE WHOLE POINT. `/recruiter-terms` is a PUBLIC page that must
+// stay indexable, and it matches `/recruiter(.*)` but not `/recruiter/(.*)`.
+// A later "simplification" to one pattern would quietly deindex the terms.
+const noindexSources = headerEntries
+  .filter((h) =>
+    (h.headers || []).some(
+      (x) => x.key.toLowerCase() === "x-robots-tag" && /noindex/.test(x.value),
+    ),
+  )
+  .map((h) => h.source);
+
+function matchesSource(source, path) {
+  return new RegExp(`^${source.replace("(.*)", ".*")}$`).test(path);
+}
+
+for (const [path, shouldBeNoindex] of [
+  ["/recruiter", true],
+  ["/recruiter/sign-in", true],
+  ["/recruiter/forgot-password", true],
+  ["/recruiter/reset-password", true],
+  ["/recruiter/jobs", true],
+  ["/recruiter/settings", true],
+  ["/recruiter-terms", false],
+  ["/post-a-job", false],
+  ["/gcc-jobs", false],
+  ["/jobs", false],
+]) {
+  const hit = noindexSources.some((source) => matchesSource(source, path));
+  ok(
+    `${path} is ${shouldBeNoindex ? "noindex" : "indexable"}`,
+    hit === shouldBeNoindex,
+    shouldBeNoindex
+      ? "it is part of the recruiter area"
+      : "a public page must not be caught by the recruiter pattern",
+  );
+}
+
+// robots.txt must keep ALLOWING these paths. Disallowing them would stop
+// Google fetching the page and therefore stop it seeing the header, and a
+// disallowed URL can still be indexed as a bare link. Allow the crawl, serve
+// the refusal.
+const robotsTxt = readFileSync("public/robots.txt", "utf8");
+ok(
+  "robots.txt does not disallow the recruiter area",
+  !/^\s*Disallow:\s*\/recruiter/im.test(robotsTxt),
+  "disallowing it would hide the X-Robots-Tag from the crawler that needs to read it",
+);
+
+// And the client-side tag stays, as the belt to the header's braces.
+for (const [file, label] of [
+  ["Pages/PostAJob.jsx", "the sign-in route"],
+  ["Pages/RecruiterForgotPassword.jsx", "forgot-password"],
+  ["Pages/RecruiterResetPassword.jsx", "reset-password"],
+]) {
+  ok(
+    `${label} still sets noindex client-side too`,
+    /noindex/.test(stripComments(read(file))),
+    "the header is server-side; this is what a human reading the page sees",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Deliverable 5 — the three disproved comments, gone and replaced
 // ---------------------------------------------------------------------------
 //
