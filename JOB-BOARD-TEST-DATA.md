@@ -3481,6 +3481,83 @@ including a recruiter's, and will always be empty for one (0 recruiters have a
 question or an answer). It navigates to `/questions/:slug`, never to one of
 the seven, so nothing bounces.
 
+## THE FOOTER AT 375px — CHECKED BEFORE FIXING, AND IT IS NOT A REGRESSION
+
+Rishi, at the stage 12 retest: *"Step 7 fails, and for both account types… at
+narrow width the EXPLORE and COMMUNITY columns disappear entirely and ACCOUNT
+collapses to one link."* And: *"Is this new, or has the footer always done
+this at narrow width? Check before you fix — if it's pre-existing it's a
+different conversation from a regression you just introduced."*
+
+**He was right to make that the first question. It is pre-existing, and it is
+live on production.**
+
+### 1. Is it new? No — it predates the branch by eight days
+
+| | |
+|---|---|
+| The four `hidden md:block` classes arrived in | **`f368c95`, 5 Sept 2026** — *"Add community Q&A feature, homepage/welcome redesign, and shared components"* |
+| This branch began at | **`4b12dbd`, 13 Sept 2026** |
+| On `main`? | **Yes** — `f368c95` is an ancestor of `main`, so **this is the live site's behaviour right now**, for every mobile visitor to the community |
+| Present before any stage 12 work? | **Yes** — all four are in `Footer.jsx` at `212ea8d` |
+
+**My footer change touched one thing: the `<Link>` INSIDE one of those
+`<li className="hidden md:block">` wrappers.** The diff is the Profile/Settings
+swap and two comments. The wrapper, the columns and every breakpoint are
+untouched.
+
+### 2. What caused it — and the viewer had nothing to do with it
+
+His instinct was right that `useViewer` could not explain Explore and
+Community. **It explains none of it.** The cause is four hard-coded Tailwind
+classes, nothing dynamic:
+
+| Element | Class |
+|---|---|
+| The **Explore** column `<div>` | `hidden md:block` |
+| The **Community** column `<div>` | `hidden md:block` |
+| The **My Dashboard** `<li>` | `hidden md:block` |
+| The **Profile / Settings** `<li>` | `hidden md:block` |
+
+### 3. Is it a defect? MEASURED, and the navigation is not lost
+
+A script rendered `/questions` signed out at both widths and listed what is
+actually visible:
+
+| | 1280px | 375px |
+|---|---|---|
+| Footer headings | iWorkAtGCC, Explore, Community, Legal, Account | **iWorkAtGCC, Legal, Account** |
+| Footer links | Explore GCC Jobs, Join the Community, Ask Answer & Connect, Privacy Policy, Recruiter Terms, Sign In | **Privacy Policy, Recruiter Terms, Sign In** |
+| Header menu | not needed (full nav in the bar) | **opens, and carries Explore GCC Jobs, Ask Answer & Connect, Sign In** |
+
+**So the four items hidden from the footer below 768px are exactly the four
+the header's menu already carries**, and the two that survive — Privacy
+Policy and Recruiter Terms — are the two that exist **nowhere else on the
+site**. That is a deliberate mobile de-duplication, not a loss.
+
+For the signed-in items the proof is structural rather than measured, and it
+is stronger than measurement would be: `SiteHeader.jsx` builds **one**
+`navItems` array and renders it **twice**, once for the desktop bar and once
+inside the mobile menu. If the desktop bar shows My Dashboard and
+Profile/Settings, the mobile menu shows them, because it is the same filtered
+array. There is no width at which the nav is unreachable — the hamburger
+exists below 640px and the full bar at 640px and up, while the footer trims at
+768px, so the bands overlap rather than leaving a hole.
+
+### THE ONE REAL GAP, which is his to decide
+
+**`Join the Community` has no mobile equivalent.** The footer's version points
+at `/signup`; the header's signed-out item is **Sign In**, which reaches
+`/signup` with `state: { mode: "signin" }`. Same route, different intent. So a
+signed-out visitor on a phone is offered *"Sign In"* and never *"Join"*.
+
+**Not changed, for two reasons.** It is a production page outside the job
+board's scope, and the premise that mobile users lose navigation turned out to
+be false — so fixing something would mean changing the live community site on
+a false alarm. **Carried item 30**, for him to decide. The options, if he wants
+one: show the Community column on mobile too; or make the signed-out header
+item read *Join* and let `/signup` handle both, which it already does.
+
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on
@@ -4071,6 +4148,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
 | 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
 | 29 | ~~**PRE-MERGE, GROUPED: two things a recruiter sees on `/profile` today.**~~ **BUILT 25 Nov 2026, awaiting Rishi's retest.** (a) `/profile`'s Name and Email rows render only when their own value exists — conditioned on the absence of the data, never on `account_type`, because keying off the role is the conditional-render mistake decision 10 rules out. (b) `/profile/delete-data` now has a **nothing-to-delete state**: no resume, no identifiable applications and no saved roles means a panel saying so and no confirmation box. The link itself is untouched, so the policy's sentence stays true. `my_applications()` returns only rows whose `candidate_id` is the caller, and anonymising NULLs that column, so its count is already the count of applications this page could still delete — no new column needed. A `notice` guard keeps the "resume deleted" confirmation visible instead of flipping straight to the empty state. | Rishi, 25 Nov 2026 | **In test** |
+| 30 | **A PRODUCTION PAGE, NOT A JOB BOARD ONE — for his decision, not a fix.** Below 768px the footer hides four items via hard-coded `hidden md:block`: the whole **Explore** and **Community** columns, and the **My Dashboard** and **Profile** rows. It is **pre-existing and live on `main`** — the classes arrived in `f368c95`, 5 Sept 2026, eight days before this branch began at `4b12dbd`. **Navigation is NOT lost** (measured at 375px: the header's menu carries Explore GCC Jobs, Ask Answer & Connect and Sign In/Out, and signed in it carries My Dashboard and Profile/Settings from the same `navItems` array), so the four hidden items are exactly the four the header menu duplicates, while the two that survive — Privacy Policy and Recruiter Terms — exist nowhere else. **The one real gap:** `Join the Community` (`/signup` in join mode) has no mobile equivalent; the header's Sign In reaches the same route in **sign-in** mode, so a signed-out phone visitor is offered "Sign In" and never "Join". | Rishi at the stage 12 retest, 25 Nov 2026 | **His decision** |
 | 28 | ~~**LIVE DEFECT: a recruiter can upload a resume from `/profile`, and it poisons an admin report.**~~ **WITHDRAWN 25 Nov 2026 — I WAS WRONG, and Rishi agreed to it on the strength of my claim.** Checked against the live `public.admin_report_totals()` rather than the tracker's summary of it: `no_resume` counts *candidates who HAVE applications but NO resume row*, so a resume with no applications never enters it; `orph` counts storage objects with **no** `candidate_resumes` row, and an upload creates both. **Neither risk figure moves.** And the state is not anomalous anyway: any candidate may upload a resume before applying, and `ApplyPanel` blocks only *your own* posting (`job.posted_by === session.user.id`), so **a recruiter can apply to another company's role** — which makes a resume on file legitimate for them under decision 10. The resume block is one of the few on `/profile` that genuinely does apply to a recruiter. | Withdrawn | No action |
 | 27 | **LIVE DEFECT ON A SIGNED-OFF PAGE: pasted Markdown is rendered literally to candidates.** Rishi's correction, 24 Nov 2026: *"a candidate reading job 13 right now sees `# Job Description` and `**bold**` on screen, so item 27 is a live defect on a signed-off page, not just a snippet problem."* He is right, and I had filed it a category too low. **The defect is what a candidate reads**; the Google snippet beginning `# Job Description` is a symptom of the same cause, not the problem. Job 13's description opens `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout, and `/gcc-jobs/:slugId` renders it with `whitespace-pre-wrap`, which deliberately never parses HTML. Options: render a safe Markdown subset; strip the markers for display and for the meta description; or change the field hint and let recruiters paste plain text. Whichever is chosen, note that the markup must keep matching the page — Google requires everything in the markup to be visible on it — so display and markup have to change together. | Found 24 Nov 2026 testing against a real row; severity corrected by Rishi the same day | **Before merge** |
 | 26 | **`alter table public.jobs validate constraint jobs_description_check;` after the pre-merge clearout.** Migration 023 added it `NOT VALID` because 24 of 25 existing rows are under 400 characters — all of them `[T5]` test jobs deleted by carried item 13. Once those are gone, validate it, and confirm `convalidated` is true. The statement is at the bottom of the migration file. It fails loudly if anything short remains, which is the point. | Migration 023 | **After carried item 13, before merge** |
