@@ -273,9 +273,15 @@ npx esbuild scripts/stage4-validation-test.mjs --bundle --format=esm \
 Two more run directly, added 25 Nov:
 
 ```sh
-node scripts/stage12-settings-test.mjs          # 177 — static, reads src/
+node scripts/stage12-settings-test.mjs          # 178 — static, reads src/
 node scripts/stage12-settings-negative-run.mjs  # 64 mutations, all must be caught
+node scripts/item27-markdown-negative-run.mjs   # 16 mutations, all must be caught
 ```
+
+`item27-markdown-test.mjs` (**133**) needs bundling like the stage suites.
+**`esbuild` is not a local dependency** — always `npx esbuild`. A harness that
+assumed `node_modules/.bin/esbuild` reported all 16 mutations as "did not
+bundle" with an empty stderr.
 
 The negative run is the check-the-check rule made executable: it breaks one
 thing at a time in a copy of `src/` and asserts the suite fails **on the
@@ -286,7 +292,7 @@ the code is fine.
 
 Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **60**,
 stage8 **44**, stage9 **90**, stage10 **116 + 111 + 62 + 121**, stage12
-**69 + 177**, check-overflow **18**. **stage7 is 60, not 56** — W6 added four. **eslint has exactly 8 pre-existing
+**69 + 178**, item 27 **133**, check-overflow **21**. **stage7 is 60, not 56** — W6 added four. **eslint has exactly 8 pre-existing
 errors** — 2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the
 baseline, not a problem to fix.
 
@@ -339,6 +345,12 @@ the tracker before quoting an assertion count as reassurance.
   The reset is initiated server-side, so under PKCE the verifier would be
   generated in a serverless function and thrown away. **Switching the client
   to PKCE breaks the reset silently.**
+- **A job description is MARKDOWN, parsed once and rendered twice** — React
+  elements for the page, an HTML string for the JSON-LD, both from
+  `src/lib/descriptionMarkdown.js`. **There is no `dangerouslySetInnerHTML`
+  anywhere in `src/` and it must stay that way**; that is the entire injection
+  surface for the detail page, and the suite asserts it. A second parser would
+  break the rule that the markup says what the page shows.
 - **A logged WORDING item is about a string, so search for the string before
   discussing it.** W7 was debated as a live concern and the text it named had
   been deleted a day later in stage 10 round two. Same class as quoting a

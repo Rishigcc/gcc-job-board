@@ -6,6 +6,7 @@ import Seo from "../components/Seo";
 import { metaDescription, pageTitle } from "../lib/jobPageHead";
 import ApplyPanel from "../components/ApplyPanel";
 import SaveJobButton from "../components/SaveJobButton";
+import JobDescription from "../components/JobDescription";
 import { WORK_MODES, EMPLOYMENT_TYPES } from "../lib/jobOptions";
 import { fetchJob } from "../lib/publicJobs";
 import { useJobSaves } from "../lib/useJobSaves";
@@ -321,21 +322,33 @@ function GccJobDetail() {
 
               <h2 className="mt-7 text-base font-bold text-slate-900">About the role</h2>
 
-              {/* Plain text from the recruiter, rendered as text. Line breaks
-                  are preserved by CSS; nothing here is ever parsed as HTML.
+              {/* CARRIED ITEM 27, 25 Nov 2026. Recruiters paste Markdown and
+                  this printed it raw, so candidates read "# Job Description"
+                  and "**bold**" on screen. It now renders a closed subset --
+                  headings, bold, italic, lists, line breaks -- parsed by
+                  src/lib/descriptionMarkdown.js and rendered to REACT
+                  ELEMENTS by JobDescription.
 
-                  break-words IS LOAD-BEARING. whitespace-pre-wrap preserves
-                  newlines but will not break a run of characters with no
-                  space in it, so a pasted URL, a line of dashes or a
-                  description typed without spaces ran straight past the card
-                  edge on desktop and mobile alike. Rishi found it, 24 Nov
-                  2026, and named the fix: the same treatment the applicant's
-                  email got in stage 7. The min-w-0 on the grid column above
-                  is the other half -- without it the track itself widens and
-                  no amount of wrapping inside helps. */}
-              <p className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-slate-800">
-                {job.description}
-              </p>
+                  NOTHING HERE IS EVER PARSED AS HTML, which was true before
+                  and is still true: there is no dangerouslySetInnerHTML in
+                  src/ at all, and the suite asserts it. A recruiter's "<" is
+                  a character in a text node, not escaped markup.
+
+                  whitespace-pre-wrap IS GONE, and that is the point: newlines
+                  are now structure in the tree rather than whitespace CSS
+                  happens to preserve, which is what lets the JSON-LD say the
+                  same thing from the same parse.
+
+                  break-words IS STILL LOAD-BEARING and moved INTO the
+                  renderer, on every block and every list item. A pasted URL,
+                  a line of dashes or a description typed without spaces ran
+                  straight past the card edge; Rishi found it on 24 Nov 2026.
+                  The min-w-0 on the grid column above is the other half --
+                  without it the track itself widens and no amount of wrapping
+                  inside helps. A 180-character word inside an <h3> is a
+                  different measurement from one inside a <p>, so
+                  check-overflow.mjs covers both. */}
+              <JobDescription text={job.description} />
 
               {job.skills?.length ? (
                 <>

@@ -3835,14 +3835,80 @@ HTML rather than plain text, so moving it to stripped plain text would be a
 exact data — escape, then mark up — with 10 assertions in
 `stage10-seo-test.mjs` behind it, including `<b>two</b>` arriving as text.
 
-#### The answers are in the reply of 25 Nov 2026, NOT YET BUILT
+#### BUILT 25 Nov 2026 — one parse, two renderers
 
-Nothing is in the code. The recommendation: **one parser, two renderers** —
-the page renders to React elements and never to an HTML string, the markup
-renders the same token tree to HTML with text escaped first. **He is asked to
-choose on the JSON-LD**, because this is the one point where I disagree with
-his instinct and the disagreement is about Google's requirement rather than
-about safety.
+He chose the HTML option for the JSON-LD after being told both were safe:
+*"You're right that the markup is already HTML, that Google asks for HTML, and
+that stripping to plain text would be changing signed-off stage 10 behaviour
+rather than repairing it."* And: *"strip the marks from metaDescription
+regardless."*
+
+| File | Role |
+|---|---|
+| `src/lib/descriptionMarkdown.js` | **the only parser.** Text → a plain token tree. No JSX, no HTML, no strings containing tags |
+| `src/components/JobDescription.jsx` | renderer 1 — **React elements**, for the page |
+| `src/lib/jobPosting.js` | renderer 2 — an **HTML string**, for the JSON-LD, via `blocksToHtml` |
+| `src/lib/jobPageHead.js` | the **flattening**, for `<meta name="description">` |
+
+**The subset is closed:** `#`/`##`/`###` (rendered h3/h4/h5, because the page
+owns h1 and h2), `**bold**`, `*italic*`, `-`/`*` and `1.` lists, blank line =
+paragraph, single newline = break. **No links, no images, no code, no tables,
+no blockquotes.**
+
+**Headings start at h3 deliberately.** A recruiter's `#` must not carry the
+same weight as the role title.
+
+**An unmatched marker is literal text** — `**bold` stays `**bold`, `2 * 3 * 4`
+survives, `###` alone is three characters. Asterisks appear in prose far more
+often than in markup, so that is the common case rather than the edge case.
+
+#### THE SIX PROOFS, and what the negative run found in them
+
+`scripts/item27-markdown-test.mjs` — **133 assertions**.
+`scripts/item27-markdown-negative-run.mjs` — **16 mutations, 16 caught.**
+
+| | Proof | How |
+|---|---|---|
+| 1 | **Structural** | `dangerouslySetInnerHTML` appears in **no** file in `src/`; the page renderer does not import the HTML serialiser; every tag in it is **written out literally** |
+| 2 | **Allowlist** | no node type outside a closed set, asserted **two ways** — by walking the tree for 25 adversarial inputs, **and** by scanning the parser's own source for `type:` literals |
+| 3 | **Hostile corpus** | 25 attacks — `<script>`, `onerror`, `<svg onload>`, `</script>`, `javascript:`, a `data:` URL, a null byte, template-injection braces — each asserted to arrive as text in **both** renderers, with no attribute emitted at all |
+| 4 | **Markup path** | the serialised script block contains **no `<`**, cannot be closed early, and is still valid JSON |
+| 5 | **Visibility** | the page's text **equals** the markup's text with tags stripped, for five cases — the rule `jobPosting.js` states, turned into a check |
+| 6 | **Overflow** | `check-overflow.mjs` now drives **job 13's page**, the one role whose description is real Markdown. **18 → 21 checks** |
+
+**THE NEGATIVE RUN FOUND A HOLE IN PROOF 2, which is the whole reason for
+running it.** A mutation adding a `[[` branch that emits
+`{ type: "link" }` was **not caught**: the corpus-driven check can only see
+node types some adversarial string actually produces, and nothing in the
+corpus contains `[[`. **A check that depends on having imagined the attack is
+the weak form of the assertion.** Proof 2 now also scans the parser's source
+for every `type:` literal, which does not care whether anyone thought of the
+syntax. That mutation is caught by the structural half.
+
+**And the suite's first run failed three of its own assertions, two of them
+the same fault for the third time on this project:** the
+`dangerouslySetInnerHTML` check and the literal-tags check both matched the
+**prose of a comment** explaining that those things are avoided. A file that
+documents what it does *not* do will always satisfy a naive search for that
+thing. Every code check in that suite now runs on a comment-stripped copy.
+The third was a check that **could not pass**: the visibility comparison
+replaced every tag with a space, which put one before the full stop in
+`*Bengaluru*.` — inline tags are not word boundaries and block tags are.
+
+**One harness bug worth recording:** the first negative run reported all 16
+mutations as "did not bundle", with an empty stderr. **`esbuild` is not a
+local dependency** — `HANDOVER.md` uses `npx` for exactly that reason — and
+the harness assumed a `node_modules/.bin/esbuild` that does not exist. It now
+bundles from the repo and runs from the copy.
+
+#### WHAT PROOF 6 STILL NEEDS, and it is a one-line data change he runs
+
+Job 13 gives the sweep real Markdown, but **its longest description word is 18
+characters**, and job 42's 180-character word is in its **title**, not its
+description. So **no measured page yet has a long unbroken word inside a
+heading or a list item**, which are now two different measurements from a
+paragraph. The SQL is in the reply of 25 Nov; it targets job 42, which the
+clearout deletes anyway.
 
 **Agreed without reservation: no links.** And a second argument for it beyond
 safety — stage 4 dropped external-apply entirely because a link to someone

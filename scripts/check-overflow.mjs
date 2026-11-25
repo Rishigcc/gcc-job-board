@@ -38,6 +38,17 @@ const PAGES = [
   "/jobs",
   "/gcc-jobs",
   "/gcc-jobs/trial-jobs-agaion-42",
+  // CARRIED ITEM 27, 25 Nov 2026: the one role whose description is real
+  // Markdown -- headings, bold and bullets, 7,085 characters of it. A
+  // description now has STRUCTURE, and a heading, a list item and a
+  // paragraph are three different measurements: the break classes live on
+  // each block in JobDescription.jsx rather than on one <p>, so a class
+  // missing from the list-item branch would show up here and nowhere else.
+  //
+  // This page is deleted at the pre-merge clearout along with the rest of
+  // the test data, so this entry goes when it does -- the same note as
+  // role 42 below.
+  "/gcc-jobs/program-manager-13",
   "/questions",
   "/post-a-job",
 ];

@@ -59,6 +59,7 @@
 // ===========================================================================
 
 import { EMPLOYMENT_TYPES, WORK_MODES } from "./jobOptions.js";
+import { descriptionToHtmlSubset } from "./descriptionMarkdown.js";
 
 // The city value that means "no particular city", from jobOptions.
 export const ANYWHERE_IN_INDIA = "Anywhere in India";
@@ -77,30 +78,34 @@ const SALARY_UNIT = {
 };
 
 // ---------------------------------------------------------------------------
-// description has to be HTML, and ours is plain text a recruiter typed.
+// description has to be HTML, and ours is Markdown a recruiter typed.
 //
-// Escaping first and marking up second is the only safe order. The other way
-// round would escape the <p> tags we had just added, and a description
-// containing "<script>" has to come out as text either way.
+// CARRIED ITEM 27, 25 Nov 2026. This used to escape the text and wrap it in
+// <p> tags without looking inside, so Google's snippet for job 13 began
+// "# Job Description" -- the same defect the page had. Fixing the page alone
+// would have left half of it.
+//
+// IT IS THE SAME PARSE THE PAGE USES. The rule below is why: the markup must
+// say what the page shows, not a tidier version of it. Two parsers would
+// drift; one cannot. `stage10-seo-test.mjs` asserts the page's visible text
+// equals this output with its tags stripped.
+//
+// Escaping first and marking up second is still the only safe order, and it
+// now lives in `blocksToHtml`: every text node is escaped as it is emitted,
+// and the only tags that can appear are ones our own code writes from a
+// closed list. The other way round would escape the tags we had just added,
+// and a description containing "<script>" comes out as text either way.
+//
+// Rishi chose HTML over stripped plain text here, 25 Nov 2026, having been
+// told both were safe: Google asks for HTML (see the field notes above), the
+// markup was already HTML so plain text would have been a change rather than
+// a repair, and a list in a description should read as a list in the rich
+// result.
 // ---------------------------------------------------------------------------
 export function descriptionToHtml(text) {
   if (typeof text !== "string") return "";
 
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  // A blank line is a paragraph break; a single newline is a line break
-  // inside one. That matches how the detail page renders it with
-  // whitespace-pre-wrap, which is what the visibility rule requires: the
-  // markup must say what the page shows, not a tidier version of it.
-  return escaped
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .map((block) => `<p>${block.replace(/\n/g, "<br>")}</p>`)
-    .join("");
+  return descriptionToHtmlSubset(text);
 }
 
 // ---------------------------------------------------------------------------

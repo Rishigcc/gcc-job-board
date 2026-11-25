@@ -16,6 +16,7 @@
 // ===========================================================================
 
 import { buildJobPosting, jobPostingScript } from "./jobPosting.js";
+import { descriptionToText } from "./descriptionMarkdown.js";
 
 // ---------------------------------------------------------------------------
 // ESCAPING.
@@ -52,7 +53,14 @@ export const META_DESCRIPTION_MAX = 160;
 export function metaDescription(text, max = META_DESCRIPTION_MAX) {
   if (typeof text !== "string") return "";
 
-  const flat = text.replace(/\s+/g, " ").trim();
+  // CARRIED ITEM 27, 25 Nov 2026: the marks come off here regardless of what
+  // the JSON-LD carries, because a meta description is plain text by
+  // definition. Without this the rich result would be fixed while the grey
+  // line under the blue link still opened with "#".
+  //
+  // It flattens the same parse the page and the markup use, so "**Bangalore**"
+  // becomes "Bangalore" rather than losing the word with the asterisks.
+  const flat = descriptionToText(text).replace(/\s+/g, " ").trim();
   if (flat.length <= max) return flat;
 
   const cut = flat.slice(0, max - 1);
