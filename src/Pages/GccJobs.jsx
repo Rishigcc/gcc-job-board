@@ -6,8 +6,8 @@ import Seo from "../components/Seo";
 import GccJobCard from "../components/GccJobCard";
 import Pagination from "../components/Pagination";
 import { fetchFacets, fetchJobs, JOBS_PER_PAGE } from "../lib/publicJobs";
-import { supabase } from "../lib/supabase";
 import { useJobSaves } from "../lib/useJobSaves";
+import { useViewer, showsCandidateControls } from "../lib/useViewer";
 
 // ===========================================================================
 // /gcc-jobs -- roles posted directly on iWorkAtGCC by recruiters.
@@ -109,19 +109,19 @@ function GccJobs() {
   // says something different to each, and showing a signed-in member "join
   // our community" for half a second before correcting it is worse than
   // waiting half a second to say anything.
-  const [userId, setUserId] = useState(undefined);
+  //
+  // One hook now, rather than a getUser() call of this page's own: the same
+  // call also answers whether the viewer is a recruiter, and resolving the
+  // viewer per page is what let the recruiter rule be applied at the header
+  // and missed at the footer. See src/lib/useViewer.js.
+  const viewer = useViewer();
+  const userId = viewer.userId;
 
-  useEffect(() => {
-    let active = true;
-
-    supabase.auth.getUser().then(({ data }) => {
-      if (active) setUserId(data?.user?.id || null);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  // DECISION F, 25 Nov 2026. A recruiter is not offered Save. With
+  // /profile/saved-jobs behind blockRecruiters they could save a role and
+  // then have nowhere to see it. Rishi: *"A control that silently does
+  // nothing visible is worse than no control."*
+  const canSave = showsCandidateControls(viewer);
 
   const jobIds = result.jobs.map((job) => job.id);
   const saves = useJobSaves(userId, jobIds);
@@ -344,14 +344,18 @@ function GccJobs() {
             <GccJobCard
               key={job.id}
               job={job}
-              save={{
-                saved: saves.savedIds.has(job.id),
-                justSaved: saves.justSavedId === job.id,
-                showPopup: saves.popupFor === job.id,
-                onToggle: saves.handleToggle,
-                onClosePopup: () => saves.setPopupFor(null),
-                redirectPath,
-              }}
+              save={
+                canSave
+                  ? {
+                      saved: saves.savedIds.has(job.id),
+                      justSaved: saves.justSavedId === job.id,
+                      showPopup: saves.popupFor === job.id,
+                      onToggle: saves.handleToggle,
+                      onClosePopup: () => saves.setPopupFor(null),
+                      redirectPath,
+                    }
+                  : null
+              }
             />
           ))}
         </div>

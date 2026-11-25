@@ -303,6 +303,86 @@ const MUTANTS = [
       ),
     "RecruiterRoute still refuses a non-recruiter session",
   ],
+  // --- the route-link sweep, and decision F -----------------------------
+  [
+    "a NEW file links to a closed route, unclassified",
+    "+components/RecruiterShortcut.jsx",
+    () =>
+      'import { Link } from "react-router-dom";\n' +
+      'function RecruiterShortcut() {\n' +
+      '  return <Link to="/my-applications">My applications</Link>;\n' +
+      '}\n' +
+      'export default RecruiterShortcut;\n',
+    "links to a closed route and is classified",
+  ],
+  [
+    "the footer's Profile link made unconditional again",
+    "components/Footer.jsx",
+    (s) =>
+      s.replace(
+        /\{isRecruiter \? \([\s\S]*?\n                    \)\}/,
+        `<Link
+                      to="/profile"
+                      className="text-slate-600 transition hover:text-blue-600"
+                    >
+                      Profile
+                    </Link>`,
+      ),
+    "the footer offers Settings to a recruiter",
+  ],
+  [
+    "the footer stops asking the recruiter question at all",
+    "components/Footer.jsx",
+    (s) =>
+      s
+        .replace('import { isRecruiterUser } from "../lib/accountType";\n', "")
+        .replace(
+          "const isRecruiter = session ? isRecruiterUser(session.user) : false;",
+          "const isRecruiter = false;",
+        ),
+    "is gated, so it asks the recruiter question",
+  ],
+  [
+    "the Ask button un-gated on /questions",
+    "Pages/Questions.jsx",
+    (s) =>
+      s
+        .replace('import { useViewer, showsCandidateControls } from "../lib/useViewer";\n', "")
+        .replace("const viewer = useViewer();\n  const canAsk = showsCandidateControls(viewer);", "const canAsk = true;"),
+    "is gated, so it asks the recruiter question",
+  ],
+  [
+    "showsCandidateControls no longer used on /questions",
+    "Pages/Questions.jsx",
+    (s) => s.replace("showsCandidateControls(viewer)", "!viewer.isRecruiter"),
+    "Pages/Questions.jsx decides candidate controls through showsCandidateControls()",
+  ],
+  [
+    "the Save control returned to the board list",
+    "Pages/GccJobs.jsx",
+    (s) =>
+      s.replace(
+        /save=\{\s*canSave\s*\?\s*\{/,
+        "save={{",
+      ),
+    "the board list withholds the Save control from a recruiter",
+  ],
+  [
+    "the Save control returned to the detail page",
+    "Pages/GccJobDetail.jsx",
+    (s) => s.replace("{canSave ? (\n                  <SaveJobButton", "{true ? (\n                  <SaveJobButton"),
+    "the job detail page withholds the Save control from a recruiter",
+  ],
+  [
+    "the viewer-resolved requirement dropped",
+    "lib/useViewer.js",
+    (s) =>
+      s.replace(
+        "return viewer.resolved && !viewer.isRecruiter;",
+        "return !viewer.isRecruiter;",
+      ),
+    "showsCandidateControls requires the viewer to be resolved",
+  ],
   // --- deliverable 6: the policy ----------------------------------------
   [
     "the approved paragraph reworded",
@@ -342,8 +422,12 @@ for (const [label, file, mutate, expected] of MUTANTS) {
   const src = join(dir, "src");
   cpSync(join(REPO, "src"), src, { recursive: true });
 
-  const path = join(src, file);
-  const before = readFileSync(path, "utf8");
+  // A leading "+" means the mutation CREATES this file rather than editing
+  // one, which is how the sweep is proved against a link that does not exist
+  // yet -- the case it is really there to catch.
+  const creating = file.startsWith("+");
+  const path = join(src, creating ? file.slice(1) : file);
+  const before = creating ? "" : readFileSync(path, "utf8");
   let after;
   try {
     after = typeof mutate === "function" ? mutate(before) : before;

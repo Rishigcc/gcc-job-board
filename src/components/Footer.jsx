@@ -41,6 +41,13 @@ function Footer() {
   // Same rule as the header: a recruiter account does not get the
   // community signposts. Dropping two of the five columns would leave an
   // odd grid, so the column count changes with them.
+  //
+  // THIS VALUE WAS COMPUTED AND THEN NOT USED ON THE ACCOUNT COLUMN, which
+  // is how a recruiter kept a Profile link in the footer after the header's
+  // was taken away on 25 Nov 2026 — one that bounced them straight back to
+  // /recruiter. Rishi: *"A control that silently does nothing visible is
+  // worse than no control."* The Account list below now asks the same
+  // question the grid does.
   const isRecruiter = session ? isRecruiterUser(session.user) : false;
 
   const gridClass = isRecruiter
@@ -160,13 +167,27 @@ function Footer() {
                       My Dashboard
                     </Link>
                   </li>
+                  {/* Profile for a community member, Settings for a
+                      recruiter — one slot, never both, exactly as in
+                      SiteHeader.jsx. /profile is behind blockRecruiters, so
+                      offering it to a recruiter is offering a link that
+                      bounces. */}
                   <li className="hidden md:block">
-                    <Link
-                      to="/profile"
-                      className="text-slate-600 transition hover:text-blue-600"
-                    >
-                      Profile
-                    </Link>
+                    {isRecruiter ? (
+                      <Link
+                        to="/recruiter/settings"
+                        className="text-slate-600 transition hover:text-blue-600"
+                      >
+                        Settings
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/profile"
+                        className="text-slate-600 transition hover:text-blue-600"
+                      >
+                        Profile
+                      </Link>
+                    )}
                   </li>
                   <li>
                     <button

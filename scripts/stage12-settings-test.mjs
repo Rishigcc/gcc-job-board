@@ -27,7 +27,7 @@
 //   SRC_ROOT=/tmp/mutant/src node scripts/stage12-settings-test.mjs
 // ===========================================================================
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const SRC = process.env.SRC_ROOT || "src";
@@ -278,6 +278,163 @@ ok(
   navItem("profile") === "Boolean(session) && !isRecruiter" &&
     navItem("settings") === "Boolean(session) && isRecruiter",
   "one must be !isRecruiter and the other isRecruiter, or a recruiter sees both",
+);
+
+// ---------------------------------------------------------------------------
+// THE ROUTE-LINK SWEEP — every file that links to one of the seven
+// ---------------------------------------------------------------------------
+//
+// WHY THIS EXISTS. Closing the seven routes is only half the rule; the other
+// half is that nothing offers a recruiter a link to one. That half was
+// applied at the header and MISSED AT THE FOOTER, then applied at the job
+// pages and MISSED AT /questions — twice, because the rule lived in whoever
+// remembered it rather than anywhere a check could reach.
+//
+// So the sweep inverts it. It finds every file in src/ that references one of
+// the seven paths and requires each to be CLASSIFIED in the table below. A
+// file that links to a closed route and is not in the table FAILS, and the
+// failure says what to decide. Adding a link is then as safe as the
+// classification the author has to write down.
+//
+// The classifications:
+//
+//   contained  the link lives INSIDE one of the seven pages (or a component
+//              only rendered there), so a recruiter never reaches it.
+//   gated      the file is reachable by a recruiter and asks the recruiter
+//              question before drawing the link. Asserted: the file imports
+//              isRecruiterUser or useViewer.
+//   provenance the link renders only for someone who arrived from a closed
+//              page, which a recruiter cannot do.
+//   allowed    deliberately shown to a recruiter, with the reason stated.
+
+const SEVEN_PATH_RE =
+  /["'`](\/profile(?:\/asked|\/saved|\/saved-jobs|\/delete-data)?|\/my-applications|\/ask)["'`]/;
+
+// file -> [classification, why]
+const LINK_TABLE = {
+  // The seven pages themselves, and the one component only rendered inside
+  // Profile.jsx. A recruiter is redirected before any of these mounts.
+  "Pages/AskQuestion.jsx": ["contained", "is /ask"],
+  "Pages/AskedQuestions.jsx": ["contained", "is /profile/asked"],
+  "Pages/SavedQuestions.jsx": ["contained", "is /profile/saved"],
+  "Pages/SavedJobs.jsx": ["contained", "is /profile/saved-jobs"],
+  "Pages/DeleteMyData.jsx": ["contained", "is /profile/delete-data"],
+  "Pages/MyApplications.jsx": ["contained", "is /my-applications"],
+  "Pages/Profile.jsx": ["contained", "is /profile"],
+  "components/ProfileJobBoard.jsx": ["contained", "rendered only by Profile.jsx"],
+  "Pages/Welcome.jsx": ["contained", "/welcome is itself behind blockRecruiters"],
+
+  // Reachable by a recruiter, and gated.
+  "components/SiteHeader.jsx": ["gated", "Profile for a member, Settings for a recruiter"],
+  "components/Footer.jsx": ["gated", "the same rule in the Account column"],
+  "Pages/Questions.jsx": ["gated", "public page; the Ask button is hidden from a recruiter"],
+
+  // Renders only for someone who came from a closed page.
+  "Pages/GccJobDetail.jsx": [
+    "provenance",
+    "the back-link appears only when router state says the visitor came from /my-applications, which a recruiter cannot reach",
+  ],
+};
+
+// Prose is not a link. NotificationsBell.jsx, Privacy.jsx, accountType.js and
+// useViewer.js all NAME one or more of the seven paths in comments or policy
+// text, and none needs an entry: SEVEN_PATH_RE matches a quoted path, which
+// is what a Link, a navigate() and an href look like, and not a path written
+// in a sentence. The stale-entry check below is what established that \u2014 it
+// rejected those four when they were listed here.
+
+const CLASSIFICATIONS = ["contained", "gated", "provenance", "allowed"];
+
+function walk(dir) {
+  const out = [];
+  for (const entry of readdirSync(join(SRC, dir || "."), { withFileTypes: true })) {
+    const rel = dir ? `${dir}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) out.push(...walk(rel));
+    else if (/\.jsx?$/.test(entry.name)) out.push(rel);
+  }
+  return out;
+}
+
+const linking = walk("")
+  .filter((rel) => rel !== "main.jsx")
+  .filter((rel) => SEVEN_PATH_RE.test(read(rel)));
+
+for (const rel of linking) {
+  const entry = LINK_TABLE[rel];
+
+  ok(
+    `${rel} links to a closed route and is classified`,
+    Boolean(entry),
+    "NOT IN THE TABLE. It references one of the seven routes closed to " +
+      "recruiters. Decide which it is \u2014 contained / gated / provenance / " +
+      "allowed \u2014 and add it to LINK_TABLE in this file with the reason.",
+  );
+
+  if (!entry) continue;
+
+  const [kind] = entry;
+
+  ok(
+    `${rel}'s classification is one of the four`,
+    CLASSIFICATIONS.includes(kind),
+    `found ${JSON.stringify(kind)}`,
+  );
+
+  if (kind === "gated") {
+    const source = read(rel);
+    ok(
+      `${rel} is gated, so it asks the recruiter question`,
+      /isRecruiterUser|useViewer/.test(source),
+      "classified `gated` but imports neither isRecruiterUser nor useViewer",
+    );
+  }
+}
+
+// The table must not rot in the other direction either: an entry for a file
+// that no longer links anywhere is a stale justification someone will trust.
+for (const rel of Object.keys(LINK_TABLE)) {
+  ok(
+    `LINK_TABLE's entry for ${rel} is still needed`,
+    linking.includes(rel),
+    "it no longer references any of the seven \u2014 remove the entry",
+  );
+}
+
+// The three pages a recruiter can reach that draw a candidate-only control
+// must each go through showsCandidateControls(), not an ad-hoc test. This is
+// the check that would have caught the footer.
+for (const rel of ["Pages/Questions.jsx", "Pages/GccJobs.jsx", "Pages/GccJobDetail.jsx"]) {
+  ok(
+    `${rel} decides candidate controls through showsCandidateControls()`,
+    /showsCandidateControls\(/.test(read(rel)),
+  );
+}
+
+// Decision F: the Save control is not offered to a recruiter, on both the
+// list and the detail page.
+ok(
+  "the board list withholds the Save control from a recruiter",
+  /save=\{\s*canSave\s*\?/.test(stripComments(read("Pages/GccJobs.jsx"))),
+);
+ok(
+  "the job detail page withholds the Save control from a recruiter",
+  /canSave \? \(\s*<SaveJobButton/.test(stripComments(read("Pages/GccJobDetail.jsx"))),
+);
+
+// A candidate-only control waits for the viewer to resolve, so a recruiter
+// never sees it drawn and then removed.
+ok(
+  "showsCandidateControls requires the viewer to be resolved",
+  /viewer\.resolved && !viewer\.isRecruiter/.test(read("lib/useViewer.js")),
+);
+
+// The footer specifically, since it is the regression this sweep came from.
+const footer = stripComments(read("components/Footer.jsx"));
+ok(
+  "the footer offers Settings to a recruiter and Profile to everyone else",
+  /isRecruiter \? \(/.test(footer) &&
+    /to="\/recruiter\/settings"/.test(footer) &&
+    /to="\/profile"/.test(footer),
 );
 
 // ---------------------------------------------------------------------------

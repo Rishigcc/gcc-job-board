@@ -8,8 +8,8 @@ import ApplyPanel from "../components/ApplyPanel";
 import SaveJobButton from "../components/SaveJobButton";
 import { WORK_MODES, EMPLOYMENT_TYPES } from "../lib/jobOptions";
 import { fetchJob } from "../lib/publicJobs";
-import { supabase } from "../lib/supabase";
 import { useJobSaves } from "../lib/useJobSaves";
+import { useViewer, showsCandidateControls } from "../lib/useViewer";
 import {
   jobPath,
   parseJobParam,
@@ -170,21 +170,19 @@ function GccJobDetail() {
   // on it: the role renders for a visitor and a signed-in candidate at the
   // same moment, and the bookmark fills in when the session resolves.
   //
-  // Both of these run before the early returns below, because a hook that is
-  // called on some renders and not others is not a hook.
-  const [userId, setUserId] = useState(null);
+  // This runs before the early returns below, because a hook that is called
+  // on some renders and not others is not a hook.
+  //
+  // One hook rather than this page's own getUser(), because the same call
+  // also answers whether the viewer is a recruiter. See src/lib/useViewer.js
+  // for why that is resolved in one place.
+  const viewer = useViewer();
+  const userId = viewer.userId;
 
-  useEffect(() => {
-    let active = true;
-
-    supabase.auth.getUser().then(({ data }) => {
-      if (active) setUserId(data?.user?.id || null);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  // DECISION F, 25 Nov 2026. A recruiter is not offered Save, because
+  // /profile/saved-jobs is behind blockRecruiters and a saved role would
+  // have nowhere to be seen.
+  const canSave = showsCandidateControls(viewer);
 
   const saves = useJobSaves(userId, id === null ? [] : [id]);
 
@@ -308,15 +306,17 @@ function GccJobDetail() {
                     purpose. ?apply=1 is what the sign-in round trip adds when
                     someone set out to APPLY, and carrying it here would open
                     the application form for someone who only pressed Save. */}
-                <SaveJobButton
-                  jobId={job.id}
-                  saved={saves.savedIds.has(job.id)}
-                  justSaved={saves.justSavedId === job.id}
-                  showPopup={saves.popupFor === job.id}
-                  onToggle={saves.handleToggle}
-                  onClosePopup={() => saves.setPopupFor(null)}
-                  redirectPath={location.pathname}
-                />
+                {canSave ? (
+                  <SaveJobButton
+                    jobId={job.id}
+                    saved={saves.savedIds.has(job.id)}
+                    justSaved={saves.justSavedId === job.id}
+                    showPopup={saves.popupFor === job.id}
+                    onToggle={saves.handleToggle}
+                    onClosePopup={() => saves.setPopupFor(null)}
+                    redirectPath={location.pathname}
+                  />
+                ) : null}
               </div>
 
               <h2 className="mt-7 text-base font-bold text-slate-900">About the role</h2>
