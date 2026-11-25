@@ -27,7 +27,7 @@ import {
 // mismatch redirects to the canonical path rather than 404ing or, worse,
 // serving the same job on two URLs.
 //
-// Served with its JobPosting markup by api/job-page.js, so this page is
+// Served with its JobPosting markup by api/public.js, so this page is
 // indexable. The noindex that stood here until 24 Nov 2026 was waiting on
 // exactly that.
 // ===========================================================================
@@ -248,7 +248,7 @@ function GccJobDetail() {
   return (
     <div className="min-h-screen bg-slate-100">
       {/* NO noindex, and NO jsonLd.
-          The markup is injected into the page source by api/job-page.js, per
+          The markup is injected into the page source by api/public.js, per
           request. Passing jsonLd here as well would put two JobPosting
           objects on one page, and Google's rule is one job per page -- two is
           worse than none. The title and description come from the same

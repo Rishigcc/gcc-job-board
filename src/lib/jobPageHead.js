@@ -134,7 +134,8 @@ export function injectHead(shell, headHtml) {
 // ---------------------------------------------------------------------------
 // IS THIS DOCUMENT OURS?
 //
-// WHY THIS EXISTS. The first version of api/job-page.js fetched the app shell
+// WHY THIS EXISTS. The first version of the job page (then api/job-page.js, now
+// api/public.js) fetched the app shell
 // over HTTP from the deployment's own host and checked `response.ok`. On a
 // preview with Vercel's deployment protection enabled, that fetch was
 // intercepted and answered with Vercel's own LOGIN PAGE -- valid HTML, status

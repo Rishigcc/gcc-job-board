@@ -413,7 +413,7 @@ async function main() {
 
   // THE BUILD FAILS HERE RATHER THAN THE SITE FAILING LATER.
   //
-  // api/job-page.js reads dist/app.html to assemble every job page, and
+  // api/public.js reads dist/app.html to assemble every job page, and
   // refuses to serve a document it cannot identify -- so a deploy that
   // somehow produced no app.html, or a foreign one, would answer 503 on
   // every /gcc-jobs/<role> URL while the rest of the site looked fine.
@@ -427,7 +427,7 @@ async function main() {
   if (!isAppShell(shell)) {
     console.error(
       `[prerender] FAILED: ${shellPath} is not a usable app shell.\n` +
-        "  api/job-page.js would answer 503 on every job page.\n" +
+        "  api/public.js would answer 503 on every job page.\n" +
         "  It must contain <div id=\"root\">, an /assets/index-*.js bundle " +
         "and a </head>."
     );

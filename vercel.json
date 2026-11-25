@@ -1,17 +1,17 @@
 {
   "functions": {
-    "api/job-page.js": {
+    "api/public.js": {
       "includeFiles": "dist/app.html"
     }
   },
   "rewrites": [
     {
       "source": "/gcc-jobs/:slugId",
-      "destination": "/api/job-page?slugId=:slugId"
+      "destination": "/api/public?page=job&slugId=:slugId"
     },
     {
       "source": "/sitemap-jobs.xml",
-      "destination": "/api/sitemap-jobs"
+      "destination": "/api/public?page=sitemap-jobs"
     },
     {
       "source": "/((?!api/).*)",
