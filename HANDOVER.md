@@ -1,0 +1,276 @@
+# HANDOVER — iWorkAtGCC job board, stage 12
+
+Written 25 November 2026, for someone picking this up with no prior context.
+
+Read this file, then `JOB-BOARD-TEST-DATA.md` — that is the project's real
+memory and it is long. This file is the map; that file is the territory.
+
+---
+
+## 1. What this is
+
+`iworkatgcc.com` is a live Q&A community of about **2,650 accounts** for
+professionals at India's Global Capability Centres. A **direct job board** is
+being added to it: recruiters post roles themselves at `/gcc-jobs`, candidates
+apply with a resume. All of it is on the branch `job-board`.
+
+**Rishi Nigam owns the site and is not a developer.** His words: *"I can read
+code and follow instructions, but I cannot review a large diff and spot a
+mistake."* That single fact shapes every working rule below.
+
+**Nothing has been merged to `main`. Nothing is live.** The whole board exists
+only on the branch and its Vercel preview.
+
+---
+
+## 2. The working rules — follow these exactly
+
+These are not preferences. Several were earned by breaking something.
+
+1. **All work on `job-board`. Never commit to `main`.**
+2. **Nothing goes live until every stage is done.** Testing happens on the
+   branch's Vercel preview; there is one deliberate merge at the end.
+3. **Build one stage, then stop.** Never mark a stage complete — **he does,
+   in writing.** If he reports something broken, that is still the current
+   stage.
+4. **Push before handing over a checklist.** *"'Built but not committed' is
+   not testable for me."*
+5. **End every stage with a numbered checklist**, each step marked
+   **[CHECK]** (one correct answer) or **[DECIDE]** (needs his judgement),
+   written so a non-developer can follow it without deciding anything.
+6. **The Supabase MCP connection is read-only.** Every schema change is a
+   migration **he** runs in the SQL editor. Tell him exactly what to run and
+   what he should see.
+7. **Migration checks must return a result table**, one row per check with
+   the figures in a `detail` column — not `raise notice`, which the Supabase
+   SQL editor does not display at all.
+8. **Dry-run every migration read-only before handing it over**, and that
+   includes **evaluating what each check asserts**, not just what the
+   migration does. Four checks have shipped broken: one that could not fail,
+   one that could not pass, eight that could not be read, and one that
+   compared `pg_get_function_identity_arguments()` to a bare type. **A check
+   meant to pass must be proven to pass against a subject that already
+   satisfies it.**
+9. **Tell him what is needed before starting, not partway through.**
+10. **Brevo sends transactional account-access emails only, both
+    user-initiated** — the recruiter signup confirmation and the recruiter
+    password reset. Nothing else, ever. No digests, no alerts, no
+    notifications. (The community digest and welcome email predate the job
+    board and are out of scope.)
+11. **Don't invent a visual identity.** He has one — muted plum, mauve and
+    warm rose with amber accents — and will supply exact colours at the
+    design pass. Until then, plain and consistent.
+12. **Keep the list of everything created while testing in production**, for
+    the pre-merge clearout. It is in `JOB-BOARD-TEST-DATA.md`.
+
+His preview, the only place he can test:
+
+```
+https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
+```
+
+---
+
+## 3. Where the project is
+
+| Stage | State |
+|---|---|
+| 1–9b | **Signed off** |
+| 10 (SEO, findability, saved roles) | **Signed off 25 Nov**, both halves |
+| 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
+| 12 (recruiter password reset, settings) | **In progress — this is the current stage** |
+
+Then: the design pass, the pre-merge clearout, and one merge.
+
+---
+
+## 4. Stage 12 — six deliverables, three done
+
+| | Deliverable | State |
+|---|---|---|
+| 1 | **Migration 025** — `public.reset_eligibility_for_email(text)`, the reset gate | **DONE**, run by him, 7 checks + verdict all PASS |
+| 1a | **`api/password.js`** — the request endpoint and the landing-page gate | **DONE**, 69 assertions |
+| 1b | **`/recruiter/forgot-password`** and **`/recruiter/reset-password`** | **DONE**, untested in a browser |
+| 2 | **The change-password box** (requires `current_password`) | **NOT BUILT** |
+| 3 | **`/recruiter/settings`** | **NOT BUILT** |
+| 4 | **Close seven candidate-only routes to recruiters** | **NOT BUILT** |
+| 5 | **Correct two comments** resting on a disproved premise | **NOT BUILT** |
+| 6 | **The privacy policy's recruiter paragraph** (approved wording) | **NOT BUILT** |
+
+**Nothing left in stage 12 needs a new serverless function.** The
+change-password box is a client call; settings reads through RLS; the blocked
+routes are client routing.
+
+### The gate's design, in one paragraph
+
+A reset is sent only if the address belongs to an account whose **role** is
+eligible **and** which has a **password identity at all**. Role decides
+policy and is widened by one line in `eligible_roles`; identity stops a
+password being created on an OAuth-only account — the identity-linking risk.
+**A later change must not collapse this to the role test**; see invariant I3
+in the tracker. Every reply from `/api/password` action `request` is
+byte-identical and padded to a 1,200ms floor, so the endpoint cannot be used
+to discover who is registered.
+
+---
+
+## 5. The four prerequisites
+
+| | What | Status |
+|---|---|---|
+| **A** | Supabase Redirect URLs | **DONE.** Four entries: the preview host, `https://www.iworkatgcc.com/**`, `http://localhost:5173/**`, and the existing per-deployment wildcard. Site URL untouched. This also closed carried item 8. |
+| **B** | "Password changed" notification off | **DONE.** **Authentication → Emails → Security section**, seven toggles, all already off. The docs name no dashboard control and claim the Management API is the only route — that is wrong, and the dashboard path above is correct. |
+| **C** | The reset email template | **DONE.** `supabase/email-templates/reset-recruiter-password.html`, pasted and saved with its subject line. |
+| **D** | Brevo log check after the first real send | **OUTSTANDING.** Cannot happen until a reset is actually sent. |
+
+---
+
+## 6. The serverless function limit — read this before adding a file
+
+**Vercel's Hobby plan allows 12 serverless functions per deployment.** The
+project reached 14 on 25 Nov and **the build stopped**. He will not upgrade.
+
+Four merges brought it to **10**:
+
+| File | Actions |
+|---|---|
+| `api/password.js` | `request`, `may-set` |
+| `api/public.js` | `page=job`, `page=sitemap-jobs` (both arrive via `vercel.json` rewrites) |
+| `api/admin.js` | `anonymise`, `delete-orphan` |
+| `api/my-data.js` | `resume-url`, `delete-resume` |
+
+Unmerged, each for a reason recorded in its file: `delete-my-data.js` (erases
+people's data — **if a thirteenth function is ever needed, this is not the
+slot to take**), `upload-resume.js` (`bodyParser: false` is per-file),
+`resume-url.js` (a recruiter reading a candidate's file — a different
+authorisation model), `rebuild.js` and `send-digest.js` (crons **cannot be
+tested on a preview at all**), `send-welcome-email.js`.
+
+**THE DISPATCH IS THE CONVENTION, NOT A ONE-OFF.** A new endpoint joins an
+existing file as another `action`. Two spare slots are for emergencies, not
+for features.
+
+**`vercel.json`'s `functions` key is `api/public.js` and carries
+`includeFiles: "dist/app.html"`.** That is what puts the app shell on the
+function's filesystem. **Re-key it wrong and every job page answers 503 while
+nothing else on the site looks wrong.**
+
+---
+
+## 7. How to run the tests
+
+`npm run build` runs Vite **and** `scripts/prerender.mjs`, which writes 87
+pages, `sitemap.xml`, and `dist/app.html`. **`npm run build:spa` empties
+`dist/` and does not recreate `app.html`** — only the full build leaves a
+complete `dist/`.
+
+Two suites run directly:
+
+```sh
+node scripts/stage12-reset-gate-test.mjs     # 69 — hits the live DB, sends nothing
+node scripts/check-overflow.mjs              # 18 — needs npm run build first
+```
+
+The rest must be **bundled first**, because they import extensionless
+modules:
+
+```sh
+npx esbuild scripts/stage4-validation-test.mjs --bundle --format=esm \
+  --platform=node --packages=external --outfile=/tmp/t.mjs && node /tmp/t.mjs
+```
+
+Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **56**,
+stage8 **44**, stage9 **90**, stage10 **116 + 111 + 62 + 121**, stage12
+**69**, check-overflow **18**. **eslint has exactly 8 pre-existing errors** —
+2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the baseline, not
+a problem to fix.
+
+### What the tests do NOT cover
+
+**Almost none of the serverless endpoints has an automated test.** The suites
+cover the **pure modules beside** them. `api/admin.js` and `api/my-data.js`
+have no coverage at all and need a human in a browser. See **"KNOWN GAP"** in
+the tracker before quoting an assertion count as reassurance.
+
+---
+
+## 8. Traps that have already cost time
+
+- **`current_role` is a reserved SQL keyword.** Alias a column that way and
+  you silently get the session role.
+- **`pg_get_function_identity_arguments()` returns argument NAMES AND TYPES**
+  (`p_email text`). For arity use `pronargs` and `proargtypes`.
+- **`has_table_privilege(..., 'insert')` is false for a column-level grant.**
+  `public.companies` grants `insert (name, slug)`; use
+  `has_column_privilege`.
+- **Never infer a column's type from a related one.** `jobs.id` is `bigint`
+  but `jobs.company_id` is a `uuid`, because `companies.id` is.
+- **New `public` tables get no `service_role` grant by default** in this
+  project. A table the server writes needs an explicit grant in the same
+  migration. This has caught three stages.
+- **A multi-statement script in the Supabase SQL editor is one implicit
+  transaction**, so a failure part-way rolls back the whole file, DDL
+  included. Say so when a migration fails — it is his first question.
+- **`break-words` is inert on a flex child.** A flex item's `min-width`
+  defaults to its min-content size and `overflow-wrap: break-word` does not
+  reduce it. `min-w-0` is the other half. **A class can compile, apply, and
+  still do nothing** — `scripts/check-overflow.mjs` measures the rendered
+  page because of this.
+- **The reset flow depends on `flowType: 'implicit'`**, the installed default.
+  The reset is initiated server-side, so under PKCE the verifier would be
+  generated in a serverless function and thrown away. **Switching the client
+  to PKCE breaks the reset silently.**
+- **Changing a shared constant invalidates fixtures in suites you did not
+  think to run.** Raising `DESCRIPTION_MIN` to 400 broke 40 of
+  `stage4-validation-test.mjs`'s 52 assertions and nobody noticed for a day.
+  Run everything after touching a shared module.
+
+---
+
+## 9. Before the merge
+
+`JOB-BOARD-TEST-DATA.md` has the full list. The ones easiest to forget:
+
+- **The clearout** (carried item 13) — in order: `candidate_resumes` rows →
+  the storage objects **by hand** → `applications` → the 24 `[T5]` jobs →
+  `Test Co A`/`Test Co B` → the two recruiter accounts →
+  `iworkatgcctest3@gmail.com`. Rows before objects, companies after jobs.
+  **Two lines closed on 22 Nov were reopened on 25 Nov** — there is a resume
+  row and a storage object again.
+- **Role 42** (a 180-character unbroken title) is the fixture
+  `check-overflow.mjs` drives. **Delete it last**, and expect that script to
+  need a new fixture.
+- **Item 26** — `alter table public.jobs validate constraint
+  jobs_description_check;` **after** the clearout. It is `NOT VALID` because
+  24 of 25 existing rows are under 400 characters.
+- **Items 1 and 20** — `LAST_UPDATED` in the policy and `NEW_FEATURE_UNTIL`
+  in `src/lib/boardPromo.js`, same edit, same moment.
+- **Item 27** — a **live defect**: recruiters paste Markdown and
+  `/gcc-jobs/:slugId` renders it literally, so candidates see `# Job
+  Description` and `**bold**` on screen.
+- **Item 23** — add a second admin account. There is exactly one `admin` row
+  and it is on a Google-only account.
+- **Item 14** — `supabase/post-merge/drop_question_authors.sql`, **after**
+  the merge is deployed and verified.
+
+---
+
+## 10. Things that live nowhere else
+
+- **He runs every migration.** Never assume one has been applied; check with
+  the read-only MCP connection.
+- **Decision 10 was amended on 25 Nov.** It used to say `/ask` and `/profile`
+  stay reachable for recruiters. **It no longer does:** 0 of 2,656 accounts
+  have two identities, and the code and database make a dual-use account
+  unreachable. Decision 10 protects a **person** with two logins, not one
+  account. Do not re-derive the old reading — the two comments that still
+  state it are deliverable 5.
+- **The plan page** is a private artifact he reads, kept in step with the
+  tracker: `https://claude.ai/artifact/HaQoBgQhig9DR4uUjC1Uqm` (version 20).
+  Its source is a scratchpad file, **not in the repo** — a fresh session will
+  have to read the artifact to update it.
+- **He catches things.** The promo card's inert `break-words`, a faulty
+  migration check, an endpoint claim that was wrong, a commit message that
+  described work not done. Expect to be corrected, check claims before
+  making them, and say plainly when something was wrong rather than quietly
+  fixing it.
