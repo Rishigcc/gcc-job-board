@@ -28,7 +28,7 @@
 // ===========================================================================
 
 import { validateApplication, MAX_RESUME_BYTES, isIndianMobile } from "../src/lib/applicationModel.js";
-import { looksLikePdf } from "../api/upload-resume.js";
+import { looksLikePdf } from "../api/_lib/pdf.js";
 
 let pass = 0, fail = 0;
 

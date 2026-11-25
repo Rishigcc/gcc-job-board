@@ -29,7 +29,7 @@ for (const line of readFileSync(`${process.cwd()}/.env`, "utf8").split("\n")) {
   if (m) process.env[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
 }
 
-const handler = (await import(`${process.cwd()}/api/request-password-reset.js`)).default;
+const handler = (await import(`${process.cwd()}/api/password.js`)).default;
 
 let passed = 0;
 const failures = [];
@@ -61,7 +61,13 @@ function mockRes() {
   return r;
 }
 
+// Every call carries action:"request" now that the two endpoints share a
+// file. A body WITHOUT an action is tested separately, below: it must be a
+// loud 400 rather than a silent reset request with no address.
 async function call(body, method = "POST") {
+  if (body && typeof body === "object" && !("action" in body)) {
+    body = { action: "request", ...body };
+  }
   const res = mockRes();
   const t0 = Date.now();
   await handler({ method, body, headers: { host: "example.test" } }, res);
@@ -103,7 +109,7 @@ const CASES = [
   ["an empty address", { email: "" }],
   ["whitespace only", { email: "   " }],
   ["no email field", {}],
-  ["a null body", null],
+  ["a null body", { action: "request", email: null }],
   ["email as a number", { email: 42 }],
   ["email as an object", { email: { a: 1 } }],
   ["a 400-character address", { email: "x".repeat(380) + "@example.invalid" }],
@@ -155,20 +161,48 @@ checkTrue("GET names the allowed method", Boolean(notAllowed.body?.error));
 // The eligible path cannot be exercised without mailing a real recruiter.
 // What CAN be proved is that it has nowhere else to answer from: the file
 // contains exactly one success reply, inside sameReply().
-const source = readFileSync(`${process.cwd()}/api/request-password-reset.js`, "utf8");
-const successReplies = (source.match(/res\.status\(200\)/g) || []).length;
-check("there is exactly one 200 reply in the file", successReplies, 1);
+const source = readFileSync(`${process.cwd()}/api/password.js`, "utf8");
+
+// ACTION-SCOPED now that two actions share the file. The file has two 200
+// replies -- one per action -- so counting the file would prove nothing. What
+// matters is that the REQUEST action has exactly one, inside sameReply().
+const requestFn = source.slice(
+  source.indexOf("async function requestReset"),
+  source.indexOf("async function maySetPassword")
+);
+checkTrue("the request action's source was found", requestFn.length > 500);
+check("the request action has exactly one 200 reply",
+  (requestFn.match(/res\.status\(200\)/g) || []).length, 1);
+check("the file has two 200 replies, one per action",
+  (source.match(/res\.status\(200\)/g) || []).length, 2);
 checkTrue("every refusal routes through sameReply",
-  (source.match(/return sameReply\(/g) || []).length >= 5);
+  (requestFn.match(/return sameReply\(/g) || []).length >= 5);
 // Anchored on the CALL, not the name: the header comment mentions
 // resetPasswordForEmail several paragraphs above it, and the first version of
 // this assertion compared against that and failed on correct code.
 checkTrue("the send is reached only after an eligible verdict",
-  source.indexOf('verdict !== "eligible"') <
-    source.indexOf("anon.auth.resetPasswordForEmail"));
+  requestFn.indexOf('verdict !== "eligible"') <
+    requestFn.indexOf("anon.auth.resetPasswordForEmail"));
 checkTrue("the gate uses the SERVICE key", /serviceKey[\s\S]{0,400}reset_eligibility_for_email/.test(source));
 checkTrue("the send uses the PUBLISHABLE key",
   /publishableKey[\s\S]{0,400}resetPasswordForEmail/.test(source));
+
+// --- the dispatch itself -------------------------------------------------
+// A MISSING ACTION MUST BE LOUD. If it defaulted to "request", a client that
+// forgot the field would ask for a reset with no address and get the same
+// cheerful reply as everyone else, and nobody would ever find out.
+const noAction = await call({ email: "x@y.co", action: undefined }, "POST");
+check("a missing action is refused with 400", noAction.status, 400);
+
+const badAction = await call({ action: "delete-everything" }, "POST");
+check("an unknown action is refused with 400", badAction.status, 400);
+checkTrue("the 400 does not leak a verdict",
+  !JSON.stringify(badAction.body || {}).includes("eligible"));
+
+// And the may-set action with no token is a 401, not the identical reply:
+// it answers about a session, so there is nothing to withhold.
+const noToken = await call({ action: "may-set" }, "POST");
+check("may-set with no token is 401", noToken.status, 401);
 
 console.log(`\nStage 12 reset-gate test: ${passed} passed, ${failures.length} failed`);
 if (failures.length) {

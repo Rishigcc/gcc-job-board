@@ -16,7 +16,7 @@ import Seo from "../components/Seo";
 //   and establishes a session before React renders.
 //
 //   IT HAD TO BE IMPLICIT. The reset is initiated SERVER-SIDE by
-//   api/request-password-reset.js, so under PKCE the code verifier would
+//   api/password.js's "request" action, so under PKCE the verifier would
 //   have been generated in a serverless function and thrown away -- the
 //   recruiter's browser would never have had it, and the exchange here would
 //   fail every time. Worth knowing before anyone "modernises" the client to
@@ -38,8 +38,8 @@ import Seo from "../components/Seo";
 //   does not have it.
 //
 // THE ELIGIBILITY CHECK IS SERVER-SIDE, deliberately.
-//   api/may-set-password.js asks the same function the request endpoint
-//   asks, so the two cannot disagree. A client-side guess at the role would
+//   api/password.js's "may-set" action asks the same function its
+//   "request" action asks, so the two cannot disagree. A client-side guess at the role would
 //   be decoration.
 //
 //   What it protects is the realistic case: a community member who receives
@@ -106,9 +106,15 @@ function RecruiterResetPassword() {
       settled.current = true;
 
       try {
-        const response = await fetch("/api/may-set-password", {
+        // api/password.js, action "may-set". The bearer token is what it
+        // answers about; there is no email in the request.
+        const response = await fetch("/api/password", {
           method: "POST",
-          headers: { Authorization: `Bearer ${session.access_token}` },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ action: "may-set" }),
         });
 
         if (!active) return;

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { looksLikePdf } from "./_lib/pdf.js";
 
 // ===========================================================================
 // POST /api/upload-resume
@@ -41,25 +42,6 @@ export const config = {
 
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB, matching the bucket's limit
 const BUCKET = "resumes";
-
-// A PDF is "%PDF-" then a version, and ends with %%EOF. Checking both ends
-// rejects a file that merely starts with the right five bytes.
-export function looksLikePdf(buffer) {
-  if (buffer.length < 32) return false;
-
-  const header = buffer.subarray(0, 8).toString("latin1");
-  if (!/^%PDF-\d\.\d/.test(header)) return false;
-
-  // %%EOF is at the end, but a generous window, because the cost of the two
-  // mistakes is not symmetric. A junk file that gets through is caught by
-  // the header check and by the recruiter opening it; a real candidate's
-  // resume wrongly refused is an application that is simply lost, and
-  // neither they nor we would ever know why. Signing tools and some
-  // generators append data after the final %%EOF, so the last 64 KB is the
-  // window rather than the last few hundred bytes.
-  const tail = buffer.subarray(Math.max(0, buffer.length - 65536)).toString("latin1");
-  return tail.includes("%%EOF");
-}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {

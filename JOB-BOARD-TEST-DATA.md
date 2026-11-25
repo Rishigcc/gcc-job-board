@@ -3795,6 +3795,132 @@ hook and then sweeps. P1's curl covers both in one request.
 | 11 | ~~**Stale unconfirmed `auth.users` rows / pre-account-takeover.**~~ **CLOSED 18 Nov 2026 by test T2 — outcome B.** A pre-registered unconfirmed password account was merged into the same user id when the real owner signed in with Google, and Supabase wiped **both** the attacker's password (`has_password` false, `providers` google only) **and** the attacker's `user_metadata`. `signInWithPassword` with the attacker's password returned 400 "Invalid login credentials". No cleanup cron is needed. | Stage 3 review | Closed |
 | 12 | **`user_activity` now skips recruiters.** `ActivityTracker` is mounted at the app root and ran `record_activity()` for every signed-in user, recruiters included — proven by the one row `community@iworkatgcc.com` had accumulated. That table feeds the digest's active-user set and the community stats, so recruiters were inflating both. Guarded in stage 3. The guard keys off `account_type` metadata; if one account ever needs to be both candidate and recruiter, change it to key off the presence of a `profiles` row instead. | Rishi, stage 3 retest | Closed (guard shipped); stray row listed above for cleanup |
 
+## CONSOLIDATION — 14 serverless functions to 10, Hobby's limit is 12
+
+The build stopped: *"No more than 12 Serverless Functions can be added to a
+Deployment on the Hobby plan."* Rishi, 25 Nov 2026: *"I'm not upgrading to
+Pro. Consolidate."*
+
+**It was 14, not the 13 he saw.** `36865b1` made it 13; `fc51c2b` (the landing
+page) added `may-set-password.js` and made it 14.
+
+| New file | Absorbs | Saves | Status |
+|---|---|---|---|
+| `api/password.js` | `request-password-reset`, `may-set-password` | 2 → 1 | **DONE 25 Nov 2026** |
+| `api/public.js` | `job-page`, `sitemap-jobs` | 2 → 1 | planned |
+| `api/admin.js` | `admin-anonymise`, `admin-delete-orphan` | 2 → 1 | planned |
+| `api/my-data.js` | `my-resume-url`, `delete-my-resume` | 2 → 1 | planned |
+
+**Lands at 10, two spare.** Rishi's decision on the fourth: *"Leave
+delete-my-data alone… One slot isn't worth touching the file that erases
+people's data."* Agreed — that merge would have bought exactly one slot in the
+most security-sensitive file in the set.
+
+**THE DISPATCH IS THE POINT, NOT THE SAVING.** Each merged file branches on an
+`action`, so the next endpoint joins an existing file instead of adding a
+fifteenth. Carried item 22's admin-set-password tool becomes an action on
+`api/admin.js` if it is ever built. Rishi: *"the dispatch convention means the
+count stops growing anyway."*
+
+### Deliberate non-merges, each for a reason
+
+- **`upload-resume`** declares `export const config = { api: { bodyParser:
+  false } }` and reads the raw stream. **That config is per-file**, so merging
+  it with JSON endpoints would force three signed-off endpoints to parse raw
+  streams themselves — a change to working security code for one slot.
+- **`resume-url`** is the only endpoint where a *recruiter* reads a
+  *candidate's* file, and its design is two clients: the database decides
+  whether, the service key only decides how. Folding that into the candidate's
+  own-data function would put two authorisation models in one file.
+- **The two crons.** Not because they could not merge, but because **crons only
+  run against production and cannot be tested on a preview**. Any change to
+  them is unverifiable until live.
+- **The dynamic sitemap stays dynamic.** It could be written at build time,
+  but Rishi: *"Up to 24 hours stale defeats the point of building it."*
+- **`may-set` stays server-side.** It could be dropped entirely — `user_roles`
+  has a `read own role` policy and `app_metadata.providers` reveals the
+  identity — but that makes the gate a client-side guess. Rishi: *"You argued
+  against a client-side gate when you designed it and the grouping doesn't
+  need the slot."*
+
+### `api/password.js` — the first merge, done
+
+Two actions, `request` and `may-set`, each checking its own auth: `request`
+takes no token because the person asking cannot sign in, `may-set` requires
+one because the only account it answers about is the bearer's own. **Nothing
+is checked once and assumed for both.**
+
+**A missing or unknown action is a loud 400**, never a default. A client that
+forgot the field would otherwise ask for a reset with no address and get the
+same cheerful reply as everyone else, and nobody would ever find out.
+
+**`maySetPassword` was restructured to have ONE reply site.** The first
+version had two 200s — a gate-error branch and a normal one — which was
+correct but the wrong shape: a second reply site is a second place a future
+edit can answer differently. `allowed` now initialises to `false`, so the
+unreadable-gate case falls out of the structure rather than out of a branch.
+**The test asserts one 200 per action**, which is what caught it.
+
+`looksLikePdf` also moves to `api/_lib/pdf.js` — `_lib` does not count toward
+the limit, a pure validator has no business in a handler, and
+`stage6-apply-test.mjs` then imports from a file that can never become a
+function.
+
+**69 assertions, all passing**, up from 63. The test is action-scoped now:
+counting 200s across the file would prove nothing with two actions in it, so
+it extracts the `requestReset` source and counts within that.
+
+**One probe of mine misfired and is worth recording**, because the conclusion
+looked like a bug: a Playwright check reported the "Forgot your password?"
+link missing from `/post-a-job`. It was clicking the *submit* button ("Sign
+In") rather than the *tab* ("Sign in") — a case-insensitive match that hit the
+wrong element and submitted the sign-up form. Clicking the tab by role shows
+the link. **The probe was wrong, not the page.**
+
+## KNOWN GAP — the serverless endpoints are almost entirely untested
+
+**Recorded at Rishi's instruction, 25 Nov 2026:** *"Put both in the tracker as
+a known gap, so the next person doesn't read '392 assertions passing' and
+think the endpoints are covered."*
+
+**They are not.** The suites test the **pure modules beside** the endpoints,
+not the endpoints themselves. Anyone reading an assertion count should read
+this table first.
+
+| Suite | What it actually covers | What it does NOT cover |
+|---|---|---|
+| `stage6-apply-test.mjs` | `applicationModel.js`, and `looksLikePdf` (moving to `api/_lib/pdf.js`) | the upload handler: streaming, storage writes, the `candidate_resumes` upsert |
+| `stage7-applications-test.mjs` | `applicationDisplay.js`, `jobOptions.js` | `api/resume-url.js` — the recruiter's signed-URL path, its two-client design |
+| `stage8-candidate-test.mjs` | `_lib/resumeStorage.js`, `applicationDisplay.js` | `my-resume-url`, `delete-my-resume`, `delete-my-data` |
+| `stage9-admin-test.mjs` | `confirmations.js`, `adminFormat.js`, `reportFormat.js` | `admin-anonymise`, `admin-delete-orphan` — **the confirmation strings are tested; the wiring that reads them is not** |
+| `stage10-head-test.mjs` | `jobPageHead.js`, 121 assertions | `api/job-page.js`'s routing, status codes and shell read |
+| `stage12-reset-gate-test.mjs` | **the handler itself**, 63 assertions | — the only endpoint with real coverage |
+| `check-overflow.mjs` | six public pages through the real rewrites | anything behind a sign-in |
+
+### The two that need a human, because nothing else reaches them
+
+**`api/admin.js`** — `stage9-admin-test.mjs` proves the confirmation strings
+and nothing about the handler that reads them. The guard could end up after
+the branch, or the two confirmations could be crossed, and no test would
+notice. **Browser retest required:** anonymise an application and delete an
+orphan, each with a correct and an incorrect confirmation, plus one attempt as
+a non-admin.
+
+**`api/my-data.js`** — `stage8-candidate-test.mjs` does not reach it. Three
+response shapes that the client reads field by field. **Browser retest
+required:** view a resume URL, delete a resume on its own, and confirm the
+other actions still behave.
+
+### Why this is a gap and not a decision
+
+An endpoint test needs a request, a response and a database, and the two
+written so far (`stage12-reset-gate-test.mjs`, and `job-page` via a mock
+`req`/`res`) show it is perfectly possible — it was simply never done for the
+endpoints built in stages 6 to 9. **The consolidation does not make this
+worse**, but it does move signed-off code, which is exactly when the absence
+of a test costs something. Worth building out if these endpoints are ever
+changed again.
+
 ## Invariants — things a later stage must not quietly break
 
 ### I3 — a forged `account_type` must stay unable to create a recruiter

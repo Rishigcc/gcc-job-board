@@ -26,6 +26,7 @@ import Privacy from "./Pages/Privacy.jsx";
 import RecruiterTerms from "./Pages/RecruiterTerms.jsx";
 import PostAJob from "./Pages/PostAJob.jsx";
 import RecruiterResetPassword from "./Pages/RecruiterResetPassword.jsx";
+import RecruiterForgotPassword from "./Pages/RecruiterForgotPassword.jsx";
 import RecruiterHome from "./Pages/RecruiterHome.jsx";
 import RecruiterJobs from "./Pages/RecruiterJobs.jsx";
 import RecruiterJobNew from "./Pages/RecruiterJobNew.jsx";
@@ -248,6 +249,13 @@ function AppRoutes() {
 
           NOT in scripts/prerender.mjs's route list: nothing here is public,
           and a prerendered copy would carry a stale shell. */}
+      {/* Asking for the link. Public and unguarded for the obvious reason:
+          the person who needs it cannot sign in. Not prerendered. */}
+      <Route
+        path="/recruiter/forgot-password"
+        element={<RecruiterForgotPassword />}
+      />
+
       <Route
         path="/recruiter/reset-password"
         element={<RecruiterResetPassword />}

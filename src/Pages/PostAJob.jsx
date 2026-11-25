@@ -597,6 +597,19 @@ function PostAJob() {
                       Sign in
                     </button>
 
+                    {/* THE ONLY WAY ANYONE FINDS THE RESET. Without this
+                        line the whole flow is a page nobody can reach, which
+                        is the failure mode of every forgotten-password
+                        feature ever shipped behind a URL. */}
+                    <p className="text-center text-sm">
+                      <Link
+                        to="/recruiter/forgot-password"
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
+                        Forgot your password?
+                      </Link>
+                    </p>
+
                     <p className="text-xs text-slate-500">
                       This is the recruiter sign-in. Community members sign in
                       with Google from{" "}
