@@ -32,6 +32,7 @@ import RecruiterJobs from "./Pages/RecruiterJobs.jsx";
 import RecruiterJobNew from "./Pages/RecruiterJobNew.jsx";
 import RecruiterJobEdit from "./Pages/RecruiterJobEdit.jsx";
 import RecruiterApplications from "./Pages/RecruiterApplications.jsx";
+import RecruiterSettings from "./Pages/RecruiterSettings.jsx";
 import MyApplications from "./Pages/MyApplications.jsx";
 import DeleteMyData from "./Pages/DeleteMyData.jsx";
 import Admin from "./Pages/Admin.jsx";
@@ -94,8 +95,27 @@ function PageViewTracker() {
 // sits after the guard, and its other two effects bail on a null userId),
 // but rendering it at all was wrong. Deciding here removes the flash.
 //
-// Deliberately opt-in, not applied to every protected route: /profile must
-// stay reachable for recruiters.
+// `blockRecruiters` is opt-in rather than the default, and the routes that
+// carry it are a decided list of seven candidate-only pages, not "every
+// protected route".
+//
+// THIS COMMENT USED TO READ "/profile must stay reachable for recruiters",
+// on decision 10's reasoning that one person may be both a candidate and a
+// recruiter. That reading was DISPROVED ON 25 NOV 2026 and the seven routes
+// now carry the guard. Decision 10 protects a PERSON holding two logins; it
+// says nothing about what one account should be shown, and the two are not
+// interchangeable:
+//
+//   * 0 of 2,656 accounts hold two identities, and 0 Google accounts hold a
+//     password.
+//   * A community account cannot become a recruiter account. `account_type`
+//     is written in exactly one place — PostAJob.jsx's signUp — and
+//     `private.handle_new_recruiter()` raises for the free email domains
+//     that 2,611 of the 2,654 Google accounts use.
+//
+// So a recruiter who wants a community presence has a SECOND, Google login,
+// and that login is not a recruiter — which is why blocking these routes
+// takes nothing away from the person decision 10 was written for.
 function ProtectedRoute({ children, blockRecruiters = false }) {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
@@ -304,6 +324,19 @@ function AppRoutes() {
         }
       />
 
+      {/* Settings. Inside RecruiterRoute so the session, the
+          recruiter_profiles row and the suspension state are settled before
+          it renders, rather than re-implemented as a third top-level route.
+          This is what the header offers a recruiter in place of /profile. */}
+      <Route
+        path="/recruiter/settings"
+        element={
+          <RecruiterRoute>
+            <RecruiterSettings />
+          </RecruiterRoute>
+        }
+      />
+
       {/* Protected Welcome page */}
       <Route
         path="/welcome"
@@ -314,33 +347,46 @@ function AppRoutes() {
         }
       />
 
-      {/* Protected Ask a Question page */}
+      {/* Ask a question. Closed to recruiters for two reasons, 25 Nov 2026,
+          and the second is a product decision rather than a tidy-up:
+          with /profile blocked a recruiter cannot set a display name, so a
+          question from one would have no name to show; and a recruiter
+          posting into a community of 2,520 job-seekers is a channel that
+          should not be open by accident. Nothing marks a question as coming
+          from a recruiter, which is what makes the second reason matter. */}
       <Route
         path="/ask"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute blockRecruiters>
             <AskQuestion />
           </ProtectedRoute>
         }
       />
 
-      {/* Protected Profile page */}
+      {/* The community profile. Blocked for recruiters, who have
+          /recruiter/settings instead: every block on this page reads "—" or
+          "0" on a recruiter account, and one of them — the resume upload —
+          is an active control for a file a recruiter should never be
+          offering. The nav item is hidden to match, in SiteHeader.jsx. */}
       <Route
         path="/profile"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute blockRecruiters>
             <Profile />
           </ProtectedRoute>
         }
       />
 
-      {/* The candidate's own applications. ProtectedRoute without
-          blockRecruiters: one person may be both a candidate and a
-          recruiter, and the candidate half is theirs to see. */}
+      {/* The candidate's own applications, and one of the seven routes
+          closed to recruiters on 25 Nov 2026. It was deliberately open until
+          then, "because one person may be both a candidate and a recruiter"
+          — see ProtectedRoute above for why that premise does not hold of a
+          single account. A recruiter account has no applications, so the
+          empty state was the entire page. */}
       <Route
         path="/my-applications"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute blockRecruiters>
             <MyApplications />
           </ProtectedRoute>
         }
@@ -352,7 +398,7 @@ function AppRoutes() {
       <Route
         path="/profile/delete-data"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute blockRecruiters>
             <DeleteMyData />
           </ProtectedRoute>
         }
@@ -374,33 +420,42 @@ function AppRoutes() {
         }
       />
 
-      {/* Protected Asked Questions page */}
+      {/* Protected Asked Questions page. Blocked for recruiters with the
+          rest of the /profile family — a recruiter has asked nothing, and
+          cannot, now that /ask is closed. */}
       <Route
         path="/profile/asked"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute blockRecruiters>
             <AskedQuestions />
           </ProtectedRoute>
         }
       />
 
-      {/* Protected Saved Questions page */}
+      {/* Protected Saved Questions page. Blocked with the rest. */}
       <Route
         path="/profile/saved"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute blockRecruiters>
             <SavedQuestions />
           </ProtectedRoute>
         }
       />
 
-      {/* Saved roles. ProtectedRoute without blockRecruiters, for the same
-          reason /my-applications is: one person may be both a recruiter and
-          a candidate, and the candidate half is theirs. */}
+      {/* Saved roles, closed to recruiters on 25 Nov 2026 — the same
+          correction as /my-applications above, and the one most easily
+          missed, because this is the only one of the seven where a recruiter
+          could have had real rows to see: a recruiter CAN save a role. It is
+          blocked anyway, because saving roles is candidate behaviour and the
+          route lives under a /profile that no longer exists for them.
+          KNOWN CONSEQUENCE: the public board is still reachable by URL for a
+          signed-in recruiter, so one can still save a role and then have
+          nowhere to see it. Hiding the save button for recruiters was NOT
+          decided and is deliberately not done here. */}
       <Route
         path="/profile/saved-jobs"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute blockRecruiters>
             <SavedJobs />
           </ProtectedRoute>
         }

@@ -80,7 +80,7 @@ https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
 | 1–9b | **Signed off** |
 | 10 (SEO, findability, saved roles) | **Signed off 25 Nov**, both halves |
 | 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
-| 12 (recruiter password reset, settings) | **In progress.** The reset flow and the function consolidation were **signed off 25 Nov**; deliverables 2–6 remain |
+| 12 (recruiter password reset, settings) | **In progress.** The reset flow and the consolidation were **signed off 25 Nov**. Deliverables 2–6 are **BUILT and pushed 25 Nov, awaiting his sign-off** |
 
 Then: the design pass, the pre-merge clearout, and one merge.
 
@@ -93,29 +93,44 @@ Then: the design pass, the pre-merge clearout, and one merge.
 | 1 | **Migration 025** — `public.reset_eligibility_for_email(text)`, the reset gate | **DONE**, run by him, 7 checks + verdict all PASS |
 | 1a | **`api/password.js`** — the request endpoint and the landing-page gate | **DONE**, 69 assertions |
 | 1b | **`/recruiter/forgot-password`** and **`/recruiter/reset-password`** | **SIGNED OFF 25 Nov** — full flow tested end to end |
-| 2 | **The change-password box** (requires `current_password`) | **NOT BUILT — start here** |
-| 3 | **`/recruiter/settings`** | **NOT BUILT** |
-| 4 | **Close seven candidate-only routes to recruiters** | **NOT BUILT** |
-| 5 | **Correct two comments** resting on a disproved premise | **NOT BUILT** |
-| 6 | **The privacy policy's recruiter paragraph** (approved wording) | **NOT BUILT** |
+| 2 | **The change-password box** | **BUILT.** Verifies the current password **twice** — see below, this is not belt-and-braces |
+| 3 | **`/recruiter/settings`** | **BUILT.** Three read-only fields as decided; header shows Settings in place of Profile |
+| 4 | **Close seven candidate-only routes to recruiters** | **BUILT.** All seven, asserted individually |
+| 5 | **Correct the comments** resting on a disproved premise | **BUILT — there were THREE in `main.jsx`, not two**, plus `RecruiterRoute`'s |
+| 6 | **The privacy policy's recruiter paragraph** (approved wording) | **BUILT**, verbatim, in the recruiter section |
 
-**The reset half of stage 12 is finished and signed off.** What remains is
-deliverables 2 to 6, none of which touches the reset flow, the database or a
-serverless function. The detail for each — including the three settings-page
-decisions already settled so they are not reopened, and the seven route names
-— is in `JOB-BOARD-TEST-DATA.md` under "Stage 12 — BUILD SCOPE".
+**Everything in stage 12 is now built.** Nothing in it added a migration, a
+database change or a serverless function — still **10**. What is outstanding
+is his test round; the checklist is the one handed over on 25 Nov. The build
+record, including the two findings below, is in `JOB-BOARD-TEST-DATA.md`
+under "Stage 12 deliverables 2–6".
 
-**Deliverable 4 is the one with a trap.** `blockRecruiters` already exists on
-`ProtectedRoute`; the seven routes are `/profile`, `/profile/asked`,
+**READ THIS BEFORE TOUCHING THE CHANGE-PASSWORD BOX.** It calls
+`signInWithPassword` with the current password *before* `updateUser`, and
+that call is **not redundant**. `current_password` on `updateUser` is
+honoured only when `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD`
+is true — project-wide Auth configuration the browser cannot assert, and
+which could not be read from `/auth/v1/settings` or without a Management API
+token. **With it off, sending only `current_password` is a gate that compiles,
+applies and does nothing**, the same shape as the inert `break-words`. The
+sign-in call is the half that is certain to run. `reauthenticate()` is
+deliberately unused: it emails a one-time code, which would be a third
+transactional email.
+
+**Deliverable 4's trap, and how it went.** `blockRecruiters` already existed
+on `ProtectedRoute`; the seven routes are `/profile`, `/profile/asked`,
 `/profile/saved`, `/profile/saved-jobs`, `/profile/delete-data`,
-`/my-applications` and `/ask`. Two of those carry comments *justifying* their
-openness with reasoning that was disproved on 25 November — correcting those
-comments is deliverable 5, and doing it in the same pass is the point, because
-a wrong premise left in a comment is how the next person re-derives the error.
+`/my-applications` and `/ask`. The scope said **two** of them carried comments
+*justifying* their openness with reasoning disproved on 25 November.
+**There were three** — `/profile/saved-jobs` was the one the scope missed, and
+it is one of the seven, so adding the guard without touching its comment would
+have left a comment stating the exact opposite of the line above it. Correcting
+them is deliverable 5, and doing it in the same pass is the point, because a
+wrong premise left in a comment is how the next person re-derives the error.
 
-**Nothing left in stage 12 needs a new serverless function.** The
-change-password box is a client call; settings reads through RLS; the blocked
-routes are client routing.
+**Nothing in stage 12 needed a new serverless function.** The change-password
+box is a client call; settings reads through RLS; the blocked routes are client
+routing. Still **10** functions.
 
 ### The gate's design, in one paragraph
 
@@ -210,11 +225,28 @@ npx esbuild scripts/stage4-validation-test.mjs --bundle --format=esm \
   --platform=node --packages=external --outfile=/tmp/t.mjs && node /tmp/t.mjs
 ```
 
+Two more run directly, added 25 Nov:
+
+```sh
+node scripts/stage12-settings-test.mjs          # 48 — static, reads src/
+node scripts/stage12-settings-negative-run.mjs  # 38 mutations, all must be caught
+```
+
+The negative run is the check-the-check rule made executable: it breaks one
+thing at a time in a copy of `src/` and asserts the suite fails **on the
+right assertion**. **Re-run it after editing `main.jsx`, `SiteHeader.jsx`,
+`RecruiterRoute.jsx`, `Privacy.jsx` or `RecruiterSettings.jsx`.** A mutation
+reported as "MUTATION CHANGED NOTHING" means its anchor text moved, not that
+the code is fine.
+
 Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **56**,
 stage8 **44**, stage9 **90**, stage10 **116 + 111 + 62 + 121**, stage12
-**69**, check-overflow **18**. **eslint has exactly 8 pre-existing errors** —
-2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the baseline, not
-a problem to fix.
+**69 + 48**, check-overflow **18**. **eslint has exactly 8 pre-existing
+errors** — 2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the
+baseline, not a problem to fix.
+
+`npm run build` now writes **88** pages, not 87 — one new community
+question.
 
 ### What the tests do NOT cover
 
@@ -242,6 +274,9 @@ the tracker before quoting an assertion count as reassurance.
 - **A multi-statement script in the Supabase SQL editor is one implicit
   transaction**, so a failure part-way rolls back the whole file, DDL
   included. Say so when a migration fails — it is his first question.
+- **The pages directory is `src/Pages`, capital P**, and every import says
+  `./Pages/`. macOS resolves `src/pages` to it too, so a lower-case import
+  builds locally and **fails on Vercel's Linux**.
 - **`break-words` is inert on a flex child.** A flex item's `min-width`
   defaults to its min-content size and `overflow-wrap: break-word` does not
   reduce it. `min-w-0` is the other half. **A class can compile, apply, and

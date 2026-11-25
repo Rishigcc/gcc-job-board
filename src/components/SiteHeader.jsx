@@ -43,7 +43,14 @@ function SiteHeader() {
   // Recruiter accounts get a deliberately narrow header: the community
   // areas are hidden, because a recruiter asking or answering is prompted
   // for a display name, and saving one creates a community `profiles` row.
-  // My Dashboard and Profile stay (My Dashboard redirects to /recruiter).
+  // My Dashboard stays (it redirects to /recruiter).
+  //
+  // PROFILE AND SETTINGS ARE ONE SLOT, NOT TWO. A recruiter sees Settings
+  // (/recruiter/settings); everyone else sees Profile (/profile). They are
+  // mutually exclusive on purpose — two near-identical links side by side
+  // would be the thing to avoid, and /profile is behind blockRecruiters as
+  // of 25 Nov 2026, so showing it to a recruiter would offer a link that
+  // bounces straight back to /recruiter.
   const isRecruiter = session ? isRecruiterUser(session.user) : false;
 
   const navItems = [
@@ -87,11 +94,23 @@ function SiteHeader() {
       key: "profile",
       label: "Profile",
       to: "/profile",
-      show: Boolean(session),
+      show: Boolean(session) && !isRecruiter,
       icon: (
         <>
           <circle cx="12" cy="8" r="4" />
           <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+        </>
+      ),
+    },
+    {
+      key: "settings",
+      label: "Settings",
+      to: "/recruiter/settings",
+      show: Boolean(session) && isRecruiter,
+      icon: (
+        <>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2.5v2.2M12 19.3v2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6" />
         </>
       ),
     },

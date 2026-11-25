@@ -252,6 +252,22 @@ function Privacy() {
         post, and to candidates who apply to them. Your email address and
         phone number are not shown publicly.
       </p>
+      {/* Added 25 Nov 2026, wording approved as drafted. The section above
+          said what is stored and nothing about access or deletion, which was
+          a gap on the recruiter side regardless of the settings page. It
+          commits us to deleting a recruiter account by hand on request —
+          accepted explicitly at this volume. The candidate sentence about
+          the delete link is NOT changed: it is already candidate-scoped,
+          sitting among the candidate sections, and the data it erases is
+          data a recruiter cannot have. */}
+      <p>
+        Your recruiter account is separate from a community account, even if
+        you use iWorkAtGCC as both — they are two separate logins. You can see
+        and correct what we hold about you from your recruiter settings. To
+        delete a recruiter account and its roles, email{" "}
+        <a href="mailto:jobs@iworkatgcc.com">jobs@iworkatgcc.com</a> and we
+        will do it by hand.
+      </p>
 
       <h2>Who else handles your data</h2>
       <p>

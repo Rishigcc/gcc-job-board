@@ -3181,6 +3181,172 @@ Candidate password reset (candidates have no password — 2,623 of 2,626
 accounts are Google-only), email change, account deletion, and any automated
 email beyond the reset itself.
 
+## Stage 12 deliverables 2–6 — BUILT 25 Nov 2026, awaiting sign-off
+
+All five in one pass, because they touch the same four files and splitting
+them would have meant two passes over `main.jsx` and the header.
+
+| | Deliverable | Where |
+|---|---|---|
+| 2 | The change-password box | `src/Pages/RecruiterSettings.jsx` |
+| 3 | `/recruiter/settings` | same file, plus the route and nav item |
+| 4 | Seven routes closed | `src/main.jsx`, `src/components/SiteHeader.jsx` |
+| 5 | **Three** comments corrected | `src/main.jsx` × 3, `src/components/RecruiterRoute.jsx` |
+| 6 | The policy paragraph | `src/Pages/Privacy.jsx` |
+
+**No migration, no serverless function, no database change.** Still 10
+functions. The settings page reads `jobs → companies(name)` through RLS with
+the recruiter's own token.
+
+### `current_password` ALONE WOULD HAVE BEEN A GATE THAT DID NOTHING
+
+This is the finding worth carrying forward, and it is the `break-words`
+lesson in a second costume.
+
+`current_password` is a real field on `UserAttributes` in supabase-js
+2.112.3, exactly as the build scope said. **But auth-js's own type comment
+says it is honoured only when
+`GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD` is true**, which
+is project-wide Supabase Auth configuration and not something the browser can
+assert. If that setting is off, the field is accepted and ignored — so a box
+that sent only `current_password` would have **asked** for the current
+password, **displayed** a field for it, and **never checked it**.
+
+```
+node_modules/@supabase/auth-js/dist/module/lib/types.d.ts:423
+  /**
+   * The user's current password
+   *
+   * This is only ever present when the user is resetting
+   * their password and GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD is true.
+   */
+  current_password?: string;
+```
+
+**So the box verifies the current password TWICE, and the first one is the
+one that is certain to run:**
+
+1. `signInWithPassword({ email, password: current })` — **our** check. It
+   succeeds or returns "Invalid login credentials", and the password is never
+   touched unless it succeeded. Same user as the one already signed in, so
+   the session it returns replaces an equivalent one.
+2. `updateUser({ current_password, password })` — the change, still carrying
+   `current_password` so the **server** enforces it as well wherever that
+   setting is on.
+
+Neither substitutes for the other, and **the sign-in call must not be deleted
+as redundant** — the comment in the file says so, because that is the edit a
+later reader would make.
+
+**I could not read that setting's value.** It is not in `/auth/v1/settings`
+(checked — that endpoint returns providers, `disable_signup`,
+`mailer_autoconfirm` and the SAML/passkey flags, nothing about password
+change), and the Management API needs a Personal Access Token. **It does not
+matter, which is the point of building it this way**: the requirement is true
+from the browser either way. Turning that setting on later is hardening, not
+a fix, and needs no code change.
+
+**The one thing I could not test and he can:** whether GoTrue *rejects*
+`current_password` when the setting is off, rather than ignoring it. It is a
+known field on the request struct, so it should decode and sit unused — but
+that is reasoning, not a result, and testing it needs a recruiter account's
+password, which I do not have and did not ask for. **Checklist step 14 is
+that test.** If the password change fails with a message about
+`current_password`, the fix is one line: drop the field and keep step 1.
+
+### DELIBERATELY NOT USED: `reauthenticate()`
+
+Supabase's own answer to "prove it is really you before a password change"
+is `supabase.auth.reauthenticate()`, which **emails a one-time code**. That
+would be a **third** transactional email, which the restated one-email rule
+does not cover. The `nonce` field on `updateUser` is the other half of the
+same flow and is unused for the same reason. Both are recorded in the file,
+because reaching for `reauthenticate()` is the obvious move for whoever
+touches this next.
+
+**No email is sent by the box.** The seven Security toggles are off,
+"Password changed" among them (prerequisite B, verified 25 Nov).
+
+### THE THIRD COMMENT ON THE DISPROVED PREMISE
+
+Deliverable 5 named two, plus `RecruiterRoute`'s. **There were three in
+`main.jsx`.** The third is `/profile/saved-jobs`:
+
+> *"ProtectedRoute without blockRecruiters, for the same reason
+> /my-applications is: one person may be both a recruiter and a candidate,
+> and the candidate half is theirs."*
+
+`/profile/saved-jobs` is one of the seven, so adding the guard without
+touching the comment would have left a comment stating the exact opposite of
+the line directly above it. **It is also the only one of the seven where a
+recruiter could have had real rows to see** — a recruiter can save a role.
+
+**KNOWN CONSEQUENCE, recorded rather than fixed:** the public board is still
+reachable by URL for a signed-in recruiter (the nav item is hidden, the route
+is not), so a recruiter can still save a role and then have nowhere to see
+it. **Hiding the save button for recruiters was not decided and was
+deliberately not done** — it is a one-condition change if wanted, and it is
+in the checklist as a [DECIDE].
+
+### HOW IT WAS PROVED: 48 assertions, and all 48 PROVED ABLE TO FAIL
+
+`scripts/stage12-settings-test.mjs` — **48 assertions, static.** None of
+deliverables 2–6 has a function or a query to drive; they are a route guard,
+a nav condition, three comments and a paragraph, all of which are true or
+false in the source and any of which a later edit could quietly undo. It
+pairs each `path=` with the guard element that follows it, so it reads each
+route's **actual** wrapper rather than finding a path and a keyword near each
+other.
+
+It asserts the seven are blocked, that `/welcome` still is, that **`/admin`
+still is not** (deliberately outside the decided list — a recruiter there
+sees Admin's own "Page not found", which is what stage 9 signed off), and
+that **nothing else acquired the guard**. For each of the four comments it
+asserts the old wording is **gone** *and* a correction is **present**,
+because deleting a comment would pass an absence test while losing the
+reasoning that stops the error being re-derived.
+
+**`scripts/stage12-settings-negative-run.mjs` — 38 mutations, 38 caught.**
+It copies `src/`, applies one deliberate break, runs the suite against the
+copy, and asserts it fails **on the right assertion**. This is the
+check-the-check rule made executable rather than remembered: the subjects are
+files, so the proof can be automated.
+
+**It found two faults in my own suite on its first run, and they were the
+same fault twice:** two checks matched the prose of the file's header comment
+instead of the code it described — the "reauthenticate() is not used" check
+tripped on the comment saying it is not used, and the
+`signInWithPassword`-before-`updateUser` ordering check was comparing
+positions inside that comment. **Identical to the fault already recorded
+against `stage12-reset-gate-test.mjs`**, where an assertion was anchored on a
+comment's mention of `resetPasswordForEmail` rather than on `anon.auth.`.
+Every code check now runs on a comment-stripped copy of the source.
+
+**That is five faulty checks, not four** — and the first two the machine
+caught rather than Rishi.
+
+### Counts after this pass
+
+Unchanged and all passing: stage4 **52**, stage5 **42**, stage6 **62**,
+stage7 **56**, stage8 **44**, stage9 **90**, stage10 **121 + 62 + 111 +
+116**, stage12 reset gate **69**, check-overflow **18**. New: stage12
+settings **48**, and its negative run **38/38**.
+
+`npm run build` writes **88** pages now rather than 87 — one new community
+question, nothing to do with this work. `/recruiter/settings` is **not**
+prerendered: the prerender route list is six static paths plus the questions,
+and a signed-in `noindex` page belongs in none of them.
+
+**eslint: still exactly 8 errors**, the documented baseline, none in the new
+files.
+
+### One case trap avoided
+
+The pages directory on disk is **`src/Pages`**, capital P, and every import
+says `./Pages/`. macOS resolves `src/pages` to it as well, so a lower-case
+import would build locally and **fail on Vercel's Linux**. The suite asserts
+the import spelling for this reason.
+
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on

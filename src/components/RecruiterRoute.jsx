@@ -69,8 +69,24 @@ function RecruiterRoute({ children }) {
       const meta = user.user_metadata || {};
 
       if (!isRecruiterUser(user)) {
-        // A community member who wandered in. Not an error — one person is
-        // allowed to be both a candidate and a recruiter.
+        // A community member who wandered in. Not an error, and the branch
+        // is right — but read the distinction it rests on, because the
+        // shorter version of this comment was wrong.
+        //
+        // ONE PERSON may be both a candidate and a recruiter. ONE ACCOUNT
+        // may not, and this branch is about the account: it refuses to
+        // create a recruiter_profiles row for a session whose metadata does
+        // not say `recruiter`. A person holding both uses has TWO LOGINS —
+        // a Google one for the community and an email-and-password one for
+        // hiring — and arrives here on whichever they signed in with. This
+        // branch sends the community one away; it does not deny that the
+        // person behind it is also a recruiter.
+        //
+        // Said plainly on 25 Nov 2026, when the one-line version was found
+        // to have been read as "one account may be both" and used to argue
+        // that /profile must stay open to recruiters. It must not: 0 of
+        // 2,656 accounts hold two identities, and the seven candidate-only
+        // routes are behind blockRecruiters in main.jsx.
         setState({ status: "not-a-recruiter" });
         return;
       }
