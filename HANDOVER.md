@@ -355,6 +355,17 @@ the tracker before quoting an assertion count as reassurance.
   after writing any SQL. Result tables use the existing convention —
   `label, result, detail`, sorted by a numeric `seq` — which contains no
   reserved word.
+- **A CHECKLIST GOES STALE THE SAME WAY A FACT DOES, and it is easier to
+  miss.** Half of carried item 29's checklist was obsolete before he ran it:
+  four steps described what a recruiter sees on `/profile` and
+  `/profile/delete-data`, and stage 12 had closed both routes to recruiters in
+  between. Rishi: *"A checklist written before a change that invalidates it is
+  the same stale-list problem as the company seed."* **A fact is stale when the
+  world moves; a checklist is stale when the world moves in the direction the
+  checklist was testing** — so it reads as plausible right up to the step that
+  cannot be performed. **Re-derive a checklist against the code as it is now
+  before handing it over, not against the code it was written for**, and say
+  which steps were dropped so the gap is visible.
 - **DRY-RUN THE FILE'S OWN TEXT, not a paraphrase of it.** A dry run that
   reproduced each check's logic in a hand-written query proved every predicate
   right and still handed over a file that would not parse. For a statement the
@@ -431,6 +442,11 @@ the tracker before quoting an assertion count as reassurance.
 ---
 
 ## 9. Before the merge
+
+**`CLEAROUT.md` is the procedure**, written 25 Nov 2026 with every figure
+derived from live rather than copied from the tracker. It is seven numbered
+steps with the SQL in `supabase/clearout/` and the dashboard steps spelled
+out. The rest of this section is the reasoning behind it.
 
 `JOB-BOARD-TEST-DATA.md` has the full list.
 

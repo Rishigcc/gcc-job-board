@@ -50,21 +50,78 @@ const PAGES = [
   "/",
   "/jobs",
   "/gcc-jobs",
-  "/gcc-jobs/trial-jobs-agaion-42",
-  // CARRIED ITEM 27, 25 Nov 2026: the one role whose description is real
-  // Markdown -- headings, bold and bullets, 7,085 characters of it. A
-  // description now has STRUCTURE, and a heading, a list item and a
-  // paragraph are three different measurements: the break classes live on
-  // each block in JobDescription.jsx rather than on one <p>, so a class
-  // missing from the list-item branch would show up here and nowhere else.
-  //
-  // This page is deleted at the pre-merge clearout along with the rest of
-  // the test data, so this entry goes when it does -- the same note as
-  // role 42 below.
-  "/gcc-jobs/program-manager-13",
   "/questions",
   "/post-a-job",
+
+  // ---------------------------------------------------------------------
+  // THE DESCRIPTION SUBJECTS, which need a job row to exist.
+  //
+  // A description has STRUCTURE since item 27, so a paragraph, a heading and
+  // a list item are three different measurements -- the wrap classes live on
+  // each block in JobDescription.jsx rather than on one <p>, and a class
+  // missing from the list-item branch would show up here and nowhere else.
+  //
+  // THE CLEAROUT DELETES BOTH OF THE ROWS THESE USED (jobs 42 and 13), so
+  // after it they resolve to "This role is no longer open". A CLOSED role is
+  // no use as a replacement: measured 25 Nov 2026, its detail page shows that
+  // same message and NO DESCRIPTION, because private.job_is_public() requires
+  // status = 'live'. So the fixture has to be live, which means it is on the
+  // public board while it exists -- and is therefore created and removed
+  // around a run rather than left in place:
+  //
+  //   supabase/test-fixtures/overflow-fixture-create.sql
+  //   node scripts/check-overflow.mjs
+  //   supabase/test-fixtures/overflow-fixture-remove.sql
+  //
+  // MARKED OPTIONAL, AND A MISSING ONE IS REPORTED LOUDLY RATHER THAN
+  // SKIPPED QUIETLY. A sweep that silently drops a subject reports a clean
+  // run and a clean run looks identical -- which is the failure this project
+  // keeps meeting. `ok` on a page with no description would mean nothing at
+  // all.
+  // THE ID IS WHAT THE PAGE LOOKS UP; the slug is decorative. An earlier
+  // version of this entry guessed `-28` and silently measured REAL job 28
+  // instead -- a guessed id is not a missing page, it is a different page.
+  // The fixture therefore takes a FIXED id of 999999.
+  { path: "/gcc-jobs/fixture-overflow-999999", optional: true },
+  { path: "/gcc-jobs/trial-jobs-agaion-42", optional: true },
+  { path: "/gcc-jobs/program-manager-13", optional: true },
 ];
+
+// The detail page prints this for a role that is closed, expired, withdrawn
+// or absent -- all four look the same to an anonymous visitor, deliberately.
+const ROLE_ABSENT = "This role is no longer open";
+
+// And this is the heading above a description that DID load.
+const ROLE_PRESENT = "About the role";
+
+// A JOB PAGE MUST BE WAITED FOR, NOT TIMED.
+//
+// The fixed 900ms below is enough for a prerendered page, and NOT enough for
+// a job detail page, which fetches its row after mount. The first version of
+// the skip check ran at 900ms, found neither marker, and reported `ok` on a
+// role that does not exist -- which also means the measurement itself was
+// taken on a page still showing "Loading...". An `ok` from measuring a
+// spinner is worth less than no check at all.
+//
+// So a job page is polled until it declares itself one way or the other.
+async function awaitRole(page) {
+  try {
+    await page.waitForFunction(
+      ([absent, present]) => {
+        const text = document.body.innerText;
+        return text.includes(absent) || text.includes(present);
+      },
+      [ROLE_ABSENT, ROLE_PRESENT],
+      { timeout: 15000 },
+    );
+  } catch {
+    return "timeout";
+  }
+  return page.evaluate(
+    (absent) => (document.body.innerText.includes(absent) ? "absent" : "present"),
+    ROLE_ABSENT,
+  );
+}
 
 const server = await preview({ preview: { port: 4199, strictPort: true }, logLevel: "warn" });
 const base = server.resolvedUrls.local[0].replace(/\/$/, "");
@@ -72,13 +129,44 @@ const browser = await chromium.launch();
 
 let failures = 0;
 let checks = 0;
+const skipped = new Set();
 
-for (const path of PAGES) {
+for (const entry of PAGES) {
+  const path = typeof entry === "string" ? entry : entry.path;
+  const optional = typeof entry === "string" ? false : Boolean(entry.optional);
+
+  if (skipped.has(path)) continue;
+
   for (const width of WIDTHS) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
     try {
       await page.goto(base + path, { waitUntil: "networkidle", timeout: 30000 });
       await page.waitForTimeout(900);
+
+      // An optional page whose row does not exist measures nothing. Resolved
+      // and announced BEFORE any measurement, so an absence can never be
+      // mistaken for a pass.
+      if (optional) {
+        const state = await awaitRole(page);
+
+        if (state === "absent") {
+          skipped.add(path);
+          console.log(`SKIP        \u2014  ${path}  no such role -- NOT MEASURED`);
+          await page.close();
+          break;
+        }
+
+        if (state === "timeout") {
+          failures += 1;
+          checks += 1;
+          console.log(
+            `ERROR ${width.toString().padStart(4)}px  ${path}  ` +
+              `neither "${ROLE_PRESENT}" nor "${ROLE_ABSENT}" appeared in 15s`,
+          );
+          await page.close();
+          continue;
+        }
+      }
 
       const r = await page.evaluate(() => {
         const d = document.documentElement;
@@ -120,5 +208,21 @@ for (const path of PAGES) {
 await browser.close();
 await server.close();
 
-console.log(`\n${checks} checks, ${failures} failed`);
+console.log(`\n${checks} checks, ${failures} failed, ${skipped.size} page(s) skipped`);
+
+if (skipped.size) {
+  console.log(
+    "\n*** DESCRIPTION OVERFLOW WAS NOT MEASURED ***\n" +
+      [...skipped].map((p) => `    missing: ${p}`).join("\n") +
+      "\n\n    A job description is the only place this sweep tests a long\n" +
+      "    unbroken word inside a heading and a list item, which are\n" +
+      "    different measurements from a paragraph. To measure them, run\n" +
+      "    supabase/test-fixtures/overflow-fixture-create.sql, re-run this\n" +
+      "    script, then run overflow-fixture-remove.sql -- the fixture role\n" +
+      "    is LIVE and sits on the public board while it exists.\n\n" +
+      "    This is a NOTICE, not a failure: after the pre-merge clearout\n" +
+      "    there is no job row to measure and that is the expected state.",
+  );
+}
+
 process.exit(failures > 0 ? 1 : 0);
