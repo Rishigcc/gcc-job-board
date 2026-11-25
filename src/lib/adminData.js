@@ -361,9 +361,20 @@ async function postAsAdmin(path, body) {
 }
 
 export async function anonymiseCandidate(candidateId, confirmation) {
-  return postAsAdmin("/api/admin-anonymise", { candidateId, confirmation });
+  // One function, two actions -- api/admin.js. The action is required:
+  // an unknown one is notFound(), like everything else that endpoint
+  // refuses, so a typo here fails as "not found" rather than as success.
+  return postAsAdmin("/api/admin", {
+    action: "anonymise",
+    candidateId,
+    confirmation,
+  });
 }
 
 export async function deleteOrphanFile(path, confirmation) {
-  return postAsAdmin("/api/admin-delete-orphan", { path, confirmation });
+  return postAsAdmin("/api/admin", {
+    action: "delete-orphan",
+    path,
+    confirmation,
+  });
 }

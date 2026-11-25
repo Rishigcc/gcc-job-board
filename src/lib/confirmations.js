@@ -11,6 +11,14 @@
 //     /api/admin-delete-orphan     "DELETE"           .toUpperCase (WRONG)
 //     /api/admin-anonymise         "ANONYMISE"        .toUpperCase (WRONG)
 //
+//   Those two admin paths no longer exist: both became actions on
+//   /api/admin on 25 Nov 2026, when the project hit Vercel's 12-function
+//   limit. The paths are left as written because this is a record of a
+//   defect as it was, not a map of the current routes -- and the lesson
+//   survives the rename. The two confirmations are now constants in the same
+//   file, which is a new way to cross them and is why they are bound to
+//   separate names there.
+//
 //   Typing lower-case `delete` enabled the button and the server accepted it,
 //   so an orphaned file was deleted on a confirmation that did not match its
 //   own label. On the anonymise panel the same defect sat in front of erasing
