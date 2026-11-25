@@ -18,11 +18,37 @@
 -- So this appends one 180-character unbroken word as a heading and one as a
 -- list item, to job 42, which is the fixture that script already drives.
 --
--- DRY-RUN, 25 Nov 2026: every check below was evaluated read-only against
--- live BOTH WAYS before this file was handed over -- as the row stands now,
--- and as it would stand after the update, simulated in a SELECT. The rule is
--- that a check meant to pass must be proven to pass, and four checks have
--- shipped broken on this project for want of it.
+-- ---------------------------------------------------------------------------
+-- VERSION 2. VERSION 1 OF THIS FILE DID NOT PARSE.
+--
+-- It ended `order by check`, and `check` is a RESERVED keyword. Postgres
+-- allows a reserved word as a column label after AS -- which is why
+-- `'c1 ...' as check` was accepted -- but a bare one in ORDER BY is parsed as
+-- the keyword, so the file failed at 42601 on its last line. Rishi found it:
+-- *"the same class as the current_role trap you hit in migration 025."*
+--
+-- NOTHING RAN. Confirmed read-only afterwards: job 42's description was still
+-- 599 characters with `updated_at` unchanged at 24 Nov 15:05. Two independent
+-- reasons, and the timestamp proves the outcome rather than the theory:
+-- Postgres parses a whole statement batch before executing any of it, so a
+-- syntax error anywhere means nothing executes; and the SQL editor runs a
+-- multi-statement file as one implicit transaction, which would have rolled
+-- the UPDATE back even if it had run.
+--
+-- THE PROJECT ALREADY HAD A CONVENTION AND I DID NOT FOLLOW IT. Applied
+-- migrations return `label, result, detail` and sort by a numeric `seq` --
+-- see 025. That convention has no reserved word in it. This file now uses it.
+-- ---------------------------------------------------------------------------
+--
+-- DRY-RUN, version 2, 25 Nov 2026. Every statement below was executed
+-- read-only against live before this file was handed over:
+--
+--   * the SELECT was run VERBATIM, as the text that is in this file, which is
+--     what version 1's dry run did not do -- it ran a hand-written
+--     simulation of the predicates instead, so the file's own syntax was
+--     never parsed by anything.
+--   * the UPDATE was checked with EXPLAIN, which parses and plans a write
+--     without performing it and so is permitted on a read-only connection.
 --
 --   check                       now    after   verdict
 --   c1 row exists                 1      1     passes both -- see note
@@ -44,6 +70,8 @@
 -- deletes it (carried item 13). The description only grows, so the NOT VALID
 -- check constraint on jobs.description is unaffected. Nothing else reads this
 -- row. Rollback is at the bottom if you want it gone sooner.
+--
+-- WHAT YOU SHOULD SEE: six rows, every `result` reading PASS.
 -- ===========================================================================
 
 update public.jobs
@@ -54,58 +82,67 @@ where id = 42
   and description not like '%' || repeat('trial', 36) || '%';   -- idempotent
 
 -- ---------------------------------------------------------------------------
--- The result table. One row per check, with the figures in `detail`.
+-- The result table: one row per check, figures in `detail`, sorted by `seq`.
+-- No column is named with a reserved word.
 -- ---------------------------------------------------------------------------
-select
-  'c1 the fixture row exists' as check,
-  case when count(*) = 1 then 'PASS' else 'FAIL' end as result,
-  'id 42, rows found: ' || count(*) as detail
-from public.jobs where id = 42
-
-union all
-select
-  'c2 a heading now carries a 180-character word',
-  case when count(*) = 1 then 'PASS' else 'FAIL' end,
-  'matching rows: ' || count(*)
-from public.jobs
-where id = 42 and description ~ ('(^|\n)## ' || repeat('trial', 36))
-
-union all
-select
-  'c3 a list item now carries a 180-character word',
-  case when count(*) = 1 then 'PASS' else 'FAIL' end,
-  'matching rows: ' || count(*)
-from public.jobs
-where id = 42 and description ~ ('(^|\n)- ' || repeat('trial', 36))
-
-union all
-select
-  'c4 the longest unbroken word is 180 characters',
-  case when max(len) = 180 then 'PASS' else 'FAIL' end,
-  'longest word: ' || max(len)
+select label, result, detail
 from (
-  select length(w) as len
-  from public.jobs j,
-       regexp_split_to_table(j.description, '\s+') as w
-  where j.id = 42
-) t
+  select
+    1 as seq,
+    'c1  the fixture row exists' as label,
+    case when count(*) = 1 then 'PASS' else 'FAIL' end as result,
+    'id 42, rows found: ' || count(*) as detail
+  from public.jobs where id = 42
 
-union all
-select
-  'c5 the description is still above the 400-character minimum',
-  case when min(length(description)) >= 400 then 'PASS' else 'FAIL' end,
-  'length: ' || min(length(description))
-from public.jobs where id = 42
+  union all
+  select
+    2,
+    'c2  a heading carries a 180-character word',
+    case when count(*) = 1 then 'PASS' else 'FAIL' end,
+    'matching rows: ' || count(*)
+  from public.jobs
+  where id = 42 and description ~ ('(^|\n)## ' || repeat('trial', 36))
 
-union all
-select
-  'c6 no other role was touched',
-  case when count(*) = 1 then 'PASS' else 'FAIL' end,
-  'roles containing the fixture word: ' || count(*)
-from public.jobs
-where description like '%' || repeat('trial', 36) || '%'
+  union all
+  select
+    3,
+    'c3  a list item carries a 180-character word',
+    case when count(*) = 1 then 'PASS' else 'FAIL' end,
+    'matching rows: ' || count(*)
+  from public.jobs
+  where id = 42 and description ~ ('(^|\n)- ' || repeat('trial', 36))
 
-order by check;
+  union all
+  select
+    4,
+    'c4  the longest unbroken word is 180 characters',
+    case when max(len) = 180 then 'PASS' else 'FAIL' end,
+    'longest word: ' || max(len)
+  from (
+    select length(w) as len
+    from public.jobs j,
+         regexp_split_to_table(j.description, '\s+') as w
+    where j.id = 42
+  ) t
+
+  union all
+  select
+    5,
+    'c5  the description still clears the 400-character minimum',
+    case when min(length(description)) >= 400 then 'PASS' else 'FAIL' end,
+    'length: ' || min(length(description))
+  from public.jobs where id = 42
+
+  union all
+  select
+    6,
+    'c6  no other role was touched',
+    case when count(*) = 1 then 'PASS' else 'FAIL' end,
+    'roles containing the fixture word: ' || count(*)
+  from public.jobs
+  where description like '%' || repeat('trial', 36) || '%'
+) checks
+order by seq;
 
 -- ---------------------------------------------------------------------------
 -- ROLLBACK, if you want the fixture gone before the clearout:

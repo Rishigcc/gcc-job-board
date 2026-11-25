@@ -276,6 +276,7 @@ Two more run directly, added 25 Nov:
 node scripts/stage12-settings-test.mjs          # 192 — static, reads src/
 node scripts/stage12-settings-negative-run.mjs  # 75 mutations, all must be caught
 node scripts/item27-markdown-negative-run.mjs   # 16 mutations, all must be caught
+node scripts/sql-reserved-words-test.mjs        # 64 — scans every .sql file
 ```
 
 `item27-markdown-test.mjs` (**133**) needs bundling like the stage suites.
@@ -310,8 +311,30 @@ the tracker before quoting an assertion count as reassurance.
 
 ## 8. Traps that have already cost time
 
-- **`current_role` is a reserved SQL keyword.** Alias a column that way and
-  you silently get the session role.
+- **RESERVED WORDS, TWICE NOW, AND THE TWO FAIL DIFFERENTLY.**
+  `current_role` as a column alias **does not error at all** — you silently
+  get the session role. `check` as a column alias **is accepted after `AS`**
+  and then fails at parse time the moment a bare `check` appears in
+  `ORDER BY`. **`node scripts/sql-reserved-words-test.mjs`** scans all 53
+  `.sql` files against the 101 reserved words from `pg_get_keywords()`; run it
+  after writing any SQL. Result tables use the existing convention —
+  `label, result, detail`, sorted by a numeric `seq` — which contains no
+  reserved word.
+- **DRY-RUN THE FILE'S OWN TEXT, not a paraphrase of it.** A dry run that
+  reproduced each check's logic in a hand-written query proved every predicate
+  right and still handed over a file that would not parse. For a statement the
+  read-only connection cannot execute, **`EXPLAIN` it**: parsing precedes the
+  privilege check, so **42601 means a syntax error and 42501 means it
+  parsed**. Both verified 25 Nov 2026.
+- **A SYNTAX ERROR ANYWHERE MEANS NOTHING IN THE FILE RAN.** Postgres parses
+  the whole batch before executing any of it, and the SQL editor's implicit
+  transaction would roll back the rest regardless. When he reports a parse
+  error, the answer to "did part of it apply" is **no** — but check
+  `updated_at` and say so from the data.
+- **ROUGHLY HALF THE `.sql` FILES HAVE NEVER BEEN PARSED.** Every migration
+  ships a `_rollback.sql` that is never run, plus
+  `post-merge/drop_question_authors.sql`. A mistake in one of those surfaces
+  during a rollback, which is an emergency.
 - **`pg_get_function_identity_arguments()` returns argument NAMES AND TYPES**
   (`p_email text`). For arity use `pronargs` and `proargtypes`.
 - **`has_table_privilege(..., 'insert')` is false for a column-level grant.**

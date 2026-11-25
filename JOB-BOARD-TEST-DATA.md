@@ -4015,6 +4015,105 @@ meaningless — the row still existing, and the description still clearing the
 what it guards can change in another; what is not fine is a check nobody has
 evaluated.**
 
+## THE FIFTH FAULTY CHECK — AND IT WAS THE FILE, NOT THE CHECK, 25 Nov 2026
+
+Rishi: *"ERROR: 42601: syntax error at or near "check". LINE 108: order by
+check. `check` is a reserved keyword in Postgres. That's the same class as the
+current_role trap you hit in migration 025 and recorded in that file's
+header."*
+
+### 1. What state job 42 is in: UNTOUCHED. Nothing ran.
+
+Verified read-only immediately after: description **599 characters**, no
+fixture heading, no fixture bullet, longest word **4**, and `updated_at` still
+**24 Nov 15:05** — unchanged from before the file was handed over. **The
+timestamp is the proof**, not the reasoning.
+
+Two independent reasons, either of which alone would be enough:
+
+1. **Postgres parses an entire statement batch before executing any of it.**
+   A syntax error anywhere in the file means **nothing** executes — not even
+   statements before the error.
+2. **The SQL editor runs a multi-statement file as one implicit
+   transaction**, already in this file's trap list, so the UPDATE would have
+   been rolled back even if it had run.
+
+### 2. Why the dry run did not catch it: IT NEVER RAN THE FILE
+
+**The dry run executed a hand-written simulation of the checks, not the
+file's own text.** It was a `with sim as (...) select ... union all ...` that
+reproduced each predicate's *logic* against both the current row and a
+simulated post-update row. Every predicate was right. **No statement from the
+file was ever sent to the server**, so its syntax was never parsed by
+anything.
+
+**That is the half-rule failing again, in a third form.** The rule after 023
+was *execute the migration's checks against the live database before handing
+the file over*. After 025 it gained *and prove a check meant to pass passes*.
+Both were satisfied. **Neither says "run the text you are about to hand
+over"** — and a paraphrase of a file cannot surface a syntax error in the
+file.
+
+**`AS check` is why it reached line 108 at all.** Postgres permits a reserved
+word as a column label after `AS`, so `'c1 ...' as check` parsed cleanly.
+Only the bare `check` in `ORDER BY` is parsed as the keyword. The file was
+wrong from line 60 and failed at line 108.
+
+**And the project already had a convention I did not follow.** Applied
+migrations return `label, result, detail` and sort by a numeric `seq` — see
+025. **There is no reserved word anywhere in it.** The fixture now uses it.
+
+### THE METHOD FIX: parse-check the statements you cannot execute
+
+`EXPLAIN <write statement>` parses and plans without performing it, so it is
+permitted where the write itself is not — and **the error code separates the
+two cases**:
+
+| | |
+|---|---|
+| `EXPLAIN` the fixture's real UPDATE | **42501 permission denied** → it parsed; parsing precedes the privilege check |
+| `EXPLAIN` the same UPDATE with `order by check` appended | **42601 syntax error** → the method detects a parse error |
+
+**Both were run, so the method itself is proved able to fail.** And the
+fixture's SELECT was then executed **verbatim, as the text in the file**,
+returning the before-state: c1 and c5 PASS, c2/c3/c4/c6 FAIL. Which is what it
+must do before the UPDATE, and proves those four can fail.
+
+### 3. Other reserved words in files nothing has ever parsed
+
+**His question was the right one, and the answer starts with an inventory.**
+Of the **53** `.sql` files in `supabase/`, roughly **half have never been
+parsed by anything**: every migration ships a matching `_rollback.sql` that is
+never run, and `post-merge/drop_question_authors.sql` runs only after the
+merge. **A reserved word in a rollback script surfaces during a rollback — an
+emergency, and the worst possible moment to meet a syntax error.**
+
+**Scanned: clean.** `scripts/sql-reserved-words-test.mjs`, now committed, reads
+the 101 reserved words from `pg_get_keywords()` (`catcode in ('R','T')`) and
+checks seven identifier positions across every `.sql` file. **0 findings**
+outside the fixture, which is fixed.
+
+**One false positive worth recording** so nobody "fixes" it: migration
+`020_job_saves.sql:216` has `order by case k.availability when 'open' ...
+end`. That is a **CASE expression**, not an alias, and the migration is
+applied and working. The scanner excludes it explicitly.
+
+**The scanner's own self-test caught a hole in the scanner on its first
+run**, and it was the first incident: the alias pattern required the alias to
+be followed by a comma, bracket or newline, so it **missed
+`as current_role from public.user_roles`** — the silent trap this whole class
+is named after. The lookahead now accepts a following keyword. **Eleven
+self-tests run before the repository scan**, six that must be flagged and five
+that must not, because a scanner that quietly matches nothing reports a clean
+repository and a clean repository looks identical.
+
+### What is different about this one
+
+The four before it were checks that asserted the wrong thing. **This one was a
+check that asserted the right thing in a file that could not run.** The
+remedy is the same shape as all of them — execute it — but applied to a
+different object: **the artefact, not the assertion.**
+
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 
 Found by Rishi while testing stage 10: **there is no "forgot password" on
