@@ -4044,7 +4044,29 @@ Three properties worth keeping:
 `Enter` now honours a deliberately opened hatch too, so the keyboard and the
 mouse finally agree about when a company can be created.
 
-## The company seed — GENERATED 24 Nov 2026, NOT YET RUN
+## The company seed — RUN 24 Nov 2026, VERIFIED. **DONE**
+
+**CLOSED.** Rishi ran `supabase/seed/companies.sql` on **24 Nov 2026** and
+tested the picker end to end. **This heading said "NOT YET RUN" for a day
+after it had been run**, and on 25 Nov I repeated that heading into a
+pre-merge list instead of checking the database — see "A LIST THAT WAS WRONG
+IN ONE PLACE" below.
+
+| Verified read-only against live, 25 Nov 2026 | |
+|---|---|
+| Companies | **1,816** |
+| `Walmart` | present |
+| `wal` in the picker | Great Wall Motor Co, SonicWall, Walgreen, Walmart, Walt Disney — **exactly the five he reported** |
+| `Test Co A` / `Test Co B` | both intact |
+| Roles posted under `Walmart` | **1** — job 42, picked from the list |
+| Migration 024's read policy | went in before the seed; `set local role anon` sees 2 of 1,816 |
+
+His words: *"zzzz offers create-new, and I posted a role under Walmart picked
+from the list."* Both halves of the picker's behaviour — resolving a match and
+offering create-new only when there is none — were therefore exercised against
+the full list rather than the four-row table.
+
+### The original note, kept for the reasoning
 
 Rishi, 24 Nov 2026: *"The company seed was never run. Typing 'walmart' offers
 to create it as a new company — the 1,814-name list is still just a file on
@@ -4222,6 +4244,60 @@ hook and then sweeps. P1's curl covers both in one request.
 - **`vercel.json` is unchanged on this branch**, so neither cron's schedule nor
   the rewrite rules differ from what production already runs.
 
+## A LIST THAT WAS WRONG IN ONE PLACE — 25 Nov 2026
+
+Rishi: *"Correction: the company seed is done. I ran `supabase/seed/companies.sql`
+on 24 November… Close that item with the evidence, and check whether anything
+else on your pre-merge list is stale the same way. **A list that's wrong in one
+place is worth re-reading before I start working through it.**"*
+
+**He was right, and the method I used to build that list was wrong.** I read
+this file's prose — including a section heading that still said
+`NOT YET RUN` — and reported it as the state of the world. **There is a rule
+in `HANDOVER.md` for exactly this:** *"He runs every migration. Never assume
+one has been applied; check with the read-only MCP connection."* The seed is a
+migration he runs. I had the connection open in the same session and did not
+use it.
+
+**The tracker is a record of decisions and reasoning. It is not a source of
+truth about current state.** Anything countable — rows, objects, accounts,
+constraint validity — is only true as of the day someone typed it, and this
+file is a month old in places. **Counts get verified, not quoted.**
+
+### What the re-read found, all verified read-only against live
+
+| Item | My list said | Live says |
+|---|---|---|
+| The company seed | not yet run | **DONE 24 Nov.** 1,816 companies, Walmart present, policy in place |
+| 13 — `candidate_resumes` | one row again, in scope | **0 rows** |
+| 13 — the `resumes` bucket | one object, by hand | **0 objects** |
+| 13 — the jobs to delete | "the 24 `[T5]` jobs" + role 42 | **27 jobs.** Jobs 13 and 41 were in neither count |
+| 13 / 5 — test Google accounts | `iworkatgcctest3@gmail.com` | **two of them**, `test2` as well |
+| 13 — companies | "`Test Co A` and `Test Co B`" | correct, **but role 42 is under `Walmart`**, which must survive |
+| 8, 18, 21 | open | **already done**, closed on 25 Nov with their evidence |
+
+### What the re-read CONFIRMED, so the rest of the list stands
+
+| Item | Verified |
+|---|---|
+| 26 — `jobs_description_check` | **still `NOT VALID`** |
+| 14 — `public.question_authors` | **still present**, so still to drop after the merge |
+| 23 — admin accounts | **exactly 1 row**, so the second account is still needed |
+| 27 — the Markdown defect | **1 job description** carries it: job 13, `Program manager` |
+| 1 / 20 — the three dates | `Privacy.jsx` 22 Nov, `RecruiterTerms.jsx` **16 Nov**, `NEW_FEATURE_UNTIL` `2027-01-19` — all three still placeholders |
+| W1 | **4 occurrences** of "verify your company", in `RecruiterApplications.jsx`, `RecruiterJobs.jsx` and `PostAJob.jsx` — note the row's description names a "stage 3 signup banner", and the string is not there |
+| W5 | **both `Roles` tabs still exist** — `Admin.jsx` (`key: "jobs"`) and `AdminReports.jsx` (`key: "roles"`) |
+| 29 | the built code is present and **still unverified by him** |
+
+### The two numbers that moved in opposite directions
+
+Worth noticing, because it is the argument against ever trusting a written
+count: the resume row and storage object had been recorded as **reopened** and
+were in fact **gone**, while the job count had been recorded as **24** and was
+in fact **27**. A stale list is not uniformly pessimistic or optimistic. **It
+is simply not current**, and the direction of its error is unpredictable —
+which is why the fix is to re-derive counts rather than to adjust them.
+
 ## Carried-forward items (must be done before the final merge)
 
 | # | Item | Raised in | Due |
@@ -4230,7 +4306,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 2 | Verify in the Microsoft Clarity dashboard that form-input masking is ON. The privacy policy states that text typed into forms is masked. | Stage 2 | Stage 6 |
 | 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
 | 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
-| 5 | Delete the test Gmail account from Authentication → Users | Stage 1 | Before merge |
+| 5 | Delete the test Google accounts from Authentication → Users. **There are TWO**, verified live 25 Nov 2026: `iworkatgcctest2@gmail.com` and `iworkatgcctest3@gmail.com`. This row and item 13 both said one. | Stage 1 | Before merge |
 | 29 | ~~**PRE-MERGE, GROUPED: two things a recruiter sees on `/profile` today.**~~ **BUILT 25 Nov 2026, awaiting Rishi's retest.** (a) `/profile`'s Name and Email rows render only when their own value exists — conditioned on the absence of the data, never on `account_type`, because keying off the role is the conditional-render mistake decision 10 rules out. (b) `/profile/delete-data` now has a **nothing-to-delete state**: no resume, no identifiable applications and no saved roles means a panel saying so and no confirmation box. The link itself is untouched, so the policy's sentence stays true. `my_applications()` returns only rows whose `candidate_id` is the caller, and anonymising NULLs that column, so its count is already the count of applications this page could still delete — no new column needed. A `notice` guard keeps the "resume deleted" confirmation visible instead of flipping straight to the empty state. | Rishi, 25 Nov 2026 | **In test** |
 | 30 | **A PRODUCTION PAGE, NOT A JOB BOARD ONE — for his decision, not a fix.** Below 768px the footer hides four items via hard-coded `hidden md:block`: the whole **Explore** and **Community** columns, and the **My Dashboard** and **Profile** rows. It is **pre-existing and live on `main`** — the classes arrived in `f368c95`, 5 Sept 2026, eight days before this branch began at `4b12dbd`. **Navigation is NOT lost** (measured at 375px: the header's menu carries Explore GCC Jobs, Ask Answer & Connect and Sign In/Out, and signed in it carries My Dashboard and Profile/Settings from the same `navItems` array), so the four hidden items are exactly the four the header menu duplicates, while the two that survive — Privacy Policy and Recruiter Terms — exist nowhere else. **The one real gap:** `Join the Community` (`/signup` in join mode) has no mobile equivalent; the header's Sign In reaches the same route in **sign-in** mode, so a signed-out phone visitor is offered "Sign In" and never "Join". | Rishi at the stage 12 retest, 25 Nov 2026 | **DONE 25 Nov 2026** — he chose showing the column over renaming the header item. Measured cost: the mobile footer 275px → 369px. |
 | 28 | ~~**LIVE DEFECT: a recruiter can upload a resume from `/profile`, and it poisons an admin report.**~~ **WITHDRAWN 25 Nov 2026 — I WAS WRONG, and Rishi agreed to it on the strength of my claim.** Checked against the live `public.admin_report_totals()` rather than the tracker's summary of it: `no_resume` counts *candidates who HAVE applications but NO resume row*, so a resume with no applications never enters it; `orph` counts storage objects with **no** `candidate_resumes` row, and an upload creates both. **Neither risk figure moves.** And the state is not anomalous anyway: any candidate may upload a resume before applying, and `ApplyPanel` blocks only *your own* posting (`job.posted_by === session.user.id`), so **a recruiter can apply to another company's role** — which makes a resume on file legitimate for them under decision 10. The resume block is one of the few on `/profile` that genuinely does apply to a recruiter. | Withdrawn | No action |
@@ -4248,7 +4324,7 @@ hook and then sweeps. P1's curl covers both in one request.
 | 16 | ~~**STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.**~~ **DONE in stage 9** — verified 24 Nov 2026 while answering what remains before launch: `AdminReports.jsx` shows `orphaned_files` with a risk tone, and `api/admin-delete-orphan.js` does the deleting, so it reports first and deletes second as decided. Was still shown as open, which would have made the pre-launch list two items longer than it is. Originally: Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
 | 15 | **DONE, BUT NOT AS BUILT — see "the board's placement changed, 24 Nov 2026".** Shipped in round one as an "Apply Directly" nav item and a homepage card; **both removed 24 Nov 2026** and replaced by a single promo card at the top of `/jobs`. The item's requirement — the board must be findable in the same stage that makes it public — is met by that card. D1 (the label) is closed by removal. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
 | 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
-| 13 | **REOPENED 25 Nov 2026 — the two lines closed on 22 Nov are no longer true.** `candidate_resumes` has one row again and the `resumes` bucket one object, both from testing stage 10 on `iworkatgcctest3@gmail.com` (24 Nov 18:45). They are back in scope for the clearout. Originally: *Partly done by stage 8's own testing, 22 Nov 2026: `candidate_resumes` is empty and the `resumes` bucket is completely empty, so those two lines are closed.* What remains: the anonymised `applications` rows, the 24 `[T5]` jobs, `Test Co A` and `Test Co B`, the two recruiter accounts, and `iworkatgcctest3@gmail.com`. Order still matters — jobs before companies, because of the foreign key. **Full pre-merge clearout, confirmed by Rishi 18 Nov 2026.** In this order: `candidate_resumes` rows → the resume objects in Storage by hand → `applications` rows → the 24 `[T5]` jobs → `Test Co A` and `Test Co B` → the two recruiter accounts → `iworkatgcctest3@gmail.com`. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
+| 13 | **RE-INVENTORIED AGAINST THE LIVE DATABASE, 25 Nov 2026.** The figures below replace every earlier count in this row, two of which had gone stale in both directions. **Read-only verified:** `candidate_resumes` **0 rows** and the `resumes` bucket **0 objects** — so the 25 Nov "REOPENED" note is no longer true, both were removed again by the delete-resume testing in the consolidation sign-off. `applications` **18 rows, all 18 already anonymised** (`candidate_id` null), so no personal data remains in them, but the rows still block the jobs they point at. `jobs` **27, not 24** — the 24 `[T5]` roles **plus three the old wording missed**: job **13** `Program manager` (Test Co B, 18 Nov, 1 application, **and the one carrying the Markdown of item 27**), job **41** `trial job` (Test Co A, 24 Nov), and job **42**, the 180-character title (**under `Walmart`**, 24 Nov). `recruiter_profiles` 2. **TWO** test Google accounts, not one: `iworkatgcctest2@gmail.com` **and** `iworkatgcctest3@gmail.com`. **THE ORDER, CORRECTED:** `applications` rows → **all 27 jobs** (role 42 last, it is `check-overflow.mjs`'s fixture) → `Test Co A` and `Test Co B` **only** → the two recruiter accounts → **both** test Google accounts. `candidate_resumes` and the storage objects are already clear, so those two steps are no-ops unless more testing recreates them — **check, do not assume**. **`Walmart` MUST NOT BE DELETED** with the companies step: job 42 sits under it and it is one of the 1,816 real seeded names. Rows before objects because nothing cascades to storage; companies after jobs because of the foreign key. | Stage 6 sign-off | Before merge |
 | 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
 | 8 | ~~**Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL.**~~ **DONE 25 Nov 2026** — closed by stage 12's prerequisite A, which added it alongside the preview host and `https://www.iworkatgcc.com/**`. The row was left open by mistake; the allowlist edit is recorded in the stage 12 prerequisites. | Stage 3 review | Closed |
 | 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |

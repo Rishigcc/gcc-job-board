@@ -328,36 +328,57 @@ the tracker before quoting an assertion count as reassurance.
 
 ## 9. Before the merge
 
-`JOB-BOARD-TEST-DATA.md` has the full list. The ones easiest to forget:
+`JOB-BOARD-TEST-DATA.md` has the full list.
 
-- **The clearout** (carried item 13) — in order: `candidate_resumes` rows →
-  the storage objects **by hand** → `applications` → the 24 `[T5]` jobs →
-  `Test Co A`/`Test Co B` → the two recruiter accounts →
-  `iworkatgcctest3@gmail.com`. Rows before objects, companies after jobs.
-  **Two lines closed on 22 Nov were reopened on 25 Nov** — there is a resume
-  row and a storage object again.
-- **Role 42** (a 180-character unbroken title) is the fixture
-  `check-overflow.mjs` drives. **Delete it last**, and expect that script to
-  need a new fixture.
+> **COUNTS IN THAT FILE ARE A RECORD, NOT A SOURCE OF TRUTH.** Every figure
+> below was re-derived read-only against live on **25 Nov 2026**, after a
+> pre-merge list quoted this file and got the company seed wrong — it had
+> been run the day before and a heading still said `NOT YET RUN`. Two other
+> figures were stale **in opposite directions**. **Re-derive before acting;
+> never adjust a written count.**
+
+- **The clearout** (carried item 13), verified 25 Nov — in order:
+  `applications` (**18 rows, all already anonymised**) → **all 27 jobs**, not
+  24 → `Test Co A`/`Test Co B` **only** → the two recruiter accounts →
+  **both** test Google accounts (`iworkatgcctest2@` *and*
+  `iworkatgcctest3@gmail.com`). `candidate_resumes` and the `resumes` bucket
+  are **already empty**, so those two steps are no-ops — but check, because
+  more testing recreates them.
+  - The 27 is the 24 `[T5]` roles **plus three**: job **13**
+    `Program manager`, job **41** `trial job`, and job **42**.
+  - **`Walmart` must survive the companies step** — job 42 sits under it and
+    it is one of the 1,816 real seeded names.
+- **Role 42** (a 180-character unbroken title, **under `Walmart`**) is the
+  fixture `check-overflow.mjs` drives. **Delete it last**, and expect that
+  script to need a new fixture.
 - **Item 26** — `alter table public.jobs validate constraint
-  jobs_description_check;` **after** the clearout. It is `NOT VALID` because
-  24 of 25 existing rows are under 400 characters.
-- **Items 1 and 20** — `LAST_UPDATED` in the policy and `NEW_FEATURE_UNTIL`
-  in `src/lib/boardPromo.js`, same edit, same moment.
+  jobs_description_check;` **after** the clearout. **Confirmed still
+  `NOT VALID`** on 25 Nov.
+- **Items 1 and 20 — THREE dates, not two.** `LAST_UPDATED` in
+  `src/Pages/Privacy.jsx` (22 Nov) **and in `src/Pages/RecruiterTerms.jsx`
+  (16 Nov)**, plus `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js`
+  (`2027-01-19`). Same moment, or the site contradicts itself.
 - **Item 27** — a **live defect**: recruiters paste Markdown and
-  `/gcc-jobs/:slugId` renders it literally, so candidates see `# Job
-  Description` and `**bold**` on screen.
-- **Item 23** — add a second admin account. There is exactly one `admin` row
-  and it is on a Google-only account.
+  `/gcc-jobs/:slugId` renders it literally. **One job carries it today**: job
+  13, `Program manager`.
+- **Item 23** — add a second admin account. **Confirmed exactly one `admin`
+  row** on 25 Nov, on a Google-only account.
 - **Item 14** — `supabase/post-merge/drop_question_authors.sql`, **after**
-  the merge is deployed and verified.
+  the merge is deployed and verified. **The view is confirmed still present.**
+- **The company seed is DONE** — run 24 Nov, 1,816 companies, picker tested
+  end to end. Do not re-report it as outstanding.
 
 ---
 
 ## 10. Things that live nowhere else
 
 - **He runs every migration.** Never assume one has been applied; check with
-  the read-only MCP connection.
+  the read-only MCP connection. **This was broken on 25 Nov 2026** — a
+  pre-merge list reported the company seed as unrun because a heading in the
+  tracker still said so, a day after he had run it. **The seed is a migration
+  he runs, the rule covered it, and the connection was open in the same
+  session.** Anything countable — rows, objects, accounts, constraint
+  validity, which migrations exist — is re-derived before it is reported.
 - **Decision 10 was amended on 25 Nov.** It used to say `/ask` and `/profile`
   stay reachable for recruiters. **It no longer does:** 0 of 2,656 accounts
   have two identities, and the code and database make a dual-use account
