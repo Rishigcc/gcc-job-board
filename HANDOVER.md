@@ -95,12 +95,25 @@ footer's Community column now shows at every width, because
 the tracker: the design pass, the live Markdown defect (item 27), the
 clearout, and the production-dependent checks.
 
-**The wording pass is nearly done.** W1, W5 and W6 shipped on 25 Nov; **W7
-was closed as superseded** — `Apply Directly` no longer exists anywhere, so
-the item described a string that had been removed. **Only W2 remains**, and
-it is waiting on his approval of proposed wording, not on build time: the
-verified state becomes a plain chip and the "no limit on live roles" fact
-moves to the **posting form**, where the cap actually bites.
+**THE WORDING PASS IS DONE.** W1, W2, W5 and W6 all shipped on 25 Nov, and
+**W7 was closed as superseded** — `Apply Directly` no longer exists anywhere,
+so the item described a string that had been removed. W3 and W4 closed
+earlier. **Nothing in the wording pass is open.**
+
+Two things from it are worth carrying:
+
+- **The verified thing is an ACCOUNT, everywhere.** W1 was scoped as "four
+  occurrences" and the concept turned out to live under five different
+  phrases in **twelve** places — after the first pass one page said "verify
+  your account" and "Your company is verified" in the two branches of one
+  condition. The suite now asserts the subject-naming phrases appear in **no**
+  `.jsx` file, rather than counting occurrences. "Your company website" and
+  "the name of your company" are deliberately untouched: the company is the
+  evidence, the account is what gains access.
+- **W2 needed no new copy.** The "no limit on live roles" fact was already on
+  the posting form (unverified) and `/recruiter`'s banner (verified), so
+  shortening the My jobs line to a chip lost nothing. **Both are asserted
+  present**, because the risk in shortening a line is losing what it carried.
 
 ---
 
@@ -260,8 +273,8 @@ npx esbuild scripts/stage4-validation-test.mjs --bundle --format=esm \
 Two more run directly, added 25 Nov:
 
 ```sh
-node scripts/stage12-settings-test.mjs          # 109 — static, reads src/
-node scripts/stage12-settings-negative-run.mjs  # 56 mutations, all must be caught
+node scripts/stage12-settings-test.mjs          # 177 — static, reads src/
+node scripts/stage12-settings-negative-run.mjs  # 64 mutations, all must be caught
 ```
 
 The negative run is the check-the-check rule made executable: it breaks one
@@ -273,7 +286,7 @@ the code is fine.
 
 Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **60**,
 stage8 **44**, stage9 **90**, stage10 **116 + 111 + 62 + 121**, stage12
-**69 + 109**, check-overflow **18**. **stage7 is 60, not 56** — W6 added four. **eslint has exactly 8 pre-existing
+**69 + 177**, check-overflow **18**. **stage7 is 60, not 56** — W6 added four. **eslint has exactly 8 pre-existing
 errors** — 2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the
 baseline, not a problem to fix.
 

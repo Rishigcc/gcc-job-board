@@ -7,10 +7,17 @@ import Seo from "../components/Seo";
 
 // A banner and two buttons. Nothing else, on purpose.
 //
-// The wording says "company verification" throughout and never "email
+// The wording says "account verification" throughout and never "email
 // verification": the recruiter has already clicked a confirmation link, and
 // calling the next step email verification would read as though that had
 // failed.
+//
+// IT SAID "company verification" UNTIL 25 Nov 2026 (wording item W1). The
+// reasoning above is unchanged -- the point was never the word "company", it
+// was avoiding "email". What changed is that the thing being verified is the
+// ACCOUNT: a recruiter's company is the evidence, and their account is what
+// gains access. "Company website" and "the name of your company" are
+// untouched, because those genuinely are about the company.
 function RecruiterHome() {
   const navigate = useNavigate();
   const { profile } = useRecruiter();
@@ -56,7 +63,7 @@ function RecruiterHome() {
                 Verified
               </span>
               <h2 className="text-base font-bold text-green-900">
-                Your company is verified
+                Your account is verified
               </h2>
             </div>
 
@@ -80,7 +87,7 @@ function RecruiterHome() {
 
               <p>
                 <strong className="font-semibold">
-                  To see who applied, we need to complete company verification.
+                  To see who applied, we need to complete account verification.
                 </strong>{" "}
                 Until then you'll see how many people applied to each role and
                 when — but not their names, email addresses or resumes.

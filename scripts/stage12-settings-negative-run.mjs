@@ -463,6 +463,66 @@ const MUTANTS = [
     (s) => s.replace('state={{ mode: "join" }}', ""),
     "the footer's community link still asks for JOIN mode",
   ],
+  // --- W1 and W2 ---------------------------------------------------------
+  [
+    "the gate panel reverts to 'verify your company'",
+    "Pages/RecruiterApplications.jsx",
+    (s) => s.replace("verify your account", "verify your company"),
+    "calls the verified thing an account, not a company",
+  ],
+  [
+    "the dashboard banner reverts to 'Your company is verified'",
+    "Pages/RecruiterHome.jsx",
+    (s) => s.replace("Your account is verified", "Your company is verified"),
+    "calls the verified thing an account, not a company",
+  ],
+  [
+    "the terms heading reverts to 'Company verification'",
+    "Pages/RecruiterTerms.jsx",
+    (s) => s.replace("<h2>4. Account verification</h2>", "<h2>4. Company verification</h2>"),
+    "calls the verified thing an account, not a company",
+  ],
+  [
+    "the wording is deleted rather than corrected",
+    "Pages/RecruiterApplications.jsx",
+    (s) => s.replace("Please verify your account to see candidate details.", ""),
+    "the gate panel says 'verify your account'",
+  ],
+  [
+    "the Verified chip replaced by a sentence again",
+    "Pages/RecruiterJobs.jsx",
+    (s) =>
+      s.replace(
+        /\{isRecruiterPlaceholder\}/,
+        "",
+      ).replace(
+        "                <span className=\"rounded-full bg-green-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white\">\n                  Verified\n                </span>",
+        "Your account is verified, so there is no limit on live roles.",
+      ),
+    "My jobs shows a Verified chip",
+  ],
+  [
+    "the no-limit fact dropped from the posting form",
+    "components/JobForm.jsx",
+    (s) => s.replace("<strong>Verification removes the limit entirely.</strong> Reply", "Reply"),
+    "an unverified recruiter still meets the no-limit fact on the posting form",
+  ],
+  [
+    "the no-limit fact dropped from the dashboard banner",
+    "Pages/RecruiterHome.jsx",
+    (s) =>
+      s.replace(
+        /There's no limit on how many\n              roles you can have live at once\./,
+        "",
+      ),
+    "a verified recruiter still has it on the dashboard banner",
+  ],
+  [
+    "the unverified slot counter removed with the chip change",
+    "Pages/RecruiterJobs.jsx",
+    (s) => s.replace("Closing a role, or letting one expire, frees a slot.", ""),
+    "the unverified slot counter is untouched",
+  ],
   // --- deliverable 6: the policy ----------------------------------------
   [
     "the approved paragraph reworded",

@@ -183,7 +183,7 @@ function RecruiterSettings() {
             screens, which is what W3's reconciliation rule exists to stop. */}
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <p className="text-[15px] leading-relaxed text-slate-700">
-            Company verification, and what it changes about who you can see,
+            Account verification, and what it changes about who you can see,
             is on your dashboard.
           </p>
 

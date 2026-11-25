@@ -241,7 +241,7 @@ function JobForm({
         >
           <p className="text-sm text-slate-800">
             <strong>{liveSlotsLabel(slotsUsed)}</strong>{" "}
-            Until your company is verified you can keep 10 live at a time.
+            Until your account is verified you can keep 10 live at a time.
             Closing a role, or letting one expire, frees a slot.
           </p>
 
@@ -257,9 +257,9 @@ function JobForm({
             </p>
           ) : (
             <p className="mt-2 text-sm text-slate-800">
-              Verifying your company removes the limit entirely. Reply to your
-              signup email with your company website and GSTIN and we will
-              verify you within two working days.
+              <strong>Verification removes the limit entirely.</strong> Reply
+              to your signup email with your company website and GSTIN and we
+              will verify you within two working days.
             </p>
           )}
         </div>

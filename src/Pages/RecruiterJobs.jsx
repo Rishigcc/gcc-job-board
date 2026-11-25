@@ -152,11 +152,29 @@ function RecruiterJobs() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               My jobs
             </h1>
-            <p className="mt-1.5 text-slate-600">
-              {isVerified
-                ? "Your company is verified, so there is no limit on live roles."
-                : `${liveSlotsLabel(liveCount)} Closing a role, or letting one expire, frees a slot.`}
-            </p>
+            {/* W2, decided 25 Nov 2026: a plain chip, not a sentence.
+                WHERE THE "no limit" FACT WENT: nowhere, because it was
+                already in both places it is needed. An UNVERIFIED recruiter
+                meets it on the posting form, at the moment the cap stops them
+                -- Rishi: *"an unverified recruiter should learn about it at
+                the moment it stops them, which is the only moment it
+                matters."* A VERIFIED one has it on /recruiter's verified
+                banner, which already reads "There's no limit on how many
+                roles you can have live at once."
+                So nothing new was written. The chip reuses that banner's
+                styling exactly, so the same fact looks the same on both
+                screens. */}
+            {isVerified ? (
+              <p className="mt-1.5">
+                <span className="rounded-full bg-green-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+                  Verified
+                </span>
+              </p>
+            ) : (
+              <p className="mt-1.5 text-slate-600">
+                {`${liveSlotsLabel(liveCount)} Closing a role, or letting one expire, frees a slot.`}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -198,7 +216,7 @@ function RecruiterJobs() {
               Candidates can see it and apply from now on.{" "}
               {isVerified
                 ? "You will see applicant details as they come in."
-                : "Until your company is verified you will see how many people applied and when, but not who they are."}
+                : "Until your account is verified you will see how many people applied and when, but not who they are."}
             </p>
             <button
               type="button"

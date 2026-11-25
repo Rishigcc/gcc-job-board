@@ -972,8 +972,8 @@ sign-off.
 
 | # | Item | Note |
 |---|---|---|
-| ~~W1~~ **DONE 25 Nov 2026** | ~~The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
-| W2 | **DECIDED 25 Nov 2026, wording proposed and awaiting his approval before it is written.** The chip is approved; the no-limit fact moves to the **posting form**, because that is where the cap bites. Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
+| ~~W1~~ **DONE 25 Nov 2026, extended from four occurrences to twelve** — the phrase was only one of several the concept appeared under. | ~~The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
+| ~~W2~~ **DONE 25 Nov 2026** — the chip, and **nothing new written**: the no-limit fact was already on the posting form for an unverified recruiter and on `/recruiter`'s banner for a verified one. The form's sentence now opens *"Verification removes the limit entirely."* | ~~Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
 | ~~W3~~ **DONE in 9b** | ~~The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** **Shipped 23 Nov 2026: anonymised applications no longer count toward "new" and appear as their own figure. Left here rather than deleted, because W6 is about how that same line now reads.** |
 | ~~W4~~ **DONE 24 Nov 2026** | ~~The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**.** Fixed as part of the D3 policy rewrite, with Rishi's agreement: *"Take W4 in D as you suggested — no point leaving the old name in a sentence you're rewriting."* The same stale name was also in a code comment in `Profile.jsx`, now corrected. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
 | ~~W5~~ **DONE 25 Nov 2026** — the report's tab is now **Role performance**; the admin one stays **Roles**. | ~~**Two tabs called Roles on `/admin`** — the action queue's and the report's. Confusing on one screen. | Rishi, 23 Nov 2026. Renaming one is a word; deciding which is the question. The admin one acts on roles, the report one counts them, so "Moderate roles" / "Roles" or "Roles" / "Role performance" are both defensible. |
@@ -3669,10 +3669,55 @@ All four occurrences in one change:
 **Company website field hint** on the posting form. Worth recording because
 the description, not the count, is what someone would search by.
 
-**AND THE CONCEPT SURVIVES IN THREE MORE PLACES UNDER A DIFFERENT PHRASE** —
-see the open question below. W1 said *"changing one and not the others would
-be worse than leaving all four"*, and that logic reaches the phrase
-`company verification` too, which W1 never named.
+**THE FOUR WERE NOT THE WHOLE OF IT — EXTENDED TO TWELVE, 25 Nov 2026.**
+W1 was scoped by a phrase, and the concept lives under several. Applying the
+four left `RecruiterApplications.jsx` saying *"verify your **account**"* at
+line 324 and *"Your **company** is verified"* ninety lines later — **the two
+branches of the same condition, on one screen.** Exactly what the item was
+written to stop.
+
+Rishi: *"Extend to all nine. You're right that the four weren't the whole of
+it."* **It turned out to be twelve**, not nine: the sweep I showed him missed
+`RecruiterTerms.jsx`'s section heading `4. Company verification` and its *"we
+may decline to verify a company"*, and `RecruiterSettings.jsx` — written
+earlier the same day — said *"Company verification… is on your dashboard."*
+
+| File | Was |
+|---|---|
+| `RecruiterApplications.jsx` | "Your company is verified, so the moment someone applies…" |
+| `RecruiterHome.jsx` | "Your company is verified" (banner heading) |
+| `RecruiterHome.jsx` | "we need to complete company verification" |
+| `RecruiterJobs.jsx` | "Your company is verified, so there is no limit…" — **removed by W2's chip** |
+| `RecruiterJobs.jsx` | "Until your company is verified you will see how many…" |
+| `JobForm.jsx` | "Until your company is verified you can keep 10 live…" |
+| `JobForm.jsx` | "Verifying your company removes the limit entirely." — **became W2's opening** |
+| `RecruiterTerms.jsx` | the meta description, the `<h2>4. Company verification</h2>`, "Before your company is verified", "decline to verify a company" |
+| `RecruiterSettings.jsx` | "Company verification, and what it changes…" |
+
+**`RecruiterHome.jsx`'s comment was updated, not deleted.** It recorded why
+the wording says "verification" and never "email verification", and that
+reasoning is unchanged — the point was never the word *company*, it was
+avoiding *email*. The comment now says which word changed and why, so the
+next reader does not restore the old one thinking it was the decision.
+
+**LEFT ALONE, because they are genuinely about the company:** "your company
+website", "the name of your company", "if your company runs its own mail",
+"Enter your company website — we use it to verify you", and
+`DeleteMyData.jsx`'s "it never touches your company". The company is the
+**evidence**; the account is what **gains access**.
+
+**The Company website field hint** — his two options, my call: **"We use this
+when we verify your account."** The shorter "to verify your account" is
+grammatical but implies the website verifies the account; *when* is accurate,
+because the website is evidence consulted during verification of the account.
+
+**The check is not a count.** Asserting "four occurrences fixed" is what let
+this happen twice. The suite now asserts that the phrases naming the verified
+**subject** — `verify your company`, `company is verified`,
+`company verification`, `verify a company`, `Verifying your company` — appear
+in **no** `.jsx` file, and separately that the replacements are present, so
+the first assertion cannot be satisfied by deleting the wording. A new string
+cannot slip past a check of that shape.
 
 ### W5 — the reports tab becomes "Role performance". DONE
 
@@ -3727,13 +3772,31 @@ described had been removed — the same class as the company seed. **A logged
 wording item is about a string, so it is worth searching for the string before
 discussing it.**
 
-### W2 — wording proposed, NOT WRITTEN
+### W2 — the chip. DONE, AND NOTHING NEW WAS WRITTEN
 
-He asked to see the posting-form wording before it is built, and his
-instruction carries the reasoning: *"an unverified recruiter should learn
-about it at the moment it stops them, which is the only moment it matters."*
-The chip cannot carry the no-limit fact, so the fact moves to the form. The
-proposal is in the reply of 25 Nov; nothing is in the code yet.
+He asked to see the proposed wording first, and asking is what settled it:
+**the fact was already in both places it is needed**, so the premise that it
+needed a new home was wrong.
+
+| State | Where the "no limit" fact already lived |
+|---|---|
+| **Unverified** | `JobForm.jsx`'s cap panel, on the posting form, **before they type** — in both the at-cap and not-at-cap branches |
+| **Verified** | `/recruiter`'s verified banner: *"There's no limit on how many roles you can have live at once."* |
+
+Rishi: *"Good catch that the fact was already in both places; the premise was
+mine and it was wrong."* His reasoning for *where* it belongs was right and
+already satisfied: *"an unverified recruiter should learn about it at the
+moment it stops them, which is the only moment it matters."*
+
+**So: the chip, and one word of emphasis.** `My jobs` shows a plain
+**Verified** chip reusing `/recruiter`'s banner styling exactly, so the same
+fact looks the same on both screens. The form's not-at-cap sentence now opens
+**"Verification removes the limit entirely."** in bold — leading with the
+benefit rather than the condition. The unverified slot counter is untouched.
+
+**Two assertions carry the part that matters**, because the risk in shortening
+a line is losing what it carried: the no-limit fact is asserted present on the
+posting form **and** on the dashboard banner. Deleting either fails the suite.
 
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 

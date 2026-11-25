@@ -542,6 +542,98 @@ ok(
 );
 
 // ---------------------------------------------------------------------------
+// W1 — one word for the thing that gets verified
+// ---------------------------------------------------------------------------
+//
+// The item was raised because the gate panel and the My jobs line disagreed.
+// It was then fixed in FOUR places and still disagreed, because the concept
+// also appears as "your company is verified" and "company verification" —
+// and after that pass `RecruiterApplications.jsx` said "verify your account"
+// at one line and "Your company is verified" ninety lines later, in the two
+// branches of the SAME condition.
+//
+// So the check is not a count of occurrences. It asserts that the phrase
+// naming the verified SUBJECT appears nowhere, which is the only form of this
+// assertion that a new string cannot slip past.
+//
+// Deliberately NOT matched: "your company website", "the name of your
+// company", "if your company runs its own". Those are about the company,
+// which is the evidence, not about what gains access.
+
+const VERIFIED_SUBJECT_PHRASES = [
+  "verify your company",
+  "verify a company",
+  "company is verified",
+  "company verification",
+  "Verifying your company",
+];
+
+for (const rel of walk("").filter((r) => /\.jsx$/.test(r))) {
+  const code = stripComments(read(rel));
+  const hits = VERIFIED_SUBJECT_PHRASES.filter((phrase) =>
+    code.toLowerCase().includes(phrase.toLowerCase()),
+  );
+  ok(
+    `${rel} calls the verified thing an account, not a company`,
+    hits.length === 0,
+    hits.length
+      ? `found ${JSON.stringify(hits)} — W1 made this "account" everywhere; ` +
+        `"your company website" and "the name of your company" are fine, the ` +
+        `SUBJECT of verification is not`
+      : "",
+  );
+}
+
+// And the replacement is actually present, so the assertion above cannot be
+// satisfied by deleting the wording altogether.
+ok(
+  "the gate panel says 'verify your account'",
+  /verify your account/.test(read("Pages/RecruiterApplications.jsx")),
+);
+ok(
+  "the recruiter dashboard says 'Your account is verified'",
+  /Your account is verified/.test(read("Pages/RecruiterHome.jsx")),
+);
+ok(
+  "the terms' section heading is 'Account verification'",
+  /<h2>4\. Account verification<\/h2>/.test(read("Pages/RecruiterTerms.jsx")),
+);
+
+// ---------------------------------------------------------------------------
+// W2 — the chip, and where the fact it cannot carry actually lives
+// ---------------------------------------------------------------------------
+
+const recruiterJobs = stripComments(read("Pages/RecruiterJobs.jsx"));
+const jobForm = stripComments(read("components/JobForm.jsx"));
+const recruiterHome = stripComments(read("Pages/RecruiterHome.jsx"));
+
+ok(
+  "My jobs shows a Verified chip for a verified recruiter",
+  /isVerified \? \(/.test(recruiterJobs) && /Verified\s*\n\s*<\/span>/.test(recruiterJobs),
+);
+ok(
+  "the long verified sentence is gone from My jobs",
+  !/no limit on live roles/.test(recruiterJobs),
+);
+ok(
+  "the unverified slot counter is untouched",
+  /liveSlotsLabel\(liveCount\)/.test(recruiterJobs) &&
+    /frees a slot/.test(recruiterJobs),
+);
+
+// THE FACT THE CHIP CANNOT CARRY must still exist in both states, or
+// shortening the line lost it. This is the assertion W2 really needs.
+ok(
+  "an unverified recruiter still meets the no-limit fact on the posting form",
+  /Verification removes the limit entirely/.test(jobForm),
+  "the form is where the cap bites, which is the only moment it matters",
+);
+ok(
+  "a verified recruiter still has it on the dashboard banner",
+  /no limit on how many\s*\n?\s*roles you can have live at once/.test(recruiterHome),
+);
+
+// ---------------------------------------------------------------------------
 // Deliverable 5 — the three disproved comments, gone and replaced
 // ---------------------------------------------------------------------------
 //

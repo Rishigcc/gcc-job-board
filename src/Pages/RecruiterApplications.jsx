@@ -352,7 +352,7 @@ function RecruiterApplications() {
         <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
           <h2 className="text-lg font-bold text-slate-900">No applications yet</h2>
           <p className="mx-auto mt-2 max-w-md text-slate-600">
-            Your company is verified, so the moment someone applies their name,
+            Your account is verified, so the moment someone applies their name,
             email, phone number and resume appear here.
           </p>
         </div>

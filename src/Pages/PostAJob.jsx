@@ -467,7 +467,7 @@ function PostAJob() {
 
                     <Field
                       label="Company website"
-                      hint="We use this to verify your account."
+                      hint="We use this when we verify your account."
                       error={errors.website}
                     >
                       <input

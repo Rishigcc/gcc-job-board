@@ -8,7 +8,7 @@ function RecruiterTerms() {
   return (
     <PolicyLayout
       title="Recruiter Terms — iWorkAtGCC"
-      description="The conditions for posting roles on iWorkAtGCC: who may post, company verification, posting limits, and how candidate data must be handled."
+      description="The conditions for posting roles on iWorkAtGCC: who may post, account verification, posting limits, and how candidate data must be handled."
       path="/recruiter-terms"
       lastUpdated={LAST_UPDATED}
     >
@@ -73,7 +73,7 @@ function RecruiterTerms() {
         </li>
       </ul>
 
-      <h2>4. Company verification</h2>
+      <h2>4. Account verification</h2>
       <p>
         You can post roles and receive applications{" "}
         <strong>immediately</strong>, with no wait and no review. What
@@ -81,7 +81,7 @@ function RecruiterTerms() {
       </p>
       <ul>
         <li>
-          <strong>Before your company is verified</strong> you can see how many
+          <strong>Before your account is verified</strong> you can see how many
           people applied to each role and on what dates. You cannot see their
           names, email addresses or resumes. That restriction is enforced in
           our database — the information is not sent to your browser at all.
@@ -97,8 +97,8 @@ function RecruiterTerms() {
           their resume.
         </li>
         <li>
-          We may ask for more information, and we may decline to verify a
-          company without giving a reason.
+          We may ask for more information, and we may decline to verify an
+          account without giving a reason.
         </li>
       </ul>
 
