@@ -325,7 +325,7 @@ function RecruiterJobs() {
                         )}
                         {applications && !isVerified ? (
                           <span className="text-slate-500">
-                            {" "}— verify your company to see who
+                            {" "}— verify your account to see who
                           </span>
                         ) : null}
                       </p>

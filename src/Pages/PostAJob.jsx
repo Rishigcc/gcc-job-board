@@ -279,7 +279,7 @@ function PostAJob() {
                     We verify companies before releasing applicant details.
                   </strong>{" "}
                   You can post and collect applications right away. To see who
-                  applied, we need to verify your company first — it takes two
+                  applied, we need to verify your account first — it takes two
                   working days.
                 </span>
               </li>
@@ -467,7 +467,7 @@ function PostAJob() {
 
                     <Field
                       label="Company website"
-                      hint="We use this to verify your company."
+                      hint="We use this to verify your account."
                       error={errors.website}
                     >
                       <input

@@ -321,7 +321,7 @@ function RecruiterApplications() {
           </h2>
 
           <p className="mt-2 text-[15px] leading-relaxed text-amber-900">
-            Please verify your company to see candidate details. For security,
+            Please verify your account to see candidate details. For security,
             candidate details are not shared with unverified accounts.
           </p>
 

@@ -972,13 +972,13 @@ sign-off.
 
 | # | Item | Note |
 |---|---|---|
-| W1 | The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
-| W2 | Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
+| ~~W1~~ **DONE 25 Nov 2026** | ~~The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
+| W2 | **DECIDED 25 Nov 2026, wording proposed and awaiting his approval before it is written.** The chip is approved; the no-limit fact moves to the **posting form**, because that is where the cap bites. Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
 | ~~W3~~ **DONE in 9b** | ~~The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** **Shipped 23 Nov 2026: anonymised applications no longer count toward "new" and appear as their own figure. Left here rather than deleted, because W6 is about how that same line now reads.** |
 | ~~W4~~ **DONE 24 Nov 2026** | ~~The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**.** Fixed as part of the D3 policy rewrite, with Rishi's agreement: *"Take W4 in D as you suggested — no point leaving the old name in a sentence you're rewriting."* The same stale name was also in a code comment in `Profile.jsx`, now corrected. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
-| W5 | **Two tabs called Roles on `/admin`** — the action queue's and the report's. Confusing on one screen. | Rishi, 23 Nov 2026. Renaming one is a word; deciding which is the question. The admin one acts on roles, the report one counts them, so "Moderate roles" / "Roles" or "Roles" / "Role performance" are both defensible. |
-| W7 | **The navigation label "Apply Directly" does not contain the word "jobs".** | Raised by me, 23 Nov 2026; Rishi's decision the same day: *"Keep 'Apply Directly' for now. Your reservation is noted and I agree it's real, but the wording review covers the whole site and this is one line. Log it there rather than deciding it in isolation."* The concern: scanning *Explore GCC Jobs · Apply Directly*, a visitor may not realise both are job listings — and the item holding our own roles is the one that does not announce itself as roles. Candidates that keep the distinction and still say jobs: **Direct GCC Jobs**, **Jobs: Apply Directly**. Note the homepage card added the same day says "Apply Directly to GCC **Roles**", so the two surfaces currently word it differently — which the review should settle together. |
-| W6 | **The recruiter summary line's figures overlap** — `1 new · 1 not selected · 3 anonymised` sums to 5 against 4 applications, because the not-selected one is also anonymised. | Deliberate, and recorded as deliberate in the W3 note: the first three say what you decided, the last says who can no longer be contacted. But Rishi is right that **a reader will try to add them**, and a figure that invites a wrong sum is a wording problem even when every number is correct. Options: separate them visually, or label the last one so it reads as a qualifier rather than a fourth bucket. |
+| ~~W5~~ **DONE 25 Nov 2026** — the report's tab is now **Role performance**; the admin one stays **Roles**. | ~~**Two tabs called Roles on `/admin`** — the action queue's and the report's. Confusing on one screen. | Rishi, 23 Nov 2026. Renaming one is a word; deciding which is the question. The admin one acts on roles, the report one counts them, so "Moderate roles" / "Roles" or "Roles" / "Role performance" are both defensible. |
+| ~~W7~~ **CLOSED 25 Nov 2026 — SUPERSEDED, not done.** `Apply Directly` appears nowhere in the repo; both surfaces were removed in stage 10 round two and the entrance now reads **Exclusive GCC Jobs**, which contains the word the item was about. | ~~**The navigation label "Apply Directly" does not contain the word "jobs".** | Raised by me, 23 Nov 2026; Rishi's decision the same day: *"Keep 'Apply Directly' for now. Your reservation is noted and I agree it's real, but the wording review covers the whole site and this is one line. Log it there rather than deciding it in isolation."* The concern: scanning *Explore GCC Jobs · Apply Directly*, a visitor may not realise both are job listings — and the item holding our own roles is the one that does not announce itself as roles. Candidates that keep the distinction and still say jobs: **Direct GCC Jobs**, **Jobs: Apply Directly**. Note the homepage card added the same day says "Apply Directly to GCC **Roles**", so the two surfaces currently word it differently — which the review should settle together. |
+| ~~W6~~ **DONE 25 Nov 2026** — now `1 new · 1 not selected (3 anonymised)`, bare when there is nothing to qualify. | ~~**The recruiter summary line's figures overlap** — `1 new · 1 not selected · 3 anonymised` sums to 5 against 4 applications, because the not-selected one is also anonymised. | Deliberate, and recorded as deliberate in the W3 note: the first three say what you decided, the last says who can no longer be contacted. But Rishi is right that **a reader will try to add them**, and a figure that invites a wrong sum is a wording problem even when every number is correct. Options: separate them visually, or label the last one so it reads as a qualifier rather than a fourth bucket. |
 
 ## `public.question_authors` — settled 19 Nov 2026 (migration 010)
 
@@ -3347,7 +3347,7 @@ says `./Pages/`. macOS resolves `src/pages` to it as well, so a lower-case
 import would build locally and **fail on Vercel's Linux**. The suite asserts
 the import spelling for this reason.
 
-## STAGE 12 — SIGNED OFF 25 Nov 2026 (UNCONDITIONAL)
+## STAGE 12 — SIGNED OFF 25 Nov 2026. **FINAL.**
 
 Rishi's result, verbatim: *"Stage 12 passes."* He confirmed, in order: the
 header showing My Dashboard and Settings with no Profile; both company rows
@@ -3371,6 +3371,12 @@ still opening the sign-in popup and the Ask button still present.
 footer's narrow-width behaviour is pre-existing production behaviour, proved
 below. **So the sign-off is unconditional**, on his word: *"Make the stage 12
 record unconditional… Nothing outstanding against `86ba72c`."*
+
+**FINAL as of the second retest**, which covered the two decisions taken after
+the sign-off: no Save on question cards or question pages as a recruiter with
+hearts intact; Save back for a Google account and still appearing at
+`/profile/saved`; the Community column showing at 375px; and Save plus hearts
+working signed out. **Nothing in stage 12 is open.**
 
 ### HE FOUND THE FOOTER, AND IT WAS THE SECOND INCOMPLETE APPLICATION
 
@@ -3641,6 +3647,93 @@ Everything else unchanged and passing: stage4 **52**, stage5 **42**, stage6
 **62**, stage7 **56**, stage8 **44**, stage9 **90**, stage10
 **121 + 62 + 111 + 116**, stage12 reset gate **69**, check-overflow **18**,
 eslint **8**.
+
+## THE WORDING PASS — DECIDED 25 Nov 2026
+
+Held as a set since stage 7 so the words moved together rather than one screen
+at a time. His decisions, and what each turned out to involve.
+
+### W1 — "verify your company" → "verify your account". DONE
+
+All four occurrences in one change:
+
+| File | Where |
+|---|---|
+| `RecruiterApplications.jsx` | the gate panel — *"Please verify your account to see candidate details."* |
+| `RecruiterJobs.jsx` | the My jobs counter line — *"— verify your account to see who"* |
+| `PostAJob.jsx` | the signed-in recruiter notice — *"we need to verify your account first"* |
+| `PostAJob.jsx` | the **Company website** field hint — *"We use this to verify your account."* |
+
+**The row's own description was wrong about one location.** It named a "stage
+3 signup banner"; the string is not there. The fourth occurrence is the
+**Company website field hint** on the posting form. Worth recording because
+the description, not the count, is what someone would search by.
+
+**AND THE CONCEPT SURVIVES IN THREE MORE PLACES UNDER A DIFFERENT PHRASE** —
+see the open question below. W1 said *"changing one and not the others would
+be worse than leaving all four"*, and that logic reaches the phrase
+`company verification` too, which W1 never named.
+
+### W5 — the reports tab becomes "Role performance". DONE
+
+`AdminReports.jsx`'s `VIEWS`, label only. **The `key` is untouched, so no URL
+changes.** The admin action-queue tab stays **Roles**, on his reasoning: *"The
+admin tab acts on roles; the report counts them."* The `<h3>Roles</h3>`
+grouping role figures inside the Overview tab is left alone — W5 is about two
+**tabs** with one name, and that heading is not a tab.
+
+### W6 — the anonymised figure becomes a parenthetical. DONE
+
+`1 new · 1 not selected · 3 anonymised` → **`1 new · 1 not selected (3 anonymised)`**
+
+Rishi: *"Every number is right; it's the grammar inviting the sum."* Joined by
+a separator it read as a fourth bucket; bracketed it reads as a qualifier of
+the figures before it. **Nothing about what is counted changed** — the two
+axes from W3 are intact, and the parts still deliberately need not sum to the
+card count.
+
+**ONE EDGE CASE, AND IT IS THE LIVE ONE.** With no decision parts there is
+nothing for a parenthetical to qualify, and `(3 anonymised)` alone would be
+brackets attached to nothing. It stays **bare** in that case — which was
+already stage 7's asserted behaviour, so it is preserved rather than invented.
+**That is not a hypothetical: all 18 applications in production are
+anonymised today**, so the bare form is what the page shows right now.
+
+Four assertions added to `stage7-applications-test.mjs` (**56 → 60**),
+including one that the figure never appears after a separator and one that the
+bare case grows no brackets.
+
+### W7 — SUPERSEDED, not acted on
+
+He asked for it to be checked before anything was done, and he was right:
+
+> *"It's logged as 'Apply Directly doesn't contain the word jobs', but I
+> removed that nav item and the homepage card in stage 10 round two."*
+
+**Searched: `Apply Directly` appears nowhere in the repo** — not in `src`,
+`api`, `scripts`, any `.jsx`, `.js`, `.mjs` or `.html`, case-insensitively,
+outside `node_modules` and `dist`. Both surfaces that carried it were removed
+when the board's placement changed on 24 Nov.
+
+**The entrance now reads `Exclusive GCC Jobs`**, stored in
+`src/lib/boardPromo.js` as `HEADING_LEAD = "Exclusive"` and
+`HEADING_ACCENT = "GCC Jobs"`. W7's entire concern was a label that did not
+contain the word "jobs". **The replacement contains it.** So there is nothing
+to decide and nothing to change: **closed as superseded by stage 10 round
+two**, which is a different outcome from closing it as done.
+
+This is the second item in two days that was stale because the thing it
+described had been removed — the same class as the company seed. **A logged
+wording item is about a string, so it is worth searching for the string before
+discussing it.**
+
+### W2 — wording proposed, NOT WRITTEN
+
+He asked to see the posting-form wording before it is built, and his
+instruction carries the reasoning: *"an unverified recruiter should learn
+about it at the moment it stops them, which is the only moment it matters."*
+The chip cannot carry the no-limit fact, so the fact moves to the form. The
+proposal is in the reply of 25 Nov; nothing is in the code yet.
 
 ## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
 

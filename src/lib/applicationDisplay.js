@@ -96,9 +96,27 @@ export function summariseStatuses(rows) {
   // data is counted in BOTH, and the parts deliberately need not sum to the
   // number of cards -- two axes, not one partition. The card itself shows the
   // same two facts: a Shortlisted chip and "Details removed".
-  if (anonymised) parts.push(`${anonymised} anonymised`);
+  //
+  // W6, decided 25 Nov 2026: IT IS A PARENTHETICAL, NOT A FOURTH ITEM.
+  // Joined with the others by " · " it read as a fourth bucket, so
+  // `1 new · 1 not selected · 3 anonymised` invited the reader to add them
+  // to 5 against 4 applications. Every figure was correct and the GRAMMAR was
+  // wrong. Rishi: *"Every number is right; it's the grammar inviting the
+  // sum."* Brackets say "this qualifies the above" where a separator says
+  // "this is another of the same kind".
+  //
+  // WITH NOTHING TO QUALIFY IT STAYS BARE. An all-anonymised list has no
+  // decision parts, and `(3 anonymised)` alone is a parenthetical attached to
+  // nothing. That case is not hypothetical -- every one of the 18 live
+  // applications is anonymised today -- and it was already the behaviour
+  // stage 7 asserted, so it is preserved rather than invented.
+  if (!parts.length) {
+    return anonymised ? `${anonymised} anonymised` : "";
+  }
 
-  return parts.join(" · ");
+  const line = parts.join(" · ");
+
+  return anonymised ? `${line} (${anonymised} anonymised)` : line;
 }
 
 // ---------------------------------------------------------------------------

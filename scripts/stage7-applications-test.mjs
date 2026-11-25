@@ -114,22 +114,40 @@ t("withdrawn comes last",
   summariseStatuses(rows("withdrawn", "applied")), "1 new · 1 withdrawn");
 t("an unknown status is counted, not dropped",
   summariseStatuses(rows("under_review", "applied")), "2 new");
-console.log("\nanonymised applications -- W3");
+console.log("\nanonymised applications -- W3, and W6's grammar");
 const anon = (status) => ({ status, is_anonymised: true });
 t("an anonymised application is not 'new'",
   summariseStatuses([anon("applied")]), "1 anonymised");
 t("it does not inflate a queue that cannot be cleared",
   summariseStatuses([...rows("applied", "applied"), anon("applied")]),
-  "2 new · 1 anonymised");
+  "2 new (1 anonymised)");
 t("a decision you made is still counted, on its own axis",
-  summariseStatuses([anon("shortlisted")]), "1 shortlisted · 1 anonymised");
+  summariseStatuses([anon("shortlisted")]), "1 shortlisted (1 anonymised)");
 t("so the parts need not sum to the card count, deliberately",
-  summariseStatuses([anon("not_selected")]), "1 not selected · 1 anonymised");
+  summariseStatuses([anon("not_selected")]), "1 not selected (1 anonymised)");
+
+// W6: the figure is a parenthetical, so it never joins the others with " · ".
+t("W6: the anonymised figure is bracketed, not a fourth bucket",
+  summariseStatuses([...rows("applied", "not_selected"), anon("applied"), anon("applied"), anon("applied")]),
+  "1 new · 1 not selected (3 anonymised)");
+t("W6: it never appears after a separator",
+  /· \d+ anonymised/.test(
+    summariseStatuses([...rows("applied"), anon("applied")]),
+  ),
+  false);
 t("a normal list is unchanged by the new rule",
   summariseStatuses(rows("applied", "shortlisted")), "1 new · 1 shortlisted");
 t("an all-anonymised list reads as such and shows no work",
   summariseStatuses([anon("applied"), anon("applied"), anon("applied")]),
   "3 anonymised");
+// W6 leaves this one bare on purpose: a parenthetical with nothing before it
+// qualifies nothing. It is also the live case -- all 18 applications in
+// production are anonymised.
+t("W6: with nothing to qualify, no brackets",
+  summariseStatuses([anon("applied"), anon("applied")]).includes("("),
+  false);
+t("an empty list is an empty line",
+  summariseStatuses([]), "");
 t("a missing is_anonymised behaves exactly as before",
   summariseStatuses(rows("applied")), "1 new");
 

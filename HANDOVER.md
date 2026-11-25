@@ -80,7 +80,7 @@ https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app
 | 1–9b | **Signed off** |
 | 10 (SEO, findability, saved roles) | **Signed off 25 Nov**, both halves |
 | 11 (analytics) | **Deferred to v2.** GA4 already records per-role page views, so what was deferred is a number inside the product, not the ability to measure. **The data is not retroactive** — that is the accepted cost. |
-| 12 (recruiter password reset, settings) | **SIGNED OFF 25 Nov, unconditional.** *"Stage 12 passes."* The two fixes he found afterwards were retested and pass; the one retest step that failed was pre-existing production behaviour, not a regression |
+| 12 (recruiter password reset, settings) | **SIGNED OFF 25 Nov. FINAL.** Both retests pass, including the two decisions taken after the sign-off. Nothing in stage 12 is open |
 
 Then: the design pass, the pre-merge clearout, and one merge.
 
@@ -92,8 +92,15 @@ footer's Community column now shows at every width, because
 `Join the Community` is the one footer link with no mobile equivalent.
 
 **What is left is not a stage.** See section 9 and the carried-items table in
-the tracker: the design pass, the wording pass, the live Markdown defect
-(item 27), the clearout, and the production-dependent checks.
+the tracker: the design pass, the live Markdown defect (item 27), the
+clearout, and the production-dependent checks.
+
+**The wording pass is nearly done.** W1, W5 and W6 shipped on 25 Nov; **W7
+was closed as superseded** — `Apply Directly` no longer exists anywhere, so
+the item described a string that had been removed. **Only W2 remains**, and
+it is waiting on his approval of proposed wording, not on build time: the
+verified state becomes a plain chip and the "no limit on live roles" fact
+moves to the **posting form**, where the cap actually bites.
 
 ---
 
@@ -264,9 +271,9 @@ right assertion**. **Re-run it after editing `main.jsx`, `SiteHeader.jsx`,
 reported as "MUTATION CHANGED NOTHING" means its anchor text moved, not that
 the code is fine.
 
-Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **56**,
+Current counts: stage4 **52**, stage5 **42**, stage6 **62**, stage7 **60**,
 stage8 **44**, stage9 **90**, stage10 **116 + 111 + 62 + 121**, stage12
-**69 + 109**, check-overflow **18**. **eslint has exactly 8 pre-existing
+**69 + 109**, check-overflow **18**. **stage7 is 60, not 56** — W6 added four. **eslint has exactly 8 pre-existing
 errors** — 2 in `Jobs.jsx`, 1 in `Signup.jsx`, 5 in `main.jsx`. That is the
 baseline, not a problem to fix.
 
@@ -319,6 +326,10 @@ the tracker before quoting an assertion count as reassurance.
   The reset is initiated server-side, so under PKCE the verifier would be
   generated in a serverless function and thrown away. **Switching the client
   to PKCE breaks the reset silently.**
+- **A logged WORDING item is about a string, so search for the string before
+  discussing it.** W7 was debated as a live concern and the text it named had
+  been deleted a day later in stage 10 round two. Same class as quoting a
+  stale count: the note outlived the thing.
 - **Changing a shared constant invalidates fixtures in suites you did not
   think to run.** Raising `DESCRIPTION_MIN` to 400 broke 40 of
   `stage4-validation-test.mjs`'s 52 assertions and nobody noticed for a day.

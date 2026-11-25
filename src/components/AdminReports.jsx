@@ -35,9 +35,13 @@ import {
 // column. Opening one person is a separate call and a deliberate act.
 // ===========================================================================
 
+// W5, decided 25 Nov 2026. /admin had TWO tabs called "Roles" -- the action
+// queue's and this report's. Renamed here rather than there because the
+// distinction is what each DOES: the admin tab acts on roles, this one counts
+// them. The `key` is untouched, so no URL changes.
 const VIEWS = [
   { key: "overview", label: "Overview" },
-  { key: "roles", label: "Roles" },
+  { key: "roles", label: "Role performance" },
   { key: "recruiters", label: "Recruiters" },
   { key: "candidates", label: "Candidates" },
 ];
