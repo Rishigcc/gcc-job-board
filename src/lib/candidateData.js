@@ -83,7 +83,8 @@ export async function fetchMyApplications() {
 }
 
 export async function deleteMyResume() {
-  return postAsUser("/api/delete-my-resume", {});
+  // One function, two actions -- api/my-data.js.
+  return postAsUser("/api/my-data", { action: "delete-resume" });
 }
 
 // `confirmation` is checked on the server as well as in the form. A typed
@@ -101,7 +102,7 @@ export async function deleteMyJobData(confirmation) {
 // the server that could be got wrong.
 // ---------------------------------------------------------------------------
 export async function fetchMyResumeUrl() {
-  const result = await postAsUser("/api/my-resume-url", {});
+  const result = await postAsUser("/api/my-data", { action: "resume-url" });
 
   if (result.error) return result;
   return { url: result.data?.url };

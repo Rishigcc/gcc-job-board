@@ -30,7 +30,7 @@
 //   you edit a constraint, edit this too.
 // ===========================================================================
 
-import { validateJob, EMPTY_JOB } from "../src/lib/jobFormModel.js";
+import { validateJob, EMPTY_JOB, DESCRIPTION_MIN } from "../src/lib/jobFormModel.js";
 import { liveSlotsLabel } from "../src/lib/jobOptions.js";
 
 const base = {
@@ -46,7 +46,13 @@ const base = {
   employment_type: "full_time",
   experience_min: "3",
   experience_max: "7",
-  description: "x".repeat(60),
+  // 400, not 60. THE MINIMUM WAS RAISED FROM 50 TO 400 on 24 Nov 2026 for
+  // Google's "we don't allow job postings with incomplete job descriptions",
+  // and this shared fixture then failed EVERY assertion that used it -- 40
+  // of them -- for weeks, because nobody re-ran this suite. Derived from the
+  // constant rather than written as a number, so the next change to it
+  // cannot do the same thing again.
+  description: "x".repeat(DESCRIPTION_MIN),
   apply_mode: "in_platform",
 };
 
@@ -80,12 +86,15 @@ t("max equal to min accepted", { ...base, experience_min: "5", experience_max: "
 t("non-integer rejected", { ...base, experience_min: "2.5" }, ["experience_min"]);
 t("blank rejected (column is not null)", { ...base, experience_min: "" }, ["experience_min"]);
 
-console.log("\ndescription -- check (length(btrim(description)) between 50 and 20000)");
-t("49 chars rejected", { ...base, description: "x".repeat(49) }, ["description"]);
-t("50 chars accepted", { ...base, description: "x".repeat(50) }, []);
+console.log(`\ndescription -- check (length(btrim(description)) between ${DESCRIPTION_MIN} and 20000)`);
+t(`${DESCRIPTION_MIN - 1} chars rejected`,
+  { ...base, description: "x".repeat(DESCRIPTION_MIN - 1) }, ["description"]);
+t(`${DESCRIPTION_MIN} chars accepted`,
+  { ...base, description: "x".repeat(DESCRIPTION_MIN) }, []);
 t("20000 accepted", { ...base, description: "x".repeat(20000) }, []);
 t("20001 rejected", { ...base, description: "x".repeat(20001) }, ["description"]);
-t("50 spaces rejected (btrim)", { ...base, description: " ".repeat(50) }, ["description"]);
+t(`${DESCRIPTION_MIN} spaces rejected (btrim)`,
+  { ...base, description: " ".repeat(DESCRIPTION_MIN) }, ["description"]);
 
 // ---------------------------------------------------------------------------
 // The external-apply option was removed from the form. jobs.apply_mode and
