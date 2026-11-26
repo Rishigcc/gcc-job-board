@@ -319,6 +319,39 @@ function RecruiterJobs() {
                         {display.key === "expired"
                           ? `Expired ${formatDate(job.expires_at)}`
                           : `Expires ${formatDate(job.expires_at)}`}
+                        {/* UNREACHABLE BY DESIGN, AND KEPT ON PURPOSE.
+                            This is the only place in the UI that branches on
+                            apply_mode, and nothing can currently put a job
+                            into the 'external' state:
+
+                              - jobFormModel.js has no control for it, and
+                                pins apply_mode to 'in_platform'.
+                              - jobMutations.js insertPayload() pins
+                                apply_mode and external_url on every write,
+                                rather than reading them from the form.
+                              - RecruiterJobEdit.jsx forces 'in_platform' on
+                                load, so if an 'external' row ever did exist,
+                                saving it would convert it rather than
+                                preserve a route the form cannot show.
+                              - private.job_accepts_applications (migration
+                                007) requires apply_mode = 'in_platform', so
+                                such a role would collect nothing anyway.
+
+                            Only a hand-written SQL edit could make this line
+                            render. It is NOT deleted because the columns stay
+                            in the schema (migration 001, with the
+                            external_needs_https_url check) specifically so
+                            that reversing the decision is a form change and
+                            never a migration -- stage4-validation-test.mjs
+                            asserts that reversibility. If the option ever
+                            comes back, this is the honest label for the
+                            state, already written.
+
+                            The recruiter-facing promise is the other half of
+                            this: PostAJob.jsx and JobForm.jsx both now say
+                            applications stay on the site. Do not reintroduce
+                            copy that offers an external route without
+                            changing all three. */}
                         {job.apply_mode === "external"
                           ? " · Applications go to your own site"
                           : null}

@@ -300,7 +300,8 @@ function PostAJob({ initialMode = "signup" }) {
                   <strong className="font-semibold text-slate-900">
                     Candidates apply with a resume.
                   </strong>{" "}
-                  Or send them to your own ATS, if you'd rather.
+                  Everything stays in one place — they apply on the site and
+                  can track every application they've made.
                 </span>
               </li>
               <li className="flex gap-3">
