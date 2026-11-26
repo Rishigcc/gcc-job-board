@@ -1,6 +1,28 @@
+import { createClient } from "@supabase/supabase-js";
+
 // Triggered daily by Vercel Cron. Hitting the deploy hook starts a fresh
 // build, which re-runs the prerender step so questions posted since the last
 // deploy become crawlable.
+//
+// IT ALSO CARRIES THE 12-MONTH APPLICATION SWEEP (stage 8).
+//
+//   The privacy policy says applications are kept "for up to 12 months after
+//   it closes or expires". Something has to make that true, and the Hobby
+//   plan allows two cron jobs, both already taken.
+//
+//   This one hosts it rather than the digest, deliberately. The digest sends
+//   to ~2,500 people and a crash part-way through risks double-sending; this
+//   function sends nothing, so a failure here is invisible to everyone. The
+//   sweep therefore runs AFTER the deploy hook has fired and is wrapped so it
+//   can never stop a rebuild: its outcome is reported in the body and the
+//   logs, never by failing the request.
+//
+//   It touches no files. Resumes have their own retention -- "until you
+//   replace or delete it" -- and there is one per candidate rather than one
+//   per application, so an application sweep never deletes a resume. The
+//   whole thing is one SQL statement inside
+//   public.purge_expired_applications(), which is granted to service_role
+//   only.
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") {
     res.setHeader("Allow", "GET, POST");
@@ -29,5 +51,47 @@ export default async function handler(req, res) {
   }
 
   console.log("Rebuild triggered via deploy hook");
-  return res.status(200).json({ triggered: true });
+
+  // Everything below is secondary. The rebuild has already been triggered and
+  // nothing here may change that outcome.
+  const purge = await purgeExpiredApplications();
+
+  return res.status(200).json({ triggered: true, ...purge });
+}
+
+// Returns a plain object either way. It never throws and never rejects, so
+// the caller above has nothing to guard against.
+async function purgeExpiredApplications() {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceKey) {
+    console.error("rebuild: retention sweep skipped, missing Supabase configuration");
+    return { purgeSkipped: "not configured" };
+  }
+
+  try {
+    const admin = createClient(supabaseUrl, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { data, error } = await admin.rpc("purge_expired_applications", {
+      p_limit: 5000,
+    });
+
+    if (error) {
+      console.error("rebuild: retention sweep failed", error);
+      return { purgeError: error.message };
+    }
+
+    const purged = typeof data === "number" ? data : 0;
+
+    // Logged on every run, including zero, so a sweep that has silently
+    // stopped working is visible as an absence in the cron log.
+    console.log(`rebuild: retention sweep purged ${purged} application(s)`);
+    return { purged };
+  } catch (err) {
+    console.error("rebuild: retention sweep threw", err);
+    return { purgeError: err.message };
+  }
 }

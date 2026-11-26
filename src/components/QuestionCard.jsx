@@ -4,6 +4,17 @@ import { supabase } from "../lib/supabase";
 import { formatRelativeTime } from "../lib/relativeTime";
 import SignInPopup from "./SignInPopup";
 
+// `canSave` HAS NO DEFAULT, DELIBERATELY. An omitted prop is undefined and
+// therefore falsy, so a new call site that forgets it HIDES the Save control
+// rather than showing it to someone who cannot use it. Hiding a control that
+// should be there is a visible bug the next person fixes; showing one that
+// leads nowhere is the fault this prop exists to prevent, and it is invisible
+// unless you happen to be signed in as a recruiter.
+//
+// Added 25 Nov 2026, with the same reasoning as the Save control on a role:
+// /profile/saved is closed to recruiters, so a recruiter saving a question
+// would have nowhere to see it. Hearts are untouched — a heart is a public
+// reaction with no personal list behind it, so it dead-ends nothing.
 function QuestionCard({
   question,
   interactions,
@@ -12,6 +23,7 @@ function QuestionCard({
   cardRef,
   currentUserId,
   onDeleted,
+  canSave,
 }) {
   const navigate = useNavigate();
 
@@ -114,7 +126,7 @@ function QuestionCard({
     >
       <h2
         ref={titleRef}
-        className="line-clamp-2 text-lg font-bold leading-snug text-slate-900 sm:text-xl"
+        className="line-clamp-2 break-words text-lg font-bold leading-snug text-slate-900 sm:text-xl"
       >
         {question.title}
       </h2>
@@ -133,7 +145,7 @@ function QuestionCard({
 
       <p
         ref={descriptionRef}
-        className="mt-2 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-slate-600 sm:text-base"
+        className="mt-2 line-clamp-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 sm:text-base"
       >
         {question.description}
       </p>
@@ -217,6 +229,7 @@ function QuestionCard({
           )}
         </div>
 
+        {canSave ? (
         <div className="relative">
           <button
             type="button"
@@ -254,6 +267,7 @@ function QuestionCard({
             />
           )}
         </div>
+        ) : null}
 
       </div>
 

@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { fetchAuthorNames } from "../lib/authors";
 import { useQuestionCardInteractions } from "../lib/useQuestionCardInteractions";
+import { useViewer, showsCandidateControls } from "../lib/useViewer";
 import Footer from "../components/Footer";
 import LoadingCard from "../components/LoadingCard";
 import SiteHeader from "../components/SiteHeader";
@@ -15,6 +16,16 @@ const TRENDING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function Questions() {
   const navigate = useNavigate();
+
+  // /questions is public and the header's link to it is hidden from a
+  // recruiter — but hiding a nav item does not close a URL, and this page
+  // had no idea who was reading it. A signed-in recruiter who typed the
+  // address was offered "Ask a Question", and /ask has been behind
+  // blockRecruiters since 25 Nov 2026, so the button bounced them to
+  // /recruiter. Found by sweeping for links to the seven closed routes,
+  // after the same omission was found in the footer.
+  const viewer = useViewer();
+  const canAsk = showsCandidateControls(viewer);
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -340,12 +351,14 @@ function Questions() {
               careers.
             </p>
 
-            <button
-              onClick={() => navigate("/ask")}
-              className="mt-4 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-md shadow-blue-500/20 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg sm:text-base"
-            >
-              Ask a Question
-            </button>
+            {canAsk ? (
+              <button
+                onClick={() => navigate("/ask")}
+                className="mt-4 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-md shadow-blue-500/20 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg sm:text-base"
+              >
+                Ask a Question
+              </button>
+            ) : null}
 
           </div>
 
@@ -408,6 +421,7 @@ function Questions() {
                   if (el) cardRefs.current[question.id] = el;
                 }}
                 currentUserId={userId}
+                canSave={canAsk}
                 onDeleted={(id) =>
                   setQuestions((prev) => prev.filter((q) => q.id !== id))
                 }
@@ -426,12 +440,14 @@ function Questions() {
                 Be the first to ask the community a question.
               </p>
 
-              <button
-                onClick={() => navigate("/ask")}
-                className="mt-6 rounded-xl bg-blue-600 px-6 py-3 text-white shadow-sm transition hover:bg-blue-700"
-              >
-                Ask a Question
-              </button>
+              {canAsk ? (
+                <button
+                  onClick={() => navigate("/ask")}
+                  className="mt-6 rounded-xl bg-blue-600 px-6 py-3 text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  Ask a Question
+                </button>
+              ) : null}
 
             </div>
           ) : (

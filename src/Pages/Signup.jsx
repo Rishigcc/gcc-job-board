@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { consumePostLoginRedirect } from "../lib/postLoginRedirect";
 import { trackEvent } from "../analytics";
@@ -296,6 +296,29 @@ useEffect(() => {
                     New here? Join the community.
                   </button>
                 )}
+              </p>
+
+              {/* ENTRANCE 1 OF 2 for a returning recruiter, 25 Nov 2026.
+                  Quiet and at the bottom on purpose: this page belongs to the
+                  community, and 2,520 of its 2,656 accounts will never want
+                  this link. It is here because a recruiter who has forgotten
+                  where to sign in will try the sign-in page first, and until
+                  now it told them nothing.
+
+                  It states the separation rather than only linking, because
+                  the common confusion is not "where do I sign in" but
+                  "why won't my recruiter password work here" -- and the
+                  answer is that they are two different accounts. The same
+                  sentence is in the privacy policy's recruiter paragraph. */}
+              <p className="mt-6 border-t border-slate-100 pt-4 text-center text-[13px] leading-relaxed text-slate-500">
+                Recruiter accounts are separate from community accounts.{" "}
+                <Link
+                  to="/recruiter/sign-in"
+                  className="font-semibold text-slate-600 underline hover:text-slate-900"
+                >
+                  Sign in as a recruiter
+                </Link>
+                .
               </p>
 
             </div>

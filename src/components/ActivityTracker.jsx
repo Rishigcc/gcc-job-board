@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { isRecruiterUser } from "../lib/accountType";
 
 // Today's date in IST (YYYY-MM-DD). Used only as a client-side guard to
 // avoid redundant network calls; the authoritative IST date is computed
@@ -21,6 +22,17 @@ function ActivityTracker() {
       } = await supabase.auth.getSession();
 
       if (!session) return;
+
+      // user_activity counts COMMUNITY active days: it feeds the digest's
+      // active-user set and the community stats. A recruiter account has no
+      // profiles row, so counting it would inflate both. Recruiters reach
+      // this code because ActivityTracker is mounted at the app root and
+      // runs on every page, including /recruiter.
+      //
+      // If one account ever needs to be both a candidate and a recruiter,
+      // change this to key off the presence of a profiles row instead of
+      // the account_type metadata.
+      if (isRecruiterUser(session.user)) return;
 
       const today = istToday();
 

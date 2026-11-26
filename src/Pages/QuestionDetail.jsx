@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useDisplayName } from "../lib/useDisplayName";
 import { fetchAuthorNames } from "../lib/authors";
 import { useQuestionSaves } from "../lib/useQuestionSaves";
+import { useViewer, showsCandidateControls } from "../lib/useViewer";
 import { useQuestionHearts } from "../lib/useQuestionHearts";
 import { useAnswerHearts } from "../lib/useAnswerHearts";
 import { TAG_OPTIONS } from "../lib/tags";
@@ -67,6 +68,15 @@ function QuestionDetail() {
     setDisplayNameInput,
     ensureDisplayName,
   } = useDisplayName();
+
+  // /questions/:slug is public, so a recruiter can reach it by URL even
+  // though the header's link to the community is hidden from them. The Save
+  // control is withheld for the same reason it is on a role: /profile/saved
+  // is behind blockRecruiters, so a saved question would have nowhere to be
+  // seen. Hearts stay — a heart is a public reaction with no personal list
+  // behind it, so it dead-ends nothing.
+  const viewer = useViewer();
+  const canSave = showsCandidateControls(viewer);
 
   const [question, setQuestion] = useState(null);
   // "loading" | "ok" | "missing" | "error" — two booleans cannot express the
@@ -747,7 +757,7 @@ function QuestionDetail() {
                   </form>
                 ) : (
                   <>
-                <h1 className="text-xl font-bold leading-snug text-slate-900 sm:text-2xl">
+                <h1 className="break-words text-xl font-bold leading-snug text-slate-900 sm:text-2xl">
                   {question.title}
                 </h1>
 
@@ -769,7 +779,7 @@ function QuestionDetail() {
                   </div>
                 )}
 
-                <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-600 sm:text-base">
+                <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 sm:text-base">
                   {question.description}
                 </p>
 
@@ -850,6 +860,7 @@ function QuestionDetail() {
                       )}
                     </div>
 
+                    {canSave ? (
                     <div className="relative">
                       <button
                         type="button"
@@ -892,6 +903,7 @@ function QuestionDetail() {
                         />
                       )}
                     </div>
+                    ) : null}
 
                   </div>
 
@@ -1031,7 +1043,7 @@ function QuestionDetail() {
                             : "border-slate-200"
                         }`}
                       >
-                        <p className="text-xs text-slate-500 sm:text-sm">
+                        <p className="break-words text-xs text-slate-500 sm:text-sm">
                           {answer.author_name || "Community Member"}
                           {answer.user_id === question.user_id && (
                             <span className="ml-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
@@ -1088,7 +1100,7 @@ function QuestionDetail() {
                           </form>
                         ) : (
                           <>
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 sm:text-base">
+                            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700 sm:text-base">
                               {answer.body}
                             </p>
 

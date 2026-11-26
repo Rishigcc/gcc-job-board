@@ -1,0 +1,5618 @@
+# Job board — test data created in production
+
+Everything below was created in the **live** Supabase project while testing,
+because migrations, Storage buckets and auth settings cannot be branched.
+Clean this out before the final merge to `main`.
+
+Status key: `LIVE` = still present, `CLEANED` = removed.
+
+## Stage 1 — schema
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Your admin row | `public.user_roles` | Delete the row whose `user_id` is yours | LIVE |
+| Decoy `candidate` role row, pointed at a random real member | `public.user_roles` | n/a | CLEANED — deleted during stage 1 |
+| `candidate` role row for your 2nd Google account | `public.user_roles` | `delete from public.user_roles where user_id = '<2nd account uid>';` | **LIVE — kept deliberately.** Rishi decided in stage 3 testing to keep it: it is the candidate persona for stages 6-8. Delete before merge. |
+| Your 2nd Google test account | `auth.users` + `public.profiles` | Keep it — needed again for candidate testing in stages 6-8. Delete from Authentication → Users before launch. | LIVE — keep until stage 8 |
+
+**Correction (stage 3 testing).** An earlier version of this file said the
+`candidate` role row would be removed "at the end of stage 1", and the stage 3
+checklist wrongly told Rishi to expect **two** rows in `user_roles`. The row was
+never deleted and is useful, so the correct expectation from here on is:
+
+| `user_roles` rows | Who | Status |
+|---|---|---|
+| `admin` | Rishi | LIVE |
+| `candidate` | 2nd Google test account | LIVE — kept on purpose |
+| `recruiter` × 2 | `community@` and `feedback@iworkatgcc.com` | LIVE |
+
+So **four** rows after stage 3, not two.
+
+The four job board tables are otherwise empty.
+
+Note: signing in with the second Google account creates a `profiles` row,
+which triggers the **existing** community welcome email to that address. That
+is the welcome email that already ships today, not a new one, and it lands in
+your own inbox.
+
+## Stage 2 — policy pages
+
+No database or test data created. Nothing to clean up.
+
+## Stage 3 — recruiter accounts
+
+**SIGNED OFF by Rishi, 18 November 2026.** Verified on the branch preview:
+recruiter signup with the free-provider block, the single Brevo confirmation
+email, the amber and green company-verification banners, the community nav
+hidden in both the header and the footer, `/welcome` redirecting with no
+flash, and both account-takeover tests. Commits `9382154`, `8da7cce`,
+`f2ee13e`, `8a8e9b6`.
+
+
+Two test recruiter accounts, both mailboxes Rishi owns and can read. Two
+rather than one so we can prove recruiter A cannot read recruiter B's
+applicants.
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Test recruiter A — `community@iworkatgcc.com` | `auth.users`, `public.recruiter_profiles`, `public.user_roles` | Authentication → Users → delete. Cascades to both tables. | LIVE — created and confirmed 16 Nov 2026 |
+| Test recruiter B — `feedback@iworkatgcc.com` | same | same | LIVE — created and confirmed 16 Nov 2026 |
+| Stray `user_activity` row for `community@` | `public.user_activity` | `delete from public.user_activity where user_id = (select id from auth.users where email = 'community@iworkatgcc.com');` — or just delete the account, which cascades | LIVE — written before the ActivityTracker guard existed |
+| Any companies, jobs and applications these two create | `public.companies`, `public.jobs`, `public.applications` | Delete the jobs first (applications cascade), then any company rows they created | PLANNED |
+
+**Both accounts, and everything they create, get deleted before the merge
+to `main`.** Nothing these accounts produce is real data.
+
+Known wrinkles with these two addresses, both flagged to Rishi:
+
+- Both are on `iworkatgcc.com`, so `recruiter_profiles.email_domain` is
+  identical for both. That does not weaken the isolation test — a job is
+  owned by `posted_by` (a user id), never by domain.
+- `jobs@` is deliberately NOT a test account: it is the sender and
+  reply-to on the recruiter signup email, and self-addressed mail through
+  Brevo is a delivery problem not worth debugging.
+- Mail still goes from `iworkatgcc.com` to `iworkatgcc.com` via an
+  external relay, which is the classic shape for spam quarantine. Treat
+  the **Brevo transactional log** as ground truth for "did we send it",
+  not the inbox.
+- `community@` is the sender on the existing welcome and digest emails.
+  Using it as a recruiter test account is fine — recruiters get no
+  `profiles` row, so neither of those emails can reach it.
+- Do **not** sign in to the community side with either address via Google.
+  If `iworkatgcc.com` runs on Google Workspace that would create a second
+  identity on the same email and muddy every test.
+
+### Stage 3 — account-takeover testing (settled 18 Nov 2026)
+
+Enabling the email/password provider meant anyone could POST to
+`/auth/v1/signup` with any address. 2,486 of the accounts on this project are
+Google-only with no password, and several sit on real company domains that
+pass the free-provider blocklist. Two tests, run with
+`scripts/stage3-takeover-check.js` and `.sql`:
+
+**T1 — password signup against an address that already exists as Google-only.
+PASS.** HTTP 200, no session, `identities` length 0, and a *fabricated* user
+id that matches no real row. The real row was untouched: `has_password` false,
+one identity, provider google. No Brevo send. This is Supabase's documented
+enumeration protection, and it means **all existing members are immune**.
+
+**T2 — pre-register an unconfirmed password account, then have the real owner
+sign in with Google. PASS, outcome B.** The merge kept the same user id
+(`2db00631-…`) but Supabase wiped **both** the attacker's password and the
+attacker's `user_metadata`:
+
+| | after T2A (pre-registered) | after the owner's Google sign-in |
+|---|---|---|
+| `confirmed` | false | true |
+| `has_password` | **true** | **false** |
+| `providers` | email | google |
+| `identity_count` | 1 | 1 |
+| `account_type` metadata | recruiter | **null** |
+| `recruiter_name` metadata | "Takeover probe" | **null** |
+
+`signInWithPassword` with the attacker's password then returned 400
+"Invalid login credentials".
+
+This is better than the Supabase docs promise — they only commit to removing
+the unconfirmed *identity*, and say nothing about the password or the
+metadata. Both were cleared. The metadata-poisoning sub-case does not occur,
+so no mitigation is needed and no cleanup cron is required. Item 11 closed.
+
+While unconfirmed, the pre-registered account owned nothing: zero rows in
+`profiles`, `recruiter_profiles` and `user_roles`.
+
+**Note on baselines.** An earlier version of the `.sql` file hardcoded
+`2446 / 2444 / 2 / 0` as the expected counts. That was wrong — this is a live
+site and people join during testing (2,447 at the start of the stage 3
+retest, 2,488 two days later). Always run section 0 on the day and compare
+against that, never against a number written down earlier.
+
+## Stage 4 — posting a job
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Test job postings by the two recruiter accounts | `public.jobs` | `delete from public.jobs where posted_by in (select id from auth.users where email in ('community@iworkatgcc.com','feedback@iworkatgcc.com'));` | PLANNED |
+| Company rows created while testing | `public.companies` | Delete the jobs first, then the company rows. **Companies are shared**, so check nothing else references one before deleting it. | PLANNED |
+| `jobs_cap_guard` trigger + `private.jobs_cap_guard()` | database | `supabase/migrations/004_job_posting_messages_rollback.sql` — but keep it, it is product behaviour, not test scaffolding | LIVE after migration 004 |
+
+Notes for testing:
+
+- **Use obviously fake company names.** New tables are published to the
+  production API the moment they exist, so a test job is readable by anyone
+  holding the public key even though no production page links to it. "Test Co
+  A" is fine; a real GCC's name is not.
+- Reaching the 10-live-roles cap needs **10 live roles on one unverified
+  account**. They can be thin — the only long field is the description, at 50
+  characters minimum.
+- A job cannot be deleted through the UI by design: there is no DELETE grant
+  on `public.jobs` for `authenticated`. Closing is the recruiter's action;
+  deleting is yours, in the SQL editor.
+
+### Stage 4 — first test round, 18 Nov 2026
+
+Rishi tested the whole of stage 4 and everything passed, including the cap
+test (HTTP 400, `P0001`, our own sentence, not the RLS message). Nine UI
+issues and one design change were raised. All were fixed in the same stage.
+
+| # | Issue | Resolution |
+|---|---|---|
+| 1 | Checklist said 8 fields need attention on an empty submit; the form says 7 | My count was wrong, not the form. Later checklists state the rule, not the number. |
+| 2 | Page did not scroll to the first error | **Real bug.** `data-invalid` was passed to `<Field>` as a prop and `Field` never put it on a DOM node, so `querySelector("[data-invalid='true']")` matched nothing. The attribute is now on the wrapper `<div>`. |
+| 3 | Experience from/to inputs vertically misaligned | Hints moved from above the control to below it. Labels are one line everywhere, so paired fields in a grid now line up by construction. Also fixed Location vs Work mode, which had the same fault unreported. |
+| 4 | Error messages did not clear when a field was fixed | Errors were held in `useState` and only recomputed on submit. They are now derived — `const errors = touched ? validateJob(values) : {}` — so they cannot go stale. |
+| 5 | Enter submitted the whole form | Form-level `onKeyDown` blocks Enter unless the target is a `<textarea>` or a `<button>`. |
+| 6 | No confirmation before posting | Two-step: **Review this role** → summary panel (title, hiring company with a new/existing badge, location, function) → **Confirm and publish**. On edit the panel appears only when the hiring company changed. |
+| 7 | Public link preview under the job title | Removed. |
+| 8 | Grey slot counter did not mention that verification lifts the limit | It does now. |
+| 9 | Dropdown type-ahead appeared not to work | **Cause: the `Choose…` placeholder.** Browsers' native type-ahead walks option *text*, so the letter C matched "Choose…" before Cybersecurity or Coimbatore. The placeholder is now `disabled`, which type-ahead and the arrow keys skip. |
+| 10 | Free-text hiring company fragments the company table | **Replaced with a picker.** See below. |
+
+### Stage 4 — the hiring company picker (issue 10)
+
+`src/components/CompanyPicker.jsx`. Typing searches `public.companies`
+server-side (debounced, `ilike`, 8 results). Typing resolves to **nothing**:
+the recruiter must either click an existing company or click
+"Add *name* as a new company", and `validateJob` refuses to submit until one
+of those has happened. The review panel then restates which it was.
+
+**Correction to something I told Rishi earlier.** I said slug matching meant
+"HSBC" and "H.S.B.C." resolved to one row. That was wrong: `slugify` turns
+every run of non-alphanumerics into a hyphen, so they became `hsbc` and
+`h-s-b-c`. There is now a separate `companySlug()` which deletes in-word
+punctuation first, so they do collide. But the wider point stands — no slug
+rule can know that "Walmart Global Tech India" and "Walmart" are one
+employer. The picker is the fix; the slug is only a spelling backstop.
+
+**Seeding.** `scripts/build-company-seed.mjs` turns a plain list of names
+into `supabase/migrations/005_seed_companies.sql`, deduplicating by
+`companySlug` and printing every collision for a human to settle. Input
+format: UTF-8 text, one company name per line, no header, no numbering,
+written exactly as it should display. The migration is data-only and
+`on conflict (slug) do nothing`, so it is safe to run twice and will never
+overwrite a name a recruiter created. **Note that `public.companies` is
+readable by `anon`, so seeded names are on the public API immediately.**
+
+### Stage 4 — second test round, 18 Nov 2026
+
+One real failure, two cosmetic, two new requests. All fixed.
+
+| # | Issue | Resolution |
+|---|---|---|
+| 1 | **The duplicate backstop did not work.** Typing `test co a.` returned "no company matches" and offered to create a duplicate. | **Real failure, and the one that mattered.** `companySlug()` was applied at insert time but not at search time, so a collision could only be found by causing it. The picker now runs **two** queries — `name ilike %term%` **and** `slug ilike %companySlug(term)%` — merges them, and sorts an exact slug match to the top. Verified against the live table: the name query returns nothing for `test co a.`, the slug query returns Test Co A. |
+| 2 | Prefill fired against an empty companies table | My description was wrong, not just the code: only the *id* was conditional, the *name* was always prefilled. That is how the stray `iworkatgcctest1` row was created. **Prefill dropped entirely**, per Rishi — for an agency their own company is never the hiring company. |
+| 3 | `\u2014` rendered as literal text under "Post a role" | JSX text is not a JS string literal, so the escape never ran. One instance; the two in `jobFormModel.js` are inside real string literals and were always correct. |
+| 4 | Location type-ahead: `c` → Chennai, `c` → Chandigarh, third press nothing | **Not fixed, by agreement.** Native macOS select behaviour. The bug that *was* ours — the enabled `Choose…` placeholder swallowing the first keystroke — is fixed. Replacing native selects with custom components would be worse on phones and for screen readers. |
+| R1 | Remove the external-apply option | Done. The radio group is gone and `insertPayload()` pins `apply_mode` to `in_platform` and `external_url` to null. **`jobs.apply_mode` and `jobs.external_url` deliberately stay in the schema**, so reversing this is a form change and never a migration. |
+| R2 | Warn before losing a half-filled form | `src/lib/useUnsavedChanges.js`. See the limit below. |
+
+**Known limit of the unsaved-work warning: the browser Back button is not
+covered.** Blocking it needs React Router's `useBlocker`, which only works
+on a data router (`createBrowserRouter`). This app uses `<BrowserRouter>`
+with `<Routes>`, so `useBlocker` throws. Converting the app to a data router
+touches every route on the site, community pages included, and is not a
+change to make from inside the posting form. Links, the logo, Cancel, tab
+close and reload are all covered.
+
+**Known limit of the company search:** it matches on the name, and on the
+slug of what was typed. It will not connect a name typed with the word
+breaks removed — `testcoa` does not find `Test Co A` — because that slug has
+no hyphens to match. Punctuation, casing and spacing are all handled.
+
+### Stage 4 — still to clean up before the merge
+
+- **All test jobs** in `public.jobs`, from both test rounds.
+- **All company rows** created while testing — `Test Co A`, `Test Co B`, and
+  anything else added through the picker. `iworkatgcctest1` was deleted
+  during the second round.
+- Deletion SQL is in the table above. **Jobs first, then companies**, because
+  of the foreign key. No DELETE grant on `public.jobs` for `authenticated`,
+  so this is Rishi's to run in the SQL editor.
+
+### Stage 4 — SIGNED OFF 18 Nov 2026
+
+Three test rounds. Commits `bb66739`, `a6040af`, `6d9729e`, `5f8f9ec`.
+
+Round one passed everything including the cap test and raised nine UI
+issues plus the hiring-company redesign. Round two found the one failure
+that mattered — the duplicate backstop searched names but normalised slugs,
+so a collision could only be discovered by causing it. Round three passed
+clean.
+
+Rishi's decisions recorded at sign-off:
+
+- **Browser Back button: do not schedule the router change.** Converting to
+  a data router rewrites routing for every page including the community
+  pages ~2,492 people use daily, to close a gap on one button in one form
+  in a feature that is not live. Revisit after merge, on its own.
+- **Same-name message: keep the add button suppressed.** A rare recruiter
+  emailing about a genuine collision costs one reply; duplicate company
+  rows cost admin work forever.
+- Applications are in-platform only. `apply_mode` and `external_url` stay
+  in the schema so this is reversible without a migration.
+
+Test data deliberately **kept** for stage 5, because the candidate side
+needs live roles to browse:
+
+| Row | Note |
+|---|---|
+| `Test Co A` | company, 0 jobs |
+| `Test Co B` | company, 1 live job |
+
+The Walmart company row and its test job were deleted during round three —
+a real company name should not sit in the table as a test artifact. Both
+Test Co rows and every test job still go before the merge.
+
+## Stage 5 — public jobs page and job detail
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| 24 sample roles, titles prefixed `[T5]` | `public.jobs` | `delete from public.jobs where title like '[T5]%';` | PLANNED |
+| `public.job_posting_agency(bigint)` | database | `supabase/migrations/005_public_job_detail_rollback.sql` — but keep it, it is product behaviour | LIVE after migration 005 |
+| Roles posted through the form while testing | `public.jobs` | `delete from public.jobs where posted_by in (select id from auth.users where email in ('community@iworkatgcc.com','feedback@iworkatgcc.com'));` | PLANNED |
+
+Notes:
+
+- **The 24 sample roles are inserted in the SQL editor, not through the
+  form.** Run there you are the `postgres` role, so the insert policy, the
+  column grants and the cap trigger are all bypassed — the trigger checks
+  `auth.uid()`, which is null in the editor. That is fine, and deliberate:
+  posting 24 roles by hand would re-prove stage 4 and nothing else. They are
+  scenery for the candidate side.
+- They all carry the `[T5]` prefix so one `like` clause removes every one.
+
+### Stage 5 — why the posting agency needed a migration
+
+`recruiter_profiles` is granted to `authenticated` only, and its read policy
+narrows that to the recruiter's own row plus admins — the same row carries
+their phone number and email domain. So the agency name could not be
+reached by a join from a public job. Migration 005 adds
+`public.job_posting_agency(bigint)`, which returns that one field and only
+for a job the caller can already see.
+
+Rejected alternatives, for the record: a view that bypasses RLS (flagged by
+Supabase's own security advisor, and easy to widen later) and a
+denormalised `posting_agency` column on `jobs` (goes stale the moment a
+recruiter corrects their own company name).
+
+### Stage 5 — one thing checked and found to be a non-issue
+
+`jobs.posted_by` is readable by `anon`, because the select grant on `jobs`
+is table-wide. That looked like it could link a recruiter's user id to their
+community identity. It cannot: `public.profiles` has no grant to `anon` at
+all, and its select policy for `authenticated` is `auth.uid() = id`, so even
+a signed-in candidate can read only their own row. The uuid joins to
+nothing. No change made.
+
+### Stage 5 — SIGNED OFF 18 Nov 2026
+
+Everything passed on the first test round. Four changes were made after
+sign-off and are verified in Part 0 of the stage 6 checklist.
+
+| # | Change | Note |
+|---|---|---|
+| 1 | Numbered pagination | Reuses `src/components/Pagination.jsx`, the component the collated `/jobs` page already uses. Two job lists on one site should not paginate in two shapes. |
+| 2 | Skills searchable | Needed **migration 006**. `jobs.skills` is `text[]`, and PostgREST can only test an array for containment — an exact, case-sensitive match on a whole element — so "snowflake" matched nothing while "Snowflake" sat in the list. |
+| 3 | Detail sidebar fills the card | `h-full` on the panel inside the stretched grid column. |
+| 4 | Salary row always on the detail page | "Not disclosed" where there is none. **Cards unchanged** — the same row twenty times down a list is noise. |
+
+Rishi's decisions at sign-off:
+
+- **Filters are Location, Function and Experience band** — not work mode.
+  GCC roles are overwhelmingly on-site or hybrid so a work-mode filter
+  barely splits the set, and ~75% of the audience is early to mid career,
+  where experience is the first screen. Bands overlap by design: a 3–8 year
+  role appears in both 3–5 and 6–10. Work mode may become a fourth filter
+  later. Built, with overlap tested in `scripts/stage5-display-test.mjs`.
+- **`/gcc-jobs` is not linked in the nav yet.** Linking a near-empty page
+  from the header makes the board look dead while he is recruiting
+  recruiters. Revisit at five or more real direct postings, roughly when
+  stage 10 makes these pages indexable; the two nav labels get settled then.
+
+A correction to my own checklist: step 13 said "snowflake" appeared in a
+skills list **and a description**. It appears only in the skills list. The
+code was right and the expectation was wrong.
+
+**Design: do not invent a visual identity.** Rishi has one — muted plum,
+mauve and warm rose with amber accents, as used on the LinkedIn and YouTube
+banners — and will supply exact colours at a design stage after stage 10.
+Until then, plain and consistent.
+
+## Stage 6 — applying
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Test applications | `public.applications` | `delete from public.applications;` — there are none from real people yet | PLANNED |
+| Uploaded test resumes | Storage → `resumes` bucket | Delete the folders by hand in the dashboard. Deleting an application row does **not** delete its file. **Includes orphans from the failed replace attempts before migration 009** — the upload succeeded and the row write failed, so those objects are referenced by nothing. The endpoint now cleans up after itself on that path, but the ones already there predate the fix. | PLANNED |
+| `applications` table, `resumes` bucket, two `private` functions | database | `supabase/migrations/007_applications_rollback.sql` — keep them, this is the product | LIVE after migration 007 |
+| Resumes on file | `public.candidate_resumes` | `delete from public.candidate_resumes;` **then** delete the objects in Storage by hand. Deleting the row does not delete the file. | PLANNED |
+| `candidate_resumes` table + guard | database | `supabase/migrations/008_candidate_resumes_rollback.sql` — keep it, this is the product | LIVE after migration 008 |
+
+Notes:
+
+- **Use a throwaway PDF.** Anything uploaded is on production storage.
+- **Delete order:** rows first, then the files, because nothing cascades
+  from the row to the object. Stage 8's delete-my-data does both; doing it
+  by hand here does not.
+- The test Gmail community account is the candidate for this stage. It is
+  already on the carried-forward list for deletion before the merge
+  (item 5); its applications and resume go with it.
+
+### Stage 6 — how "a recruiter never receives candidate data" is enforced
+
+`public.applications` has **no select policy mentioning recruiters**. Not a
+narrowed one — none. There is no row a recruiter can read, so there is no
+column to leak, and that is far easier to verify than any policy would be:
+a recruiter calling `/rest/v1/applications` with the public key gets `[]`
+whatever they ask for. Stage 7 gives them what they are allowed to see
+through narrow functions returning only permitted columns; it must not
+widen this table.
+
+Resumes: the `resumes` bucket is private and **has no policies on
+`storage.objects` at all**, so no client role can read or write it. Every
+upload goes through `/api/upload-resume` under the service key; every
+future download will be a short-lived signed URL minted server-side.
+
+### Stage 6 — one resume per candidate (migration 008)
+
+**This reverses a spec line, on purpose.** Migration 007 stored a resume path
+on every application, so an application recorded exactly what was sent that
+day. Rishi's decision, 18 Nov 2026: candidates should not re-upload for every
+role. The resume now lives on the candidate — one row in
+`public.candidate_resumes` — and every application points at whatever is
+current.
+
+**The trade-off, accepted knowingly.** A recruiter who shortlisted someone in
+March and opens the file in May may be reading a different document. The
+mitigation is `candidate_resumes.updated_at`, shown as "Resume updated on
+&lt;date&gt;" beside the recruiter's download in stage 7. There is no silent
+substitution: the date is always on screen next to the file.
+
+**Nothing writes this table from a browser.** No insert, update or delete
+policy and no write grant — only `/api/upload-resume` under the service key,
+which has already read the file's first bytes and built the path from a
+verified user id. `private.candidate_resumes_guard()` is the second lock: the
+service key bypasses RLS but not triggers, and the trigger pins every path to
+`^<candidate_id>/`.
+
+**Replacing deletes the old object**, but only after the row has been
+repointed. A failed delete leaves an orphan nobody can reach; a delete in the
+other order would lose a live resume.
+
+**An application still cannot exist without a resume.** That used to be the
+`not null` on `applications.resume_path`, which migration 008 drops. It is now
+`private.applications_guard()` refusing an INSERT by a candidate with no
+`candidate_resumes` row — on INSERT only, because stage 8 anonymises by UPDATE
+after the resume is gone.
+
+**Stage 7 owes this:** the "Resume updated on &lt;date&gt;" line beside the
+download. The data is in place; there is no recruiter-facing UI yet to put it
+in.
+
+**Stage 8 owes this:** a standalone "my resume" control, so replacing it does
+not require opening a job. Today the only place to manage it is the apply
+form.
+
+### Stage 6 — the grant migration 008 forgot (migration 009)
+
+**This is the trap most likely to bite stages 7 to 10, so it is written here
+rather than only in the migration.**
+
+Replacing a resume returned 502. The Vercel log: `42501, permission denied
+for table candidate_resumes`. Migration 008 said the only writer was
+`/api/upload-resume` under the service key, then never granted the service
+key anything.
+
+**Why it was not obvious.** In a default Supabase project, a new table in
+`public` inherits read and write for `anon`, `authenticated` **and**
+`service_role`, and the work is in revoking them. This project is not
+default. Its default privileges are:
+
+```
+for role postgres, schema public, tables:
+  postgres=arwdDxtm  anon=Dxtm  authenticated=Dxtm  service_role=Dxtm
+```
+
+`Dxtm` is TRUNCATE, REFERENCES, TRIGGER, MAINTAIN. No insert, select, update
+or delete for **any** of the three API roles. So a new table starts with no
+data access at all and every privilege must be named — including the service
+key's.
+
+> **A new table that server code has to write needs an explicit grant to
+> `service_role`, in the same migration that creates it.**
+
+The community tables already follow this: `profiles` carries an explicit
+SELECT and UPDATE for `service_role`, `questions` / `answers` / the hearts
+tables carry SELECT, and nothing carries INSERT or DELETE. Migrations 007 and
+008 both omitted it; 007 got away with it because no server code writes
+`public.applications` yet. **Stage 7 must not assume it has access.**
+
+Migration 009 grants `select, insert, update` on `candidate_resumes` to
+`service_role` — and deliberately not DELETE, and nothing on `applications`.
+A SECURITY DEFINER function runs as its owner and needs no grant, which is
+how stage 7 should read applications.
+
+`service_role` bypasses RLS but **not** triggers, so
+`private.candidate_resumes_guard()` still pins every path on a service-key
+write.
+
+### Stage 6 — what the file check does and does not do
+
+`api/upload-resume.js` reads the uploaded bytes and requires `%PDF-<n>.<n>`
+at the start and `%%EOF` within the last 64 KB. This is the only honest
+check available: the filename, the `Content-Type` header and the bucket's
+`allowed_mime_types` are all supplied by whoever uploads, so a `.exe`
+renamed to `.pdf` and sent as `application/pdf` satisfies every one of them.
+
+The 64 KB window is deliberately generous. A junk file that slips through is
+caught by the header check and by the recruiter opening it; a real
+candidate's resume wrongly refused is an application silently lost.
+
+**It is a structure check, not antivirus.** A genuinely malicious PDF is
+still a PDF and will pass. Any job board carries that risk the moment a
+recruiter downloads a stranger's file.
+
+### Stage 6 — SIGNED OFF 19 Nov 2026
+
+Three test rounds. The security property held on the first one and did not
+have to be revisited.
+
+**The main result, in Rishi's own test.** Signed in as `community@`, the
+recruiter who posted the role, `GET /rest/v1/applications?select=*` returned
+`200 []`. The identical call as the candidate returned one row. So the empty
+array means filtered, not a broken request. A direct `GET` on the real resume
+path as the recruiter returned `400 {"statusCode":"404"}` — refused without
+even being told the file exists.
+
+| Round | What came back | Outcome |
+|---|---|---|
+| 1 | Sidebar still not full height; four changes; two non-bugs | The sidebar fix had targeted the description column, not the card |
+| 2 | **Blocker: replacing a resume returned 502** | Migration 008 granted the service key nothing — see the grant rule above |
+| 3 | All passed | Signed off |
+
+Decisions taken during the stage:
+
+- **One resume per candidate**, overriding the spec line that each
+  application stores its own copy. Rishi's call, knowing that a recruiter may
+  open a different document than the one they shortlisted; the mitigation is
+  the updated-on date travelling with the file. Migration 008.
+- **The landline collision stays.** `080 2555 1234` has the same digits as a
+  mobile written with a leading zero, so 08x and 09x landlines pass the phone
+  check. Rishi: "Refusing a real mobile loses a candidate silently, while
+  accepting a rare landline costs a recruiter one wasted dial. And a landline
+  in a phone field isn't wrong anyway — it's a working number."
+- **Both confirmation panels say "You have applied to this job"**, and the
+  applied panel is one line: "Sent on &lt;date&gt;."
+- **The confirmation does not promise never to email.** Candidate email is
+  deferred, not cancelled, and published copy should not need walking back.
+
+Two things that looked like bugs and were not:
+
+- "Fresher" is the display rule for a 0–0 year role, not a form option.
+- A `.docx` renamed to `.pdf` is accepted *into the file field* by the
+  browser — `accept` filters the picker, it does not validate. The real check
+  runs on Send, and refused it.
+
+Carried into stage 7: the "Resume updated on &lt;date&gt;" line beside the
+download, and the grant rule — migration 007 granted `service_role` nothing
+on `public.applications`, and that is to be left that way.
+
+## Stage 4 onwards
+
+(Appended at the end of each stage.)
+
+## Stage 7 — the recruiter sees applications
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Statuses moved to Shortlisted / Not selected while testing | `public.applications.status` | `update public.applications set status = 'applied';` — or leave it, the rows are going anyway | PLANNED |
+| Four `public.recruiter_*` functions | database | `supabase/migrations/011_recruiter_applications_rollback.sql` — keep them, this is the product | LIVE after migration 011 |
+
+**Nothing else is created by this stage.** No table, no bucket, no row. It adds
+four functions and reads what stage 6 already stored.
+
+### Stage 7 — how the verification gate is enforced
+
+**`public.applications` is untouched.** Migration 011 adds no policy, no grant
+and no column to it. Stage 6's three policies — one INSERT, two SELECT, none
+for recruiters — are exactly as they were tested, and the check queries at the
+bottom of 011 re-print them so a regression is visible on the day.
+
+**Why a policy could not have done this job.** RLS is row-level. A policy that
+lets a recruiter match their applications lets them read *every column* of
+those rows, names and emails included, and there is no second policy that
+takes columns back. Column grants can restrict columns, but a grant is
+per-role, not per-row — it cannot say "this recruiter but not that one".
+Verification is a per-row, per-column rule, so it belongs in a function with a
+named column list.
+
+So: four SECURITY DEFINER functions, each checking ownership and verification
+itself.
+
+| Function | Who | Returns |
+|---|---|---|
+| `recruiter_application_counts()` | any active recruiter | job_id, count, latest date — **no per-candidate row at all** |
+| `recruiter_applications(job_id)` | verified only | nine named columns; **no `candidate_id`**, no `consent_at`, no `resume_path` |
+| `recruiter_resume_path(id)` | verified only | one path, one application at a time |
+| `recruiter_set_application_status(id, status)` | verified only | the stored status; cannot set `withdrawn` |
+
+**An unverified caller gets an empty result, not an error.** That is what
+makes the gate checkable in one browser request: `[]` while applications sit
+in the table. The page does **not** infer "nobody applied" from that — it
+reads `is_verified` from the recruiter's own profile row and shows the gate
+with the count from the counts function. `fetchApplications()` returns
+`gated: true` rather than a bare empty array so that distinction cannot be
+lost in a later edit.
+
+**`candidate_id` is deliberately not returned.** A recruiter has no use for
+the uuid, and withholding it means they cannot carry it to any other table.
+
+### Stage 7 — the resume download, and why it takes two clients
+
+`/api/resume-url` uses two Supabase clients and the split is the security
+property:
+
+- **The database decides whether.** The first client is built with the
+  **publishable** key and the recruiter's own bearer token, so inside
+  `recruiter_resume_path()` `auth.uid()` is the recruiter and the function's
+  checks apply. Null means no — not your job, not verified, suspended,
+  anonymised, no resume — and which one is never reported back.
+- **The service key decides how.** The bucket has no policies on
+  `storage.objects`, so only the service key can read it. It signs the URL and
+  does nothing else.
+
+Doing it the other way round — verifying the token with the service key and
+checking ownership in JavaScript — would put the same authorisation rule in
+two places, and the copy that drifts is always the one nobody is looking at.
+
+The URL lasts **60 seconds** and is never stored. `Content-Disposition` is
+built from the application id, which the server knows and the client does not
+get to choose: a filename from the client would be a header the client writes.
+
+### Stage 7 — where the apply form's name prefill comes from
+
+Asked at the first test round, because a prefill is what most people accept
+without thinking: if a community **nickname** were prefilled into a job
+application, candidates would send recruiters the wrong name without noticing.
+
+**It is the Google account name, and it always was.** `ApplyPanel` reads
+`user.user_metadata.full_name` (falling back to `.name`), which is written
+only by the identity provider at sign-in. **Nothing in this codebase ever
+writes `user_metadata`** — there is no `supabase.auth.updateUser` call
+anywhere — and `saveDisplayName()` writes `public.profiles.display_name` and
+nothing else. The two values are never connected.
+
+Worth confirming rather than reasoning about, because the two agree for most
+accounts and a test account cannot tell them apart:
+
+```sql
+-- 132 on 19 Nov 2026
+select count(*) from auth.users u join public.profiles p on p.id = u.id
+ where p.display_name is not null
+   and coalesce(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name') is not null
+   and p.display_name is distinct from
+       coalesce(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name');
+```
+
+**So this is a rule to keep, not a bug that was fixed.** Anything that starts
+writing `user_metadata` — a "complete your profile" screen, a nickname sync —
+would silently change what gets prefilled into every job application.
+
+### Stage 7 — the grant rule, applied
+
+Migration 007 granted `service_role` nothing on `public.applications` and
+**migration 011 leaves it that way.** A SECURITY DEFINER function runs as its
+owner, `postgres`, so it needs no grant; and `/api/resume-url` never reads the
+table with the service key. If a later stage finds it needs direct service-key
+access to applications, that is a sign the work belongs in a function instead.
+
+### Stage 7 — decisions at the first test round (19 Nov 2026)
+
+- **Status control is buttons, not a dropdown.** Rishi: "Setting someone to
+  'Not selected' is a judgement about a person, and a dropdown puts that one
+  stray scroll away on Windows." Pressing the active button returns the
+  application to Applied, so nothing is one-way.
+- **The privacy paragraph stays exactly as written** — the only place a
+  recruiter is reminded while actually holding someone's email address.
+- **The gate panel is about half its original length**, and says *company*
+  verification throughout — never "verify your email" or "verify your
+  account", because they confirmed their email at signup and would read either
+  of those as a bug.
+- **Sort on My jobs: newest, oldest, most applications.** No filter — an
+  unverified recruiter caps at ten live roles, and filtering ten items is not
+  worth the surface. The 25 in testing only exist because of the SQL-inserted
+  samples.
+
+**The 60-second signed-URL expiry is now verified** — at stage 8 sign-off
+Rishi fetched a signed URL two minutes later and got 400. It had been recorded
+here as unverified rather than as a pass.
+
+### Stage 7 — SIGNED OFF 20 Nov 2026
+
+Two rounds. The security property passed on the first one and was not
+revisited.
+
+**The results that mattered, in Rishi's own tests.** Unverified, with
+applications in the table, `recruiter_application_counts()` returned six rows
+of numbers and dates while `recruiter_applications()` returned `200 []`;
+`recruiter_set_application_status` returned `400 / P0001` with its own
+sentence and `recruiter_resume_path` returned `null`. After verification the
+full card appeared — and `GET /rest/v1/applications?select=*` **still**
+returned `200 []`, with a direct storage read on the real resume path still
+`400`. **Verification opens the functions, not the table.**
+
+Also confirmed: suspension empties the counts and the list; the second
+recruiter account, which has posted nothing, gets `[]` from both RPCs; a
+status of `withdrawn` is refused with a readable message; "Not selected" never
+renders as "rejected" or as a raw value.
+
+| Round | What came back | Outcome |
+|---|---|---|
+| 1 | All passed. Three changes, three decisions, one question | Status control, gate wording, sort |
+| 2 | All passed, plus the 375px overflow fixed on the real preview | Signed off |
+
+Changes made between the rounds:
+
+- **Status control is buttons, not a dropdown.** Both directions reversible,
+  and Not selected → Shortlist moves straight across without going via
+  Applied.
+- **Gate panel about half its length**, company verification throughout.
+- **Sort on My jobs** — newest, oldest, most applications. URL state holds
+  across a fresh tab, `?sort=sideways` falls back cleanly, no roles dropped.
+- **The applications card overflowed at 375px** and `shrink-0` was the cause:
+  with it the button column takes its max-content width, so the `flex-wrap`
+  inside had nothing to wrap against. 433px inside a 303px card. Fixed in its
+  own commit and verified on the real preview.
+
+**The 60-second signed-URL expiry is now verified** — at stage 8 sign-off
+Rishi fetched a signed URL two minutes later and got 400. It had been recorded
+here as unverified rather than as a pass.
+
+**Confirmed, not changed:** the apply form's name prefill is the Google
+account name, not `profiles.display_name` — see the section above. 132 real
+users have a display name that differs, so this would have mattered.
+
+## Stage 8 — the candidate's own side
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Anonymised applications from testing delete-my-data | `public.applications` | **Cannot be undone.** The row survives with nulls; delete it with the rest of the test rows. | PLANNED |
+| `jobs.closed_at` on test roles | `public.jobs` | Goes with the test jobs | PLANNED |
+| Four `public` functions, one `private` trigger function | database | `supabase/migrations/013_candidate_dashboard_rollback.sql` — keep them, this is the product | LIVE after migration 013 |
+
+**Nothing new is created by this stage** beyond a column and five functions. It
+deletes rather than collects.
+
+### Stage 8 — why the columns are nullable instead of hidden
+
+Stage 7 hides candidate data from an unverified recruiter by having a function
+not return it. That is right **there**, where the data must still exist for a
+verified recruiter to see later.
+
+It is **wrong here.** The privacy policy says the name, email, phone, notice
+period and account reference are *"erased from our database — not hidden,
+erased"*. A column that still holds the name has erased nothing, whatever the
+read function does with it. So migration 013 drops `NOT NULL` on
+`candidate_id`, `full_name`, `email` and `notice_period`, and
+`anonymise_job_data_for()` nulls them.
+
+Every CHECK constraint on those columns already tolerates NULL — a CHECK that
+evaluates to NULL passes — so none needed altering. Verified against the live
+definitions before writing the migration rather than after it failed.
+
+**`candidate_id` goes because of one sentence**: *"neither we nor the recruiter
+can connect that application back to you."* Nulling the name while keeping the
+account reference would leave that false. Two consequences, both of them
+decided and both stated on the button before it is pressed: the candidate
+loses sight of the application too, and `one_application_per_job` no longer
+stops them applying to that role again, because NULLs do not collide in a
+Postgres unique index.
+
+### Stage 8 — the delete functions are not callable from a browser
+
+Deleting a resume is two things that must both happen: a row goes and a file
+in a private bucket goes. Only the service key can delete the file.
+
+So `delete_resume_for(uuid)` and `anonymise_job_data_for(uuid)` take a user id
+and are granted to **`service_role` only**. There is no client-callable path to
+either. If there were, a hand-written RPC call from the console would
+anonymise the row and leave the file in storage — and *"permanently deleted"*
+would be quietly false with nothing left to notice it.
+
+The endpoints verify the bearer token with the service key and pass the
+verified id, the same shape `/api/upload-resume` already uses.
+`my_applications()` is read-only and stays callable by the candidate.
+
+**The grant is the only thing between "pass your own id" and "pass anybody's",
+so it must not be widened to `authenticated`.**
+
+**Order of operations: file first, then the database.** A failed file delete
+then changes nothing and can be retried. The other order leaves a row saying
+the resume is gone while the file still sits in storage, which is the single
+outcome the policy forbids.
+
+### Stage 8 — the 12-month sweep rides an existing cron
+
+The policy says applications are kept *"for up to 12 months after it closes or
+expires"*. The Hobby plan allows two cron jobs and both were taken.
+
+It did not need a third. The sweep touches **no files** — resumes have their
+own retention and there is one per candidate, not one per application — so it
+is a single SQL statement in `public.purge_expired_applications()`, called once
+a day from `api/rebuild.js`.
+
+**It cannot be verified before the merge, and that is now recorded as P1 in the
+post-merge section rather than as an open stage 8 test.** Vercel runs crons
+only against the production deployment, and production builds from `main`.
+
+`rebuild.js` hosts it rather than `send-digest.js` deliberately: the digest
+reaches ~2,500 people and a crash part-way through risks double-sending, while
+`rebuild.js` sends nothing. The sweep runs **after** the deploy hook has fired
+and is wrapped so it can never fail a rebuild — its outcome goes in the
+response body and the log, never into the status code. The count is logged on
+every run including zero, so a sweep that has silently stopped working shows
+up as an absence.
+
+**`jobs.closed_at` had to exist first.** Closing early was not recorded
+anywhere and `updated_at` moves on any edit, so "12 months after it closes"
+could not be computed. Measuring from `expires_at` instead would have
+**breached** the sentence rather than satisfied it: a role closed on day 3
+still expires on day 30, so its applications would be held about 12.9 months
+after closing. Rishi's decision, 22 Nov 2026: record the date rather than
+reword around not having it, since once roles close without it that date is
+gone for good and stage 9's admin queue will want it.
+
+Reopening clears it, so retention always measures from the most recent close.
+**There is deliberately no backfill** — for roles already closed the date is
+not recoverable, and inventing one would be worse than the `coalesce` fallback
+to `expires_at`. Every such row today is test data.
+
+### Stage 8 — status precedence, which is the part no test round would catch
+
+A recruiter can shortlist someone and the role can then expire. Both facts are
+true and only one can be a chip. **The recruiter's decision wins**, because
+"Shortlisted" tells the candidate something about themselves while "Closed"
+only tells them about the calendar — and showing "Closed" over a shortlist
+reads as a rejection, which is the crueller of the two mistakes.
+
+Seeing it by hand would need a shortlisted application on an expired role,
+which is exactly the state nobody sets up by accident, so it is pinned in
+`scripts/stage8-candidate-test.mjs` instead.
+
+### Stage 8 — /profile was stripped back after the first look
+
+Rishi's instruction, 22 Nov 2026, and the reasoning is worth keeping: no red
+panel on a page the whole community opens every day.
+
+- **The resume block is a date and a button.** No explanatory paragraph, no
+  warning box. The one fact that could not simply be dropped — there is one
+  resume and replacing it reaches back into applications already sent — is
+  not standing page text; it appears once a file has been picked, beside the
+  button that would do it. Clean resting page, no silent replacement.
+- **An upload control had to be added**, because `/profile` previously had
+  none: uploading only ever happened inside an apply form. Same endpoint, same
+  2 MB and real-PDF checks.
+- **Everything destructive moved to `/profile/delete-data`**, reached by one
+  quiet grey text link at the bottom of `/profile`. The feature stays because
+  the privacy policy promises it; it just no longer greets people who came to
+  change their display name.
+- **"Delete my resume only" moved there too** rather than disappearing with
+  the stripped-back block, because the policy promises a resume can be deleted
+  on its own.
+
+- **A Download option was added to the resume block**, because a candidate
+  could replace their resume but never see which file a recruiter was being
+  given. `/api/my-resume-url` **takes no identity input of any kind** — not a
+  user id in the body, not one in the query string. It verifies the bearer
+  token with the service key and looks up only the row keyed by that verified
+  id, so there is no parameter to tamper with and no server-side comparison
+  that could be got wrong. That is a stronger guarantee than validating an id
+  would be: the recruiter endpoint has to ask the database whether the caller
+  owns an application, because it is reaching for someone else's data on
+  purpose; here the caller *is* the answer. The path is still checked against
+  the verified id before signing, because this function can sign any object in
+  the bucket and should refuse rather than trust that the write-time trigger
+  held. Signed for 60 seconds, filename built from the row's own `updated_at`.
+
+- **The job detail page's back link now depends on how you got there.** From
+  `/my-applications` it offers both *My applications* and *All roles*; from
+  anywhere else it is unchanged. It keys off **router state, not a query
+  parameter**, and that is the whole design: state exists only for an in-app
+  navigation, so a refresh, a pasted link or a link shared with someone else
+  arrives with none and falls back to the public behaviour. A `?from=`
+  parameter would survive being copied and would then offer a stranger a route
+  to "My applications", which is not theirs. The state is read as a boolean
+  and the destination is hardcoded, so nothing navigates to a path that came
+  out of state. The canonical-slug redirect passes the state through, or an
+  older saved link would silently lose its way back.
+
+Two policy sentences had to follow the controls, and both were approved: the
+resume paragraph now says replacing happens on the profile and deleting on its
+own happens on the delete page, with the clause that deleting a resume does not
+withdraw anything; and the policy and the button now share one name, **Delete
+my job board data**, instead of the policy saying "Delete my data".
+
+### Stage 8 — the privacy policy was corrected, not the code
+
+Three paragraphs disagreed with the built system. `Privacy.jsx` is on the
+branch only and has never been on `main`, so none of this was ever published —
+it would have gone live at the merge.
+
+| Said | Reality | Fixed by |
+|---|---|---|
+| Replacing a resume *"does not reach back into past applications"* | Stage 6 deliberately reversed exactly this | Rewriting the paragraph to describe one resume per candidate and the updated-on date as the mitigation |
+| A whole *"Withdrawing an application"* section | Version 1 has no withdraw | Replacing it with "Can I take an application back?" — not yet, and why |
+| Anonymising erases *"name, experience, location, notice period"* | There is no experience or location column; email and phone are collected and were not listed | Listing the columns that actually exist |
+
+**One went the other way.** *"Neither we nor the recruiter can link that
+application back to you"* was the better design, so the code was changed to
+match the policy rather than the policy softened to match the code. That is
+why `candidate_id` is erased.
+
+`LAST_UPDATED` on the privacy policy moves to **22 November 2026**.
+`RecruiterTerms.jsx` still carries its own date and is unaffected — carried
+item 1 still applies to it.
+
+### Stage 8 — SIGNED OFF 22 Nov 2026
+
+Five rounds, four of them changes rather than failures. Nothing in the security
+design had to be revisited.
+
+**The results that mattered, in Rishi's own tests.** Every application row came
+back with `candidate_id`, `full_name`, `email`, `phone` and `notice_period`
+**null** — erased in the column, not hidden by a function — with `status` and
+`consent_at` surviving. The recruiter saw *"Details removed"*, and
+`recruiter_applications` returned all nulls with `is_anonymised` true.
+Re-applying worked. All three write functions returned **403** from the browser.
+Download returned only the caller's own file, and passing three different id
+fields in the body changed nothing.
+
+**Folder clearing was proved against the real orphans:** four objects removed,
+including the three from 19 November that deleting by row name could never have
+reached. Storage is now completely empty and the invariant query reads 0, 0, 0.
+
+| Round | What came back | Outcome |
+|---|---|---|
+| 1 | Not testable — built but not pushed | Led to the standing push-before-checklist rule |
+| 2 | Three changes: strip `/profile`, move deletion to its own route, saved jobs | Plus two policy corrections |
+| 3 | Add a resume Download | Endpoint takes no identity input at all |
+| 4 | Back link wrong when arriving from `/my-applications` | Router state, so a shared link cannot mislead |
+| 5 | An orphan survived deletion | Became invariant I2 |
+| — | All passed | Signed off |
+
+**Two carried items closed by this stage:**
+
+- **The 60-second signed URL expiry**, recorded as unverified at stage 7
+  sign-off. Rishi fetched one two minutes later and got 400.
+- **The three orphaned storage objects** carried since stage 6. Removed by the
+  feature that exists because of them, which is a better outcome than clearing
+  them by hand.
+
+### Stage 8 — what the Security Advisor says, and which of it matters
+
+Worth triaging once rather than re-reading the warnings before every launch
+check. The dashboard's count and a raw lint count group these differently, so
+the categories matter more than the number.
+
+| Finding | Level | Verdict |
+|---|---|---|
+| `security_definer_view` on `question_authors` | **ERROR** | Known. Dropped after the merge — carried item 14. The only error. |
+| `rls_enabled_no_policy` on `user_activity` | INFO | **Correct as designed.** RLS on with no policy means no client role can touch it; `record_activity()` writes it as definer and the digest reads it with the service key. The same "absence is the design" pattern as `applications`. |
+| `anon_security_definer_function_executable` ×4 | WARN | `author_names` and `job_posting_agency` are deliberate — anonymous visitors read author names and job pages. The other two are below. |
+| `authenticated_security_definer_function_executable` ×9 | WARN | Seven are the job board's own, each checking ownership and verification itself; that is the design. The three **write** functions correctly do **not** appear, which is the advisor confirming the service-role-only grant. |
+| `auth_leaked_password_protection` | WARN | Carried item 7. Needs Pro. |
+
+**Two of those warnings cannot do harm, and it is worth knowing why rather
+than trying to fix them:**
+
+- **`record_activity()`** opens with `if auth.uid() is null then return; end
+  if;`. An anonymous caller gets a no-op, so the `anon` grant is noise.
+- **`rls_auto_enable()`** is declared `returns event_trigger`. Postgres refuses
+  to call such a function any way other than as an event trigger, so the grant
+  is unreachable by construction. It is also useful: it enables RLS
+  automatically on any new table in `public`.
+
+Neither is ours and neither needs changing. Recorded so nobody spends launch
+day on them.
+
+## Deferred — saved jobs, to stage 10
+
+A candidate bookmarking a recruiter-posted role on `/gcc-jobs`, the same idea
+as the existing Questions Saved counter. Not job drafts, and nothing to do
+with the external listings on `/jobs`.
+
+**Cut from stage 8, reinstated, then moved to stage 10 on 22 Nov 2026.** The
+reason it was reinstated — that "Explore GCC Jobs" is in the navigation — does
+not hold: that link goes to `/jobs`, the collated external page, and `/gcc-jobs`
+is still unreachable from anywhere a visitor would look. Building a bookmark
+button on a page nobody can navigate to would ship a feature to an empty room.
+Stage 10 is where the board becomes both indexable and linked, so that is where
+this belongs.
+
+**The design, recorded now so stage 10 does not redesign it:**
+
+| Piece | Decision |
+|---|---|
+| Table | `public.job_saves`, mirroring `question_saves` exactly, since that shape is already proven in production |
+| Columns | `job_id bigint`, `user_id uuid`, `created_at timestamptz` |
+| Primary key | `(job_id, user_id)` — one save per person per role, so saving twice is idempotent rather than an error |
+| Foreign keys | both `on delete cascade` |
+| Policies | three, all `auth.uid() = user_id`: select own, insert as self, delete own |
+| Grants | `select, insert, delete` to `authenticated`. **No update** — a save has nothing to change. |
+| Function | `my_saved_jobs()`, definer, for the same reason `my_applications()` exists: a saved role that has since closed is hidden by `private.job_is_public()`, and a list that silently loses rows is worse than one that marks them Closed |
+| Save control | the card on `/gcc-jobs` and the detail page. Signed out reuses `setPostLoginRedirect`, so the save completes after sign-in instead of being lost |
+| Profile | a **Jobs Saved** counter beside Questions Asked and Questions Saved — the existing two-up grid becomes three — linking to `/saved-jobs` |
+
+No new security surface: a save is the candidate's own row and nothing else
+ever reads it.
+
+## Deferred — the wording pass (after all eleven stages)
+
+Logged, **not to be changed now**. Both are Rishi's calls from the stage 7
+sign-off.
+
+| # | Item | Note |
+|---|---|---|
+| ~~W1~~ **DONE 25 Nov 2026, extended from four occurrences to twelve** — the phrase was only one of several the concept appeared under. | ~~The gate panel says **"verify your company"**; Rishi asked for **"verify your account"**. | The phrase appears in the gate panel, the My jobs counter line, the posting form and the stage 3 signup banner. Changing one and not the others would be worse than leaving all four, so this moves as a set. Note it also cuts against the stage 3 decision to say "company verification" rather than "email verification" — that decision was about not implying the *email* needed confirming, which "account" also avoids, so there is no conflict, only a change of word. |
+| ~~W2~~ **DONE 25 Nov 2026** — the chip, and **nothing new written**: the no-limit fact was already on the posting form for an unverified recruiter and on `/recruiter`'s banner for a verified one. The form's sentence now opens *"Verification removes the limit entirely."* | ~~Shorten the verified state on My jobs to a plain **"Verified"** chip. | **Tension Rishi flagged himself:** the current sentence — "Your company is verified, so there is no limit on live roles." — also carries the no-limit fact, and a chip cannot. So the chip needs somewhere else to carry it. Options not yet chosen: next to the slot counter it replaces, on the posting form where the cap is already explained, or on recruiter home. Decide the destination before shortening the line, or the fact is simply lost. |
+| ~~W3~~ **DONE in 9b** | ~~The recruiter applications page still shows **"1 new"** above an application whose details have been removed. | `summariseStatuses()` counts by `status`, and anonymising deliberately leaves `status` alone so a recruiter keeps their own shortlist decision. So the count is accurate and the word is wrong: an anonymised application is not "new", it is gone. Either exclude anonymised rows from the summary or give them their own term. **Do not "fix" it by changing what anonymising does to `status`.** **Shipped 23 Nov 2026: anonymised applications no longer count toward "new" and appear as their own figure. Left here rather than deleted, because W6 is about how that same line now reads.** |
+| ~~W4~~ **DONE 24 Nov 2026** | ~~The privacy page says **"Delete my data"** under *"Can I take an application back?"* while everywhere else says **"Delete my job board data"**.** Fixed as part of the D3 policy rewrite, with Rishi's agreement: *"Take W4 in D as you suggested — no point leaving the old name in a sentence you're rewriting."* The same stale name was also in a code comment in `Profile.jsx`, now corrected. | The same two-names problem fixed elsewhere on 22 Nov, missed in that one paragraph because it was written before the button was renamed. One word. |
+| ~~W5~~ **DONE 25 Nov 2026** — the report's tab is now **Role performance**; the admin one stays **Roles**. | ~~**Two tabs called Roles on `/admin`** — the action queue's and the report's. Confusing on one screen. | Rishi, 23 Nov 2026. Renaming one is a word; deciding which is the question. The admin one acts on roles, the report one counts them, so "Moderate roles" / "Roles" or "Roles" / "Role performance" are both defensible. |
+| ~~W7~~ **CLOSED 25 Nov 2026 — SUPERSEDED, not done.** `Apply Directly` appears nowhere in the repo; both surfaces were removed in stage 10 round two and the entrance now reads **Exclusive GCC Jobs**, which contains the word the item was about. | ~~**The navigation label "Apply Directly" does not contain the word "jobs".** | Raised by me, 23 Nov 2026; Rishi's decision the same day: *"Keep 'Apply Directly' for now. Your reservation is noted and I agree it's real, but the wording review covers the whole site and this is one line. Log it there rather than deciding it in isolation."* The concern: scanning *Explore GCC Jobs · Apply Directly*, a visitor may not realise both are job listings — and the item holding our own roles is the one that does not announce itself as roles. Candidates that keep the distinction and still say jobs: **Direct GCC Jobs**, **Jobs: Apply Directly**. Note the homepage card added the same day says "Apply Directly to GCC **Roles**", so the two surfaces currently word it differently — which the review should settle together. |
+| ~~W6~~ **DONE 25 Nov 2026** — now `1 new · 1 not selected (3 anonymised)`, bare when there is nothing to qualify. | ~~**The recruiter summary line's figures overlap** — `1 new · 1 not selected · 3 anonymised` sums to 5 against 4 applications, because the not-selected one is also anonymised. | Deliberate, and recorded as deliberate in the W3 note: the first three say what you decided, the last says who can no longer be contacted. But Rishi is right that **a reader will try to add them**, and a figure that invites a wrong sum is a wording problem even when every number is correct. Options: separate them visually, or label the last one so it reads as a qualifier rather than a fourth bucket. |
+
+## `public.question_authors` — settled 19 Nov 2026 (migration 010)
+
+Raised by Rishi as its own piece of work, not folded into a stage: the
+Security Advisor flags a Security Definer View on `public.question_authors`,
+which predates the job board. Was it actually a problem?
+
+**Partly, and not where the advisor points.** The view was
+`select id, display_name from profiles`, owned by `postgres`, no
+`security_invoker`, granted to `anon` and `authenticated` — so it bypassed the
+`auth.uid() = id` policy on `profiles`.
+
+**That bypass is necessary.** The Q&A pages must show who wrote what, and RLS
+cannot express "anyone may read the display name but nothing else": a policy
+is row-level, so letting you read a row lets you read every column of it.
+Column grants are the tool for that, and `profiles` grants `authenticated` the
+whole table (`arwdDxtm`), so fixing it there would mean rewriting the
+privileges of the table the whole community depends on.
+
+**The scope was the problem.** Named `question_authors`, it returned every
+profile row:
+
+| | |
+|---|---|
+| Rows the view returned | 2,464 |
+| With a display name | 166 |
+| People who have ever asked, answered or hearted | 97 |
+| **Named but never participated — published for nothing** | **76** |
+
+No email, no avatar, no contact detail. A membership list, not a breach.
+
+**The real risk was structural.** A definer view silently ignores RLS, so
+adding `email` for some future "contact the author" feature would publish
+2,464 addresses with nothing in the way. The advisor flags the shape, not
+today's columns.
+
+**The fix: a function, not a view.** `public.author_names(uuid[])` resolves
+ids the caller already has. There is no `select *`, so there is nothing to
+enumerate — you must know the uuid to learn the name, and every uuid this app
+passes came from questions, answers or hearts in the first place. It is the
+pattern this project already uses for the same problem
+(`public.job_posting_agency`, migration 005). Widening it to return an email
+means changing a signature and every caller, which is a visible act; adding a
+column to a view was not.
+
+**A correction to my own earlier analysis.** I said narrowing could not break
+the app because `authors.js` only ever queries ids taken from questions and
+answers. That was wrong: `NotificationsBell.jsx` also passes the ids of people
+who **hearted** a question or answer, and a hearter need not have posted
+anything. Hence 97 "with a public presence", not 89 authors — and hence a
+function taking explicit ids rather than a narrowed row set being the right
+answer anyway.
+
+**The view is NOT dropped yet, on purpose.** Production serves the main
+branch, which still reads it. Dropping it now would replace every author name
+on the live community with "Community Member" until the branch merges. So the
+view stays, narrowed to 90 rows, and
+`supabase/post-merge/drop_question_authors.sql` removes it after the merge.
+**Until then the advisor will keep flagging it, correctly.**
+
+**Measured sequencing risk.** The prerender runs the real app against the real
+database, so the order matters. With the branch's code and no migration 010,
+prerendered question pages carry **95** "Community Member" fallbacks; with
+author names resolving, **2** (people who genuinely have no display name).
+Run migration 010 **before** the preview rebuilds, or redeploy after it.
+Production is unaffected either way.
+
+## Function search_path — settled 20 Nov 2026 (migration 012)
+
+The Security Advisor flags `update_updated_at`, `prevent_slug_change` and
+`mark_answer_edited` as "Function Search Path Mutable". All three predate the
+job board.
+
+**Honest severity: lower than the same warning on a SECURITY DEFINER
+function.** All three are SECURITY INVOKER — they run with the privileges of
+whoever triggered them, so a mutable `search_path` cannot escalate anything.
+All three are also trivial and reference no object in `public` at all, only
+`NEW`, `OLD` and `now()`. There was nothing to hijack.
+
+**Pinned anyway**, because the warning is about what a function could become:
+these are trigger functions, so the moment a body grows a reference to a
+table, that name resolves according to whoever is writing the row.
+
+Done with `alter function ... set search_path`, **not** `create or replace`,
+so the bodies are provably untouched — these fire on the community's questions
+and answers, and there was no reason to retype them.
+
+`public, pg_catalog` rather than Supabase's recommended `''`, because every
+function in this project has used that since migration 001 and one convention
+applied consistently beats a marginally tighter setting on three functions
+that resolve nothing.
+
+**The sweep at the bottom of 012 is the reusable part.** It counts every
+unpinned function across `public` and `private`, so it proves nothing was
+missed and is the query to re-run after any later migration adds one. It
+should read 0 from now on.
+
+## Stage 9 — admin
+
+| What | Where | How to remove | Status |
+|---|---|---|---|
+| Audit rows from testing | `public.admin_audit` | **`truncate public.admin_audit;`** — Rishi's decision 23 Nov 2026: all 67 rows are test actions on test accounts, so truncate at merge rather than deleting entries selectively now. Deleting selectively would leave a log with holes in it, which is worse than a log that starts at launch. | PLANNED |
+| Verification and suspension states changed while testing | `public.recruiter_profiles` | Set back from `/admin` itself, which is the point of the stage | PLANNED |
+| A test company rename | `public.companies` | Rename back from `/admin`; the audit row carries the old name | PLANNED |
+| `admin_audit`, 7 `public` functions, 1 `private` function | database | `supabase/migrations/014_admin_audit_rollback.sql` — **it drops the audit log**, so export first | LIVE after migration 014 |
+
+### Stage 9 — what changed the shape of this stage
+
+Before designing it, I checked what an admin could actually do **through the
+app**. The answer was nothing:
+
+| Table | Admin write path before stage 9 |
+|---|---|
+| `recruiter_profiles` | None. Own-row INSERT/UPDATE and an admin SELECT only. |
+| `companies` | **None at all** — no UPDATE policy, no DELETE policy, for anyone. |
+| `jobs` | Recruiter-only, and the update policy excludes `hidden` on both sides. |
+
+So every verification and suspension to date has been raw SQL in the
+dashboard. **This is the first time these actions exist outside the SQL
+editor**, which is why the audit row is written by the same function that
+performs the change rather than by the page that calls it. A page can forget;
+a function cannot.
+
+**No new policies on the tables being acted on.** `companies` and
+`recruiter_profiles` still carry no admin write policy afterwards, and check
+`c5_no_new_admin_policies` in migration 014 asserts exactly that, so a later
+migration cannot quietly take the easier route.
+
+### Stage 9 — reversible and final, split honestly
+
+Rishi's decision was that admin actions should be reversible. **Three cannot
+be**, and the split is recorded rather than approximated:
+
+| Action | | Why |
+|---|---|---|
+| verify ↔ unverify | Reversible | The inverse is the other button |
+| suspend ↔ unsuspend | Reversible | Same |
+| hide ↔ unhide | Reversible | Same, and only `/admin` can unhide |
+| rename a company | Reversible | The audit row carries the old name and slug |
+| delete an orphaned file | **Final** | The bytes are gone |
+| anonymise on request | **Final** | The columns are erased, which is the feature |
+| the nightly retention purge | **Final** | Rows are deleted |
+
+"Reversible" here means **an inverse action exists and the audit row records
+the previous value** — not a generic undo engine. The four reversible actions
+are toggles, so there is nothing to build for the undo; the audit row supplies
+the old value where a toggle is not enough.
+
+**Company merge is out of version 1.** With 1,814 companies seeded, recruiters
+pick rather than add, so the realistic repair is a misspelling. If a rename
+collides with an existing slug the function refuses and says a merge is what is
+needed, rather than doing something else silently.
+
+### Stage 9 — the orphan report is its own authorisation
+
+`/api/admin-delete-orphan` is the only admin action whose target is a
+client-supplied string rather than a row id, and the service key can delete
+any object in the bucket. So the path is not taken on trust: it must still
+appear in `admin_orphaned_resumes()`, which by definition only lists objects
+no `candidate_resumes` row points at. **A live candidate's resume therefore
+cannot be deleted from that panel at all**, however the request is
+constructed.
+
+### Stage 9 — `/admin` is hidden, and hiding is not the security
+
+URL-only, linked from nowhere, and a non-admin sees **"Page not found"**
+rather than a refusal — a refusal confirms the route exists.
+
+**That is presentation, not protection, and must never be mistaken for it.**
+Every action is a definer function checking `private.is_admin()` in the
+database, and both endpoints verify the bearer token with the service key and
+read the admin row with the service key — not through the caller's session,
+which would be reading a permission from the thing being permitted. Whether
+this component renders changes nothing about what a request can do.
+
+### Stage 9 — the 502 on both admin endpoints (migration 015)
+
+**Found by Rishi at step 7, and it broke for the admin too — not only for the
+non-admin the step was testing.** Worth recording in full, because it is the
+third appearance of the same root cause.
+
+`api/_lib/adminGuard.js` read `public.user_roles` with the service key to
+establish whether the caller was an admin. **This project grants
+`service_role` nothing by default**, so that read was `42501` and the guard
+reported it as "We could not confirm your account" with a 502. Proved from the
+database rather than from a log: `has_table_privilege('service_role',
+'public.user_roles','SELECT')` was **false**.
+
+**The same root cause had broken a second thing nobody had reached yet.**
+`/api/admin-delete-orphan` verified a path by calling
+`admin_orphaned_resumes()` with the service key, and that was wrong twice
+over:
+
+1. the function is granted to `authenticated` only, so the service key could
+   not execute it — `has_function_privilege` was **false**; and
+2. **even with a grant it would have returned nothing**, because its `WHERE`
+   clause contains `private.is_admin()` and `auth.uid()` is null for the
+   service key. Every path would have looked un-orphaned and every deletion
+   would have been refused with 409.
+
+So the orphan panel was broken in two independent ways, and the guard's 502
+on an earlier step hid both. **The lesson is the ordering of the checklist as
+much as the code:** the admin's own path (steps 31, 33) would have failed too,
+several steps after a non-admin check that looked like a minor wording issue.
+
+**The fix is two booleans, not a grant.** Granting `service_role` SELECT on
+`user_roles` would have worked and widened the one table whose entire design
+is that nothing writes it and almost nothing reads it. Instead, migration 015
+adds `public.is_admin_user(uuid)` and `public.is_orphaned_resume(text)`, both
+**service_role only**, and check `c3_user_roles_still_closed` asserts the
+table was not widened instead.
+
+`is_orphaned_resume()` is deliberately **factual, not authorising**: it says
+whether an object exists with no `candidate_resumes` row pointing at it, and
+nothing about who is asking. The authorisation is the guard plus
+`admin_log_orphan_deleted()`'s own actor check — a third copy of the same
+decision would be noise. What it still guarantees is the part that matters: a
+path with a live row returns false.
+
+**And every failure now looks like a missing route.** Not an admin, a broken
+lookup, a bad token: all **404 "Not found."** The old message told an
+anonymous caller both that the route was real and that it had tried to check
+them. The cost is that a genuine outage is indistinguishable from "not an
+admin" *in the response*, which is why the two cases log differently — the
+response is for the caller, the log is for us.
+
+### Stage 9 — "every failure looks like a missing route" took three passes
+
+Worth recording because the rule is only worth anything if it has no
+exceptions, and it acquired one twice.
+
+| Pass | What leaked | How |
+|---|---|---|
+| 1 | 502 *"We could not confirm your account"* | Announced that the route was real **and** that it had tried to check the caller |
+| 2 | **401 *"Sign in again and retry."*** on the missing-token path | Announced exactly the same thing to exactly the same anonymous caller. Found by Rishi at R2. |
+| 3 | **405 with an `Allow: POST` header** on a non-POST | A path that does not exist answers 404 to a `GET`; this one answered 405. Nobody had tried it. |
+
+Also closed in pass 3: a missing `SUPABASE_SERVICE_ROLE_KEY` returned **500
+"Server not configured"**, which confirms the route to anyone who asks.
+
+**All five paths now return an identical 404 `{"error":"Not found."}`** — no
+token, malformed token, expired token, broken lookup, real non-admin — through
+one `notFound()` helper, so a later edit cannot reintroduce a distinguishable
+response on one path and not the others.
+
+**The structural invariant, which is checkable by reading rather than
+testing:** in both admin endpoints, every `res.status(...)` that is not 404
+appears *after* the `requireAdmin` gate. So nothing but a proven admin can
+ever see a 400, 409, 502 or 200. If a status appears above that line in a
+future edit, it is a disclosure.
+
+**The other endpoints keep their 405 and 500.** `upload-resume`, `resume-url`,
+`my-resume-url`, `delete-my-resume` and `delete-my-data` are not hidden
+routes — they are linked from pages, and pretending they do not exist would
+cost real diagnosability for no gain. **Only the admin pair pretends not to be
+there.**
+
+**And the honest cost:** a genuine outage is now indistinguishable from "not an
+admin" in the response. The cases log differently, and the common case — an
+admin whose session has gone — is caught earlier and more usefully by
+`postAsAdmin()` in `src/lib/adminData.js`, which checks for a session before
+sending anything.
+
+### Stage 9 — the audit log's growth, answered with measurements
+
+Three questions asked at the first test round, answered from the live database
+rather than estimated.
+
+**1. Is there an index supporting newest-first reads?** Yes —
+`admin_audit_recent_idx on (created_at desc)`, created by migration 014. And
+the planner is already using it rather than table-scanning, at five rows:
+
+```
+Limit  (cost=0.15..5.77 rows=100)
+  ->  Index Scan using admin_audit_recent_idx on admin_audit
+Execution Time: 0.119 ms
+```
+
+**2. Did the page load every row?** It was capped at a flat 100 with no way
+past it — which is worse than no paging, because **it would have silently
+stopped showing history the day the log passed 100 and looked like the whole
+truth while doing it.** Now paged at 50 with a Load more, and it shows
+"Showing N of M" so a truncated view is visibly truncated.
+
+The cursor is **`id`, not `created_at`**, deliberately: two rows can share a
+timestamp, and a keyset cursor on a non-unique column skips rows at the page
+boundary — the kind of bug that loses one entry in a thousand and is never
+noticed. `id` is a generated identity, so its order *is* insertion order,
+which here is chronological order. `admin_audit_recent_idx` is kept anyway,
+because the realistic future question is "what happened last March" and that
+is the index which answers it.
+
+**3. How many rows a year?** Measured: **282 bytes per row**, 64 kB total for
+the table and both indexes at five rows.
+
+| Source | Rows per year |
+|---|---|
+| Verifications, at five recruiters a week | ~260 |
+| Suspensions, hides, renames, anonymisations | tens |
+| The nightly purge | **at most 365, usually far fewer** — it writes a row only when it actually deleted something |
+| **Total, order of magnitude** | **a few hundred to ~700** |
+
+At 700 rows a year that is **about 200 kB a year**. The Supabase free tier
+allows 500 MB. **Deleting old entries would never be the thing that saves you.**
+
+**So: agreed, do not prune, and the reasoning should be recorded rather than
+assumed.** An audit log that expires stops being evidence, and the Final rows
+are precisely what would be needed to show a deletion request was honoured.
+
+**Is there a size at which that changes? Not realistically — but there is a
+shape that would.** The number to protect is not rows per year, it is
+**one row per decision, not per affected record.** `purge_expired_applications`
+already follows it: one row saying "deleted 40 applications", not forty rows.
+If a future action logs per-record — an orphan sweep writing a row per file,
+say — volume could jump by orders of magnitude, and the answer even then would
+be partitioning or archiving to cold storage, never deletion.
+
+### Stage 9 — the typed confirmations were case-insensitive
+
+Found by Rishi: typing lower-case `delete` on the orphan panel enabled the
+button **and the deletion succeeded**, on a form whose own label said to type
+`DELETE`.
+
+**Both halves were broken independently, and the earlier specification of this
+endpoint was wrong.** I had said it "returns 400 unless the confirmation is
+exactly DELETE". It did not:
+
+| Site | What it did |
+|---|---|
+| `AdminData.jsx` orphan panel | client `.toUpperCase()` before comparing |
+| `AdminData.jsx` anonymise panel | the same, on the action that erases a person's data |
+| `api/admin-delete-orphan.js` | **server `.toUpperCase()`** |
+| `api/admin-anonymise.js` | **server `.toUpperCase()`** |
+
+The client sent `typed.trim()` unmodified, so **it was the server that accepted
+it.** Stage 8's `delete-my-data` was correct all along — the defect was a
+deviation from a pattern that already existed, in the admin pair only.
+
+**The fix is one comparison instead of six.** `src/lib/confirmations.js` holds
+the three words and `confirmed(typed, expected)`, and all six call sites use
+it, including stage 8's two — which was a no-behaviour-change refactor, because
+leaving two patterns in place is precisely how a transformation gets added to
+one of them.
+
+`api/` importing from `src/lib/` is unusual and deliberate: the module is plain
+ESM with no browser dependency, and the alternative is two copies of the one
+thing that must not vary.
+
+**The rule, written at the function: trim, never fold case.** A typed
+confirmation is a deliberate-effort check, and accepting `delete` for `DELETE`
+halves the effort while making the label untrue. Surrounding whitespace is
+forgiven because it is an artefact of selecting and pasting, not a reduction in
+deliberateness.
+
+**22 cases cover it**, including the ones that would have caught this: lower
+case refused, mixed case refused, `DELETE` not accepted for `DELETE MY DATA` in
+either direction, a prefix insufficient, a superstring insufficient, and an
+object with a `toString` returning the right word refused.
+
+> **One of those tests was initially wrong in a way worth recording**: it
+> asserted that doubling the inner spaces of a confirmation fails, applied to
+> all three words. `DELETE` and `ANONYMISE` contain no spaces, so the
+> assertion tested nothing and "passed" by accident on a transformation that
+> did not happen. It now runs only against multi-word confirmations. A test
+> that cannot fail is worth less than no test, because it looks like coverage.
+
+### Stage 9 — SIGNED OFF 23 Nov 2026
+
+Three rounds, **three bugs, and all three were the same kind of mistake in
+different clothes: a thing that was claimed rather than checked.**
+
+| Bug | What it actually was |
+|---|---|
+| Both admin endpoints returned 502 to **everyone, admin included** | A server-side read of `user_roles`, on a project that grants `service_role` nothing. The third appearance of that trap. It also silently broke the orphan verification in two further ways nobody had reached. |
+| Unhiding a closed role **reopened it** and wiped `closed_at` | The inverse assumed `'live'` instead of reading the previous status, which the audit row already held |
+| The confirmation comparison **folded case on the server** for both admin endpoints | A deviation from stage 8's correct pattern, in the admin pair only. My specification of that endpoint had been wrong. |
+
+**Results at sign-off, in Rishi's own tests.** `/admin` gives *Page not found*
+to a candidate and redirects when signed out; direct function calls return
+`P0001 "Only an administrator can do that."`; the orphan report and audit log
+both return `[]`. After migration 015 every endpoint failure path returns an
+identical 404 — no token, bad token, GET, non-admin. `is_admin_user` and
+`is_orphaned_resume` both 403.
+
+**The hidden path, which had never run anywhere, works end to end**: the public
+page, the `/gcc-jobs` listing, search, the poster's My jobs panel, the edit page
+refusing to load, and a direct `PATCH` changing zero rows. Unhiding restores
+`closed` with `closed_at` intact.
+
+**The audit log paged correctly** — "Showing 50 of 67", Load more, 67 of 67, and
+SQL agreed.
+
+**Advisor as predicted:** +5 entries, all `admin_*`, under the signed-in
+definer-function lint. `admin_audit` absent from `rls_enabled_no_policy`. The
+three `service_role`-only functions absent everywhere.
+
+### Stage 9 — two things recorded rather than re-tested
+
+**A6, the audit-log page boundary, is reasoned rather than observed.** Rishi
+could not eyeball a gap at the 50/51 boundary from the UI, and he is right that
+asserting it from the screen would be theatre. The argument stands on its own:
+the cursor is `id`, a generated identity, so it is unique and monotonic with
+insertion, and `.lt("id", last)` therefore cannot skip or repeat. **Recorded as
+reasoned.** The thing that would make it observable is a test against a fake
+client, as `clearResumeFolder` has — worth doing if this ever paginates
+something that matters more than a log.
+
+**Reloading a job page reached from `/admin` keeps the `← Admin` link; it does
+not fall back.** Rishi found this and correctly judged it harmless. **My
+checklist predicted a fallback and my code comment asserted one, and both were
+wrong** — the browser preserves `history.state` across a reload by design.
+
+The accurate statement, now in the comment: the fallback triggers on a **new
+navigation**, which is every way a URL reaches someone else — a pasted link, a
+shared link, a new tab. Rishi confirmed that half directly: a copied URL shows
+only `← All roles`. A reload is the same person on the same history entry they
+just navigated, so keeping the link is correct, and the link does nothing for a
+non-admin anyway. **Nothing to fix; a comment to correct, which is worse than a
+bug if left, because the next person reasons from it.**
+
+The same is true of `/my-applications`, for the same reason and with the same
+lack of consequence.
+
+### Stage 9 — expected Security Advisor state
+
+Checked directly after migration 014 rather than predicted, so a real finding
+can be told from a designed absence. **Compare by category, not by the
+dashboard's headline total** — the dashboard groups differently from the raw
+lint output.
+
+| Lint | Before 014 | After 014 |
+|---|---|---|
+| `security_definer_view` (**ERROR**) | 1 | **1** — `question_authors`, dropped after merge |
+| `rls_enabled_no_policy` (INFO) | 1 | **1** — `user_activity` only. **`admin_audit` must NOT appear**: it has a SELECT policy. |
+| `anon_security_definer_function_executable` | 4 | **4 — unchanged.** No admin function is anon-callable. |
+| `authenticated_security_definer_function_executable` | 9 | **14**, +5 |
+| `auth_leaked_password_protection` | 1 | 1 |
+
+The five new entries, all expected, all `is_admin()`-gated internally:
+`admin_orphaned_resumes`, `admin_rename_company`, `admin_set_job_hidden`,
+`admin_set_recruiter_suspended`, `admin_set_recruiter_verified`.
+
+**Migration 015 adds nothing to the advisor**, because both its functions are
+`service_role` only. If `is_admin_user` or `is_orphaned_resume` ever shows up
+under either definer-function lint, a grant has been widened.
+
+**Five functions must NOT appear anywhere in the advisor**, and their absence
+is the advisor confirming the grant split:
+`admin_anonymise_candidate_for`, `admin_log_orphan_deleted`,
+`purge_expired_applications`, `is_admin_user` and `is_orphaned_resume` are all
+granted to `service_role` only.
+`private.audit()` is absent too, because the `private` schema is not exposed.
+
+## Stage 9b — admin reporting (SCOPED 23 Nov 2026, not started)
+
+Its own stage, **before stage 10**, because verification decisions are being
+made weekly with no numbers and the latency baseline has to exist before real
+recruiters arrive. Read-only and additive, so it cannot destabilise stage 9's
+action queue — which is why it is not folded into it.
+
+### What it covers
+
+| Section | Figures |
+|---|---|
+| **Overview** | Headline and reconciliation numbers, from one function so nothing is computed twice |
+| **Roles** | applications, unactioned, shortlisted, not selected, anonymised, time to first application, last application, **plus the zero-application view** |
+| **Recruiters** | posted / live / closed / hidden / expired, applications received, shortlisted, not selected, last posted, **verification latency**, **cap pressure** |
+| **Candidates** | name, roles applied to, first and last applied. **No email in the list** — see below |
+| **Data health** | candidates with applications but no resume, orphaned files |
+
+One **Reports** tab with a sub-selector (Overview / Roles / Recruiters /
+Candidates). Rishi's decision: five top-level tabs is too many.
+
+### Four functions, and why functions at all
+
+`admin reads all applications` and `admin reads all jobs` **already permit
+every one of these reads.** The functions unlock nothing. They exist because an
+aggregate returns counts, whereas a client-side group-by ships every
+candidate's name and email to a browser in order to count them — the same
+principle as stage 7, made even though the policy does not require it.
+
+```
+admin_report_totals()      one row  -- every headline and reconciliation figure
+admin_role_stats()         per role
+admin_recruiter_stats()    per recruiter, including latency
+admin_candidate_stats()    per identifiable candidate, no email
+admin_candidate_detail()   one candidate, with email -- opened deliberately
+```
+
+Zero-application roles and cap pressure are **filters over those**, not new
+functions: the page narrows, the surface does not grow.
+
+**One rule the stage rests on: every number has exactly one source.** If the
+Roles page sums per-role counts and Overview sums its own, they will eventually
+disagree. That is the only reason `admin_report_totals()` exists.
+
+### The reconciliation rule — W3 applied consistently
+
+Rishi's decision, 23 Nov 2026: **a number nobody can act on should not sit in a
+count of work waiting.**
+
+| Figure | Anonymised rows |
+|---|---|
+| Totals, per role and per recruiter | **Included** — they must agree with what the recruiter sees |
+| **Unactioned** | **Excluded** |
+| Shortlisted / not selected | **Included** — `status` survives anonymising |
+| Candidates list | **Absent** — no id, no name, no email to list |
+| Anonymised | **Its own figure, beside the totals** |
+
+So the candidates view shows a number **deliberately smaller** than the total,
+and the page must state the difference, or the per-candidate figures will not
+sum and someone will lose an afternoon to it.
+
+### Verification latency — decision A
+
+**Source: the audit log, not `recruiter_profiles.verified_at`.** That column is
+overwritten on re-verification and nulled on unverify, so it is not a
+historical record. Latency is `recruiter_profiles.created_at` to the **first**
+`recruiter_verified` audit row — first, not latest, because a re-verification
+after an unverify is not the original wait.
+
+**The baseline starts the day migration 014 shipped.** Verifications done in
+SQL before that have no audit row and must display as **"not measured"**, never
+as a null treated as zero, which would drag the average into looking good.
+
+**Rishi's decision: A — weekends excluded, public holidays not modelled.** His
+reasoning: *"I'd rather under-report my own performance than model state
+holidays."* A holiday therefore counts as a working day, which makes the figure
+**pessimistic — it will never flatter.** That is the right direction for a
+published promise.
+
+A signup at Friday 18:00 is due end of Tuesday: two working days, **4.2
+calendar days**. Measuring calendar time would report a breach that never
+happened, which is the whole reason this needed deciding rather than assuming.
+
+### The candidates list — Rishi's shape, and the two details it needs
+
+**Decided: name, roles applied to, first and last applied in the list. Email
+only on opening one candidate**, the same shape as the anonymise panel. Not
+harder than either option originally proposed — one extra function, and the
+email never crosses the wire for the list view at all, which is better than the
+full-list option.
+
+**Two details that need stating because they are not obvious:**
+
+- **`full_name` is per application, not per candidate.** Someone who applied
+  three times may have three spellings. The list shows **the name on their most
+  recent application**, and the same applies to the email on the detail view.
+- **A candidate who deleted their data and then applied again** appears with a
+  count covering only the applications made since. The earlier ones are
+  unlinkable by design, and the reconciliation figure is where they show up.
+
+### The four additions Rishi accepted
+
+1. **Verification latency** against the published two-working-day promise.
+2. **Time to first application** per role, and **roles with zero applications
+   by age** — the second being the actionable one, since those are the
+   recruiters who quietly leave.
+3. **Cap pressure** — unverified recruiters at or near ten live roles, a
+   verification-queue signal currently invisible.
+4. **Resume-less candidates** — `candidate_resumes` against distinct
+   candidates with applications. Should be equal; a gap means something broke.
+
+**One sequencing fact:** all of these come from existing tables plus the audit
+log. Nothing needs new collection **except "did anyone look at the role", which
+needs stage 11.** So the honest funnel in 9b is applications → shortlisted →
+not selected, and views can only be added afterwards.
+
+### 9b TOUCHES A SIGNED-OFF STAGE
+
+**W3 moves into 9b** (Rishi's decision: not into stage 9's current round, which
+is mid-retest of the hide/unhide bug and should not gain a second moving part).
+
+The change is **`summariseStatuses()` in `src/lib/applicationDisplay.js` plus
+its tests — no migration.** `recruiter_applications()` already returns
+`is_anonymised` and the function already receives it and ignores it. Anonymised
+rows stop counting toward "1 new" and get their own figure.
+
+`recruiter_application_counts()` — the "1 application" on My jobs — **stays
+exactly as it is**, because that is a total, and totals include anonymised.
+
+> **9b's checklist must retest stage 7's applications panel.** It is a
+> signed-off stage and this changes one line of what it displays.
+
+### Stage 9b — migration 017, and two faults caught by dry-running it
+
+**The migration would have failed outright when run.** `percentile_cont`
+returns `double precision`, and `round(double precision, integer)` does not
+exist in Postgres — only `round(numeric, integer)`. Found by executing the
+query body against the live database before shipping it, not by reading it.
+Fixed with an explicit `::numeric` and a comment saying why, since it looks
+like a redundant cast.
+
+A second fault in my own check queries: `c3` tested
+`information_schema.columns` for a *function* name, which is always zero, so
+half of it could never fail. It now compares `pg_get_function_result` for both
+candidate functions — the list must not mention email, the detail must.
+
+**The working-day arithmetic was verified as data**, five cases including the
+one that justified the whole decision:
+
+| | Working days |
+|---|---|
+| Friday 18:00 → Tuesday 17:00 | **2** — within the promise |
+| Friday 18:00 → Wednesday | **3** — a breach |
+| Monday → Tuesday | 1 |
+| Monday → same day | 0 |
+| Saturday → Monday | 1 |
+
+### Stage 9b — c5 could not pass, which is the other half of the c3 lesson
+
+**Rishi's diagnosis was exactly right.** Every report function gates on
+`private.is_admin()`, which reads `auth.uid()`, which reads
+`request.jwt.claims` — and **the SQL editor has no JWT**. So all five returned
+zero rows, a scalar subquery over zero rows returned **NULL**, and
+`0 + NULL = NULL` failed against the total. Confirmed from the function
+definition rather than inferred: `auth.uid()` is
+`coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''),
+(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid`,
+and both settings are null in the editor.
+
+**It is the same trap as `admin_orphaned_resumes()` in stage 9** — a function
+whose `WHERE` contains `is_admin()` returns nothing rather than refusing — and
+I wrote a check that depended on it.
+
+Together with `c3` in the first draft of the same file, which queried
+`information_schema` for a *function* name and so could never fail, the pair is
+worth stating as a rule, and it is now in the file:
+
+> **A check that cannot pass is as useless as one that cannot fail. Both look
+> like coverage and neither is.**
+
+**The fix tests the rule, not the session**, in three statements whose order
+matters:
+
+| | |
+|---|---|
+| **9a** | With no session, assert **every** report returns zero rows. The gate, verified rather than assumed. |
+| **9b** | `set_config('request.jwt.claims', …, true)` — become the admin **for this transaction only**, reading the id from `user_roles` rather than hardcoding it |
+| **9c** | `c0` asserts the impersonation carried, then the arithmetic runs against the real functions |
+
+**Why impersonation rather than recomputing from base tables**, which was the
+other option: recomputing would assert an arithmetic identity about the table
+and never execute the functions at all, so a bug in one of them would pass.
+This way `c5` compares the numbers the application will actually display.
+
+Verified that it works before shipping it: `set_config(..., true)` in one
+statement and `auth.uid()` in the next returns the admin uuid, because the
+editor runs a script as a single transaction. **`c0` exists because that is an
+assumption** — if it ever stopped being true, the arithmetic would fail
+mysteriously instead of saying why.
+
+`true` makes it transaction-local, so it cannot leak into the session. Nothing
+is granted; it supplies a session the editor does not have.
+
+### Stage 9b — W3, and why the figures deliberately do not sum
+
+`summariseStatuses()` now excludes anonymised applications from **"new"** and
+shows **"N anonymised"** as its own part. `recruiter_applications()` already
+returned `is_anonymised`; the function received it and ignored it. **No
+migration.**
+
+`recruiter_application_counts()` — the "1 application" on My jobs — is
+unchanged, because that is a **total**, and totals include anonymised.
+
+**The anonymised figure is a separate axis, not a fifth bucket**, which is why
+the parts need not add up to the number of cards:
+
+- *new / shortlisted / not selected* answer **what did you decide**
+- *anonymised* answers **who can no longer be contacted**
+
+An application you shortlisted whose candidate then deleted their data is
+counted in **both**, and the card itself already shows the same two facts: a
+Shortlisted chip and "Details removed". Forcing them into one partition would
+mean either losing a decision you made or inventing a sum nobody asked for.
+
+### Stage 9b — a silent no-op in my own tooling, worth recording
+
+While adding the report-formatting tests, a Python `s.replace()` that inserted
+an import **matched nothing and failed silently**, because the anchor string I
+used belonged to a different test file. The tests then ran and died on
+`notMeasured is not defined`.
+
+Harmless here because it failed loudly at runtime. Worth recording because the
+same edit a line later — into a *source* file rather than a test — would have
+produced a file that still compiled and silently lacked the change. **Every
+edit in this project's tooling should assert its anchor matched**, and the
+ones that do are the reason several of these edits have failed fast instead of
+quietly.
+
+### Stage 9b — two raw database values on screen, one found and one not
+
+Rishi found the candidate detail panel listing applications as `applied`,
+`shortlisted`, `not_selected` — lower case, with an underscore, on the one
+surface that had not been routed through `statusLabel()`.
+
+**The same defect was one view over and he had not hit it yet.** The Roles
+table's status pill rendered `admin_role_stats().display_status` unchanged:
+`live`, `closed`, `expired`, `hidden`. Two of those — `closed` and `hidden` —
+**are** `jobs.status` column values, and every other surface in the product
+says Live, Closed, Expired, Hidden.
+
+Both fixed: the panel uses `statusLabel()`, and the pill uses a new
+`roleStatusLabel()` in `src/lib/reportFormat.js` so it is testable rather than
+inline. Nine cases, including that no label is lower case, none contains an
+underscore, and an inherited key like `constructor` returns "Unknown" rather
+than a function.
+
+**The pattern worth noticing:** every time a new surface renders an existing
+value, it is a fresh opportunity to leak a token, and the rule has now been
+broken in stages 8, 9 and 9b. A label function per value type, imported rather
+than re-expressed, is the only thing that has actually held.
+
+### Stage 9b — the "not measured" safeguard did not catch its own case
+(migration 018)
+
+**Rishi's observation, and it was more than a note.** Reports → Recruiters
+showed `iworkatgcctest1` as a **5-working-day breach** of the two-working-day
+promise, with "Not measured" reading **0**.
+
+That recruiter was really verified by hand in SQL on 16–19 Nov, before the
+audit log existed. The only recorded verification is a test one from 23 Nov. So
+`first_verified_at()` found an audit row, called it the first verification, and
+measured signup to a re-verification seven days later.
+
+**The safeguard was built to report "not measured" in exactly this case and
+failed to, because it tested whether an audit row EXISTS rather than whether
+the row it found is the ORIGINAL event.**
+
+**The inference that fixes it:** an account cannot be *unverified* unless it was
+verified first. So a `recruiter_unverified` row preceding the earliest
+`recruiter_verified` row proves the original verification predates the log.
+Confirmed against the data before writing it — **audit row id 1 for that
+recruiter is `recruiter_unverified`.**
+
+This is not a workaround for test data. **It is the correct general rule:** any
+account verified outside the log and later re-verified through `/admin`
+produces exactly this pattern, and its original wait is genuinely unmeasurable.
+Saying "not measured" is honest; inventing 5 working days is not.
+
+**What it cannot fix**, stated so it is not mistaken for complete: a SQL
+verification never re-verified through `/admin` leaves no trace at all. It
+already reads as not measured, correctly, but for the weaker reason that there
+is nothing to find. And from here the question disappears — every verification
+goes through `admin_set_recruiter_verified()`, so the first audit row *is* the
+first verification. This only ever mattered for accounts predating migration
+014.
+
+### Stage 9b — a moving denominator in the promise statistic (migration 019)
+
+**R7 failed, and not for the reason the step gave.** I wrote that unverifying a
+recruiter should not wipe their measurement, since 018 keys off an unverify
+*preceding* the first verify. It did wipe it, and that rule was not the cause.
+
+`admin_report_totals()` computed latency from
+`from public.recruiter_profiles r where r.is_verified`, so unverifying someone
+removed them from the statistic altogether. Rishi named the cause exactly in
+his second hypothesis.
+
+**The fault is a moving denominator.** "Currently verified" and "has ever been
+verified" are different populations, and the promise is about the second. A
+recruiter who waited five working days waited five working days; unverifying
+them later does not unmake it. Under the old filter a **published-promise
+statistic changed retroactively** — and it moved in the **flattering**
+direction, because the breach simply left the sample.
+
+His follow-up was the right instinct too: *"Not measured should arguably be 2."*
+Neither was right. The recruiter was not unmeasured, it was **excluded** — and
+that is the tell for a moving denominator.
+
+**It also broke a rule this stage was built on, in a way the rule did not
+cover.** Migration 017 says every number has exactly one source, so the
+Overview must not add up what another view returned. It does not. But the
+Overview and `admin_recruiter_stats()` defined their **population**
+differently — the latter has no `is_verified` filter and was right all along —
+so the two views disagreed about the same recruiter:
+
+| | `iworkatgcc`, measured at 5 working days |
+|---|---|
+| Recruiters view | showed it as over two working days |
+| Overview | reported **0 breaches** |
+
+Same bug class, different axis. **"One source per number" was not enough; it
+needed to be "one source per number AND one population per question."**
+
+**The checks are now the cross-view assertions that would have caught it:** c1
+and c2 assert the Overview's measured and breached counts equal what the
+Recruiters view reports, and c3 asserts measured + unmeasured equals everyone
+ever verified — so nobody can be silently excluded again.
+
+Rehearsed against live data before shipping: measured **1**, unmeasured **1**,
+within **0**, breached **1**, median **5** — with `iworkatgcc` counted at 5
+working days despite not being verified right now, which is the whole point.
+
+### Stage 9b — the test data is in an unusual state, on purpose
+
+After stage 9's testing, **all 10 applications are anonymised.** So when 9b is
+first opened:
+
+- the candidates report is **empty**
+- `applications_unactioned` is **0**
+- `applications_anonymised` equals `applications_total`
+
+**That is the reconciliation rule working, not a bug.** It also means check
+`c5` exercises the interesting path from the first run: `0 + 10 = 10`. Applying
+again from the test Gmail is what populates the candidate side.
+
+### What 9b needs before it starts
+
+One migration (**017**). No new environment variables. Nothing from Rishi
+beyond stage 9 being signed off first.
+
+### Stage 9b — SIGNED OFF 23 Nov 2026
+
+Three rounds. **Two real bugs, both found by testing rather than review**, and
+both of a kind that reading the code would not have caught.
+
+| Bug | Why review would have missed it |
+|---|---|
+| Raw status values leaking into **two** new surfaces — the candidate panel and the Roles pill | Each one looks correct in isolation. The defect is only visible against the rest of the product, where every other surface capitalises. |
+| The verification population defined as **currently** verified rather than **ever** verified | The line `where r.is_verified` reads like "verified recruiters". It takes toggling a recruiter and watching a published statistic move to see that it means something else. |
+
+**The second was the serious one.** It moved a published-promise statistic
+**retroactively, in the flattering direction** — unverifying a recruiter
+removed their breach from the sample. And it made two views disagree about the
+same person while each was internally consistent.
+
+| Round | What came back |
+|---|---|
+| 1 | `c5` could not pass from the SQL editor — the check, not the code |
+| 2 | Raw status values in the candidate panel; and an observation about verification that turned out to be a defect |
+| 3 | R7 failed: the measurement vanished on unverify |
+| — | All passed. Signed off. |
+
+**What Rishi's testing contributed that the code review did not:** every one of
+the three rounds was a case where a stated behaviour did not hold, and in two
+of them my own explanation of the cause was wrong before his diagnosis
+corrected it. R7's step text said the unverify rule was the likely cause; it
+was not, and his second hypothesis was right.
+
+### Stage 9b — the rules this stage added, worth carrying forward
+
+- **A check that cannot pass is as useless as one that cannot fail.** Both
+  halves happened in the same file, one round apart.
+- **One source per number AND one population per question.** The first was
+  written down in 017 and honoured; the second was not stated and was broken.
+- **A label function per value type, imported rather than re-expressed.** The
+  only thing that has actually stopped raw column values reaching a screen
+  across stages 8, 9 and 9b.
+- **Null is not zero.** An unmeasured verification displayed as "0 days" would
+  make a published promise look perfect precisely where there is no evidence.
+
+## Stage 10 — SEO, and making the board findable (ROUND ONE BUILT 23 Nov 2026)
+
+**One stage, two rounds, signed off separately — Rishi's decision, 23 Nov
+2026.** Round one is everything that is fully testable on a preview: the board
+becomes reachable, and a candidate can save a role. Round two is the SEO work,
+which is only partly testable before merge (see P3).
+
+### Round one — what was built
+
+| Piece | Where |
+|---|---|
+| `job_saves` table, three policies, `my_saved_jobs()` | `supabase/migrations/020_job_saves.sql` |
+| The saves hook (optimistic, sign-in popup) | `src/lib/useJobSaves.js` |
+| Pure display helpers for the three states | `src/lib/savedJobsDisplay.js` |
+| The RPC read and the delete | `src/lib/savedJobs.js` |
+| The Save control | `src/components/SaveJobButton.jsx` |
+| Save on the list and on the detail page | `src/Pages/GccJobs.jsx`, `src/Pages/GccJobDetail.jsx` |
+| `/profile/saved-jobs` | `src/Pages/SavedJobs.jsx` |
+| "Roles Saved" counter, third tile | `src/Pages/Profile.jsx` |
+| **"Apply Directly" in the header nav → `/gcc-jobs`** | `src/components/SiteHeader.jsx` |
+| 111 assertions on the helpers | `scripts/stage10-saves-test.mjs` |
+
+### A saved role has three states, and only one of them is the normal case
+
+`public.jobs` has a select policy built on `private.job_is_public()`, so a role
+that closed, expired, was hidden by an admin, or whose recruiter was suspended
+**stops being returned to the browser entirely**. A plain join from `job_saves`
+would therefore drop exactly the rows the page exists to explain — and the
+counter on `/profile` counts *rows in `job_saves`*, so the number and the page
+it opens would disagree. A page showing four cards under a counter reading six
+is a bug report.
+
+So `my_saved_jobs()` returns **every** save with an availability:
+
+| State | Means | What is shown |
+|---|---|---|
+| `open` | still accepting applications | the ordinary job card |
+| `closed` | filled, closed by the recruiter, or past its closing date | a flattened card: which role it was, and that it has closed |
+| `withdrawn` | hidden by an admin, or its recruiter is suspended | **no title, no company, no link** |
+
+**The difference between the last two is not cosmetic.** A closed role was a
+real posting that ran its course, and someone who bookmarked it is entitled to
+know which role it was. A withdrawn role was taken down *by us*, which is the
+one case where continuing to print the recruiter's words would undo the
+removal. The function nulls every display column for those, so the page cannot
+render one by accident.
+
+**An unrecognised availability is treated as withdrawn, not as open.** That is
+the fail-closed direction, and it is the one a future `jobs.status` value will
+exercise. Asserted in the test script across nine bad values.
+
+### Round one — open decisions for Rishi
+
+| # | Decision |
+|---|---|
+| D1 | **The nav label.** Built as "Apply Directly", as instructed. My one reservation, recorded: it does not contain the word "jobs", so a visitor scanning *Explore GCC Jobs · Apply Directly* may not realise both are job listings — and the item holding our own roles is the one that does not announce itself as roles. "Direct GCC Jobs" or "Jobs: Apply Directly" keep the distinction and still say jobs. One-line change either way. |
+| D2 | **A homepage hero card for the board.** `src/components/Header.jsx` carries the homepage cards and one already says "Explore GCC Jobs". A card there would be seen by far more people than a nav item. Not added, because it was not asked for. |
+| D3 | **Does "Delete my job board data" also forget saved roles?** Not changed, deliberately. Saved *questions* are explicitly untouched by that endpoint; the privacy policy names applications and the resume and nothing else; and a saved role holds no personal detail an application does not already hold. But the button says "job board data", and a saved role plainly is. If the answer is yes, the privacy policy needs a line and `api/delete-my-data.js`'s header comment is currently wrong. Deleting the **account** already clears these rows, by the cascade. |
+
+### Round two — scope, recorded before it starts
+
+- Per-request job detail pages with `JobPosting` JSON-LD; `noindex` removed.
+- 404 for a job that is not public, so Google drops it (spec allows 404, 410,
+  a past `validThrough`, or removing the markup; no stated preference).
+- **No markup on `/gcc-jobs`** — "Don't add structured data to pages intended
+  to present a list of jobs", and exactly one job per page.
+- `jobLocation` as `Place` + `PostalAddress` with `addressCountry: "IN"` plus
+  the city; `jobLocationType: TELECOMMUTE` only for "Anywhere in India".
+- `directApply` **omitted** — our flow has a sign-in in the middle, so the
+  claim would be false. Rishi, 23 Nov 2026.
+- Indexing API **out of v1**. Rishi, 23 Nov 2026.
+- `employmentType` values are case-sensitive: `FULL_TIME`, `PART_TIME`,
+  `CONTRACTOR`, `TEMPORARY`, `INTERN`, `VOLUNTEER`, `PER_DIEM`, `OTHER`.
+- **India is in Google's listed countries.** Confirmed against the live spec
+  page, 23 Nov 2026, before building: the Asia list is Bangladesh, Hong Kong,
+  **India**, Indonesia, Japan, Kazakhstan, Kyrgyzstan, Malaysia, Pakistan,
+  Philippines, Singapore, Sri Lanka, Taiwan, Thailand, Uzbekistan, Vietnam.
+  No date marker on that section.
+- **Raise the description minimum from 50 to 400 characters.** Google's only
+  stated rule is the negative one — "We don't allow job postings with
+  incomplete job descriptions" — and there is no number in the spec, so a
+  counter cannot enforce completeness; it can only catch the one-liner. 400 is
+  roughly 60–70 words. Stage 9's admin hide is the backstop for a post that
+  clears 400 and is still junk. The message names the consequence: *"Describe
+  the role in at least 400 characters — you have N. A thin description stops
+  the role appearing in Google's job results, where most candidates will find
+  it."* **The CHECK constraint on `jobs.description` is still `>= 50` and must
+  be raised in the same migration, or the form and the database disagree.**
+
+### Stage 10 round one — SIGNED OFF 23 Nov 2026
+
+Rishi's result, verbatim: *"Round one signed off. Migration 020 re-run: 8
+checks, 8 PASS, with the figures readable. Nav works and recruiters don't see
+either link. Save works signed out → sign in → filter survives. Three saves
+persist across reload, list and detail agree, toggle works both ways. Tile and
+page counts match at every step. Closed role shows the grey panel with its
+title; hidden role shows 'A role you saved' with nothing of the posting;
+unhide restores; Remove drops both counts. Second account sees the empty state
+and job_saves has exactly one user's rows. No overflow at 375px."*
+
+The three decisions he returned with:
+
+| # | Decision | Outcome |
+|---|---|---|
+| D1 | **Keep "Apply Directly" for now.** *"Your reservation is noted and I agree it's real, but the wording review covers the whole site and this is one line. Log it there rather than deciding it in isolation — W7."* | Logged as **W7**. No code change. |
+| D2 | **Add the homepage card.** *"A nav item only reaches people already looking; the homepage reaches the 2,520 members who don't know the board exists. That's the findable half of the stage."* | Built 23 Nov. Fourth card in `ACTION_ITEMS`, second position, orange accent, paper-plane icon. Grid moved from `md:grid-cols-3` to `md:grid-cols-2 lg:grid-cols-4` — **a visible homepage layout change for every member**, because three columns plus a fourth card leaves one card alone on a second row. |
+| D3 | **Include saved roles in "Delete my job board data".** *"The button's name is a promise, and a saved role is plainly job board data. It also reveals something an application doesn't: which employers someone was interested in but never approached. Saved questions staying untouched doesn't argue against this — those aren't job board data."* | Migration 021. See below. |
+
+**D2 had a side effect worth recording as a result, not a footnote.** The
+homepage is prerendered, so `dist/index.html` now contains a real
+`<a href="/gcc-jobs">`. A crawler reaching the homepage finds the board
+**without running JavaScript** — which is part of what round two was for,
+delivered early by where the card happens to live.
+
+### Stage 10 — D3's policy wording, approved 24 Nov 2026
+
+Four changes, all approved as drafted:
+
+| Where | What changed |
+|---|---|
+| **What we collect** | A new `<h3>When you save a role</h3>`. It sits between the community section and the application section because a saved role is the **only** job board data collected from someone who has not applied — so it cannot live under "When you apply", and it is not community data either. It states plainly that the recruiter is told nothing: not who saved the role, not how many did. |
+| **What we collect** (community) | *"which posts you have saved or liked"* → *"which **questions** you have saved or liked"*, so the two kinds of save are never confused anywhere in the document. |
+| **What we keep and for how long** | A retention line: saved roles last until removed, until the job board data is deleted, or until the account is deleted — whichever comes first. |
+| **Deleting your data** | A new bullet before the applications one: every saved role is **deleted, not anonymised**, because there is nothing in a bookmark worth keeping once someone has asked to be forgotten. And the "not touched" bullet now names **saved questions** explicitly. |
+| **Can I take an application back?** | Rewritten to include saved roles — and **W4 fixed in the same sentence**, since it was being rewritten anyway. |
+
+**`LAST_UPDATED` deliberately left at 22 November 2026.** Carried item 1 sets
+it to the real launch date at merge, and no date is correct before then: the
+policy is not published, so "24 November" would be as untrue as "22
+November". This is the one place where leaving a stale value is the honest
+choice rather than the lazy one.
+
+**D3 is now complete.** The code was ahead of the promise between 23 and 24
+November, which was only safe because nothing merges until stage 11.
+
+### Stage 10 — D3, and the argument I got wrong
+
+Migration 020's header argued *against* including saved roles, on the grounds
+that "a saved role holds no personal detail that an application does not
+already hold". **That was wrong, and Rishi's reason is the one the file should
+have reached:**
+
+> An application tells an employer something they already know. A saved role
+> says *interested, and did not approach* — which nobody knows at all.
+
+That is a disclosure with no counterpart anywhere else in the system, and it
+is exactly what a delete-my-data button exists for. 020's header is annotated
+as superseded rather than rewritten, because a migration is a record of what
+was run and what was believed when it ran.
+
+**It went INSIDE `anonymise_job_data_for()` rather than beside it, for two
+reasons.** Atomicity: a second RPC could half-succeed, and the endpoint would
+then have to describe a half-finished deletion to someone who had just typed
+`DELETE MY DATA`. And it keeps 020's `c3` true — no grant to `service_role` on
+`job_saves` was needed, because a definer function runs as its owner. 021's
+`c5` asserts that grant still does not exist.
+
+Two faults caught while writing 021's own checks, both of the same kind —
+**a check that can destroy real data is worse than no check**:
+
+- `c3` calls a destructive function on a real account. It now proves the
+  subject has zero applications, zero resume rows and zero saves *before*
+  calling, and reports FAIL without calling anything if not.
+- `c4` called the same function and did **not** repeat that proof. If `c3` had
+  bailed out because the subject was dirty, `c4` would have gone ahead and run
+  it on exactly the account `c3` had just refused to touch. The guard is now
+  duplicated on purpose.
+
+### Stage 10 — eight checks that could not be read (the same lesson, third form)
+
+Migration 020 as first shipped reported all eight checks with `raise notice`.
+**Supabase's SQL editor does not display notice output at all**, so a
+completely clean run printed "Success. No rows returned" and every PASS was
+invisible. The checks were sound and their figures were real; there was simply
+no way for the person running the file to see either.
+
+Rishi, 23 Nov 2026: *"That's the third time a check has been written in a form
+I can't read — c3 that couldn't fail, c5 that couldn't pass, and now eight
+that are invisible. Same lesson each time. From here, migration checks should
+return a result row like 017/018/019 did, not notices."*
+
+| Migration | The fault | The form of it |
+|---|---|---|
+| 015 c3 | queried `information_schema.columns` for a *function* name | a check that could not **fail** |
+| 017 c5 | `is_admin()` returned zero rows, so the scalar subquery was NULL | a check that could not **pass** |
+| 020 v1 | eight `raise notice` calls in an editor that shows none of them | eight checks that could not be **read** |
+
+**THE RULE, now in force for every migration from 020 onwards: a migration's
+checks end in a `select` that returns one row per check, with the figures in a
+`detail` column whether it passed or failed.** A check is only a check if its
+outcome reaches the person running it — and a check that shows its numbers
+only on failure is a check whose numbers nobody ever sees, which is most of
+how this went wrong.
+
+020 was rewritten to that form, 23 Nov 2026. The results collect in a
+temporary table rather than one wide select — which is what 019 used — for two
+reasons: the editor shows the result of the **last** statement only, and `c7`
+has to write rows before it can read them back through the function, so it
+cannot be a column in a single select.
+
+**The original run did pass.** Every check raised on failure, so a run with no
+exception plus `job_saves` holding zero rows afterwards is direct evidence:
+`c7` cannot reach its end without having inserted three rows, read exactly two
+back, classified both correctly, and deleted them. What was lost was the
+figures, not the verdict.
+
+### Stage 10 — the board's placement changed, 24 Nov 2026
+
+Rishi's decision, verbatim: *"New placement for the board, replacing what
+round one shipped. Remove the 'Apply Directly' link from the header and the
+card from the homepage. Both go. Instead, a promo card at the top of /jobs,
+above the Notify Me box."*
+
+His reason, which is the better argument: `/jobs` is where someone is already
+looking for work, so the card reaches them **mid-search**. A nav item reaches
+people already looking for the board; a homepage card reaches people who
+arrive at the homepage. Neither is a person in the middle of a job hunt.
+
+| What | Then | Now |
+|---|---|---|
+| Header nav | "Apply Directly" item | **removed** |
+| Homepage | fourth action card, four-column grid | **removed**, grid back to three; `FeatureCard.jsx` restored byte-for-byte |
+| `/jobs` | nothing | promo card above the Notify Me box, "New Feature" badge, heading **Exclusive jobs** |
+| `/gcc-jobs` empty state | "Recruiters post roles here directly. Check back shortly." | Rishi's wording, plus two links; signed-in variant |
+| `/gcc-jobs` last page | nothing | "More direct GCC jobs coming soon" |
+
+This **supersedes** decision 27 (add the homepage card) rather than undoing it:
+the findability problem 27 named is real, and the promo card is the answer to
+it. **D1 (the nav label) and D2 (a homepage card) are closed by removal.**
+
+#### The card, third version: a feature-announcement banner, 24 Nov 2026
+
+Rishi supplied an illustration and a brief: two columns on desktop, text left
+and artwork right, on a very pale gradient — *"Not a saturated filled panel;
+the last version was too heavy."*
+
+**The illustration was not in the repo.** It arrived attached to the message
+rather than committed, so it was written to
+`public/exclusive-jobs-illustration.svg` **verbatim** — not recoloured, not
+redrawn, as instructed.
+
+| | Second version | Third version |
+|---|---|---|
+| Background | blue-600 → purple-700, filled | white → blue-50 → teal-100, very pale |
+| Text | white on saturated blue | navy heading, blue accent, slate body |
+| Badge | white/20 pill | teal-200 pill, navy text, letter-spaced, megaphone glyph |
+| CTA | text link with arrow | solid blue pill button with arrow |
+| Artwork | none | his SVG, right, bleeding past the edge |
+| Corners | 16px | 24px |
+
+**The CTA is a `<span>`, not a `<button>`.** The whole card is a link, and a
+button inside an anchor is invalid HTML — a nested interactive element, which
+keyboard navigation and screen readers both handle badly. It is styled as a
+button with the card as the click target: one thing to click, one thing to
+announce.
+
+**The illustration is not rendered at all below `md`**, rather than scaled
+down. Rishi: *"I'd rather lose the artwork than squeeze it."* `hidden
+md:block` means a phone never downloads 4KB it will not show.
+
+**Two colour observations, reported rather than fixed** (he asked to be told
+rather than have the file edited):
+
+- The **yellow sparks** (`#FACC15`) are back on the card, in his artwork. He
+  had asked for yellow to go because it read as a warning; three small sparks
+  in the top-right corner read as an accent rather than as caution, so they
+  were left alone — but the earlier note was explicit enough to flag this
+  against.
+- The **laptop base** (`#CFE0FA`, pale blue) lands on the blue-50 part of the
+  gradient, which is nearly the same value. It may look faint. The laptop's
+  navy bezel keeps the screen itself defined, so this is the one element worth
+  a second look.
+
+**Verified rather than assumed**, as with the previous version: every
+arbitrary-value class (`w-[260px]`, `md:grid-cols-[1fr_auto]`,
+`tracking-[0.12em]`) was confirmed in the compiled Tailwind v4 CSS, and the
+prerendered `/jobs` confirmed to carry the badge, the two-tone heading, the
+pill button and the `<img>`.
+
+#### The card's colour and copy, revised 24 Nov 2026
+
+Rishi, after seeing it: *"Drop the yellow. It reads as a warning rather than
+an announcement."* He is right, and the reason is worth keeping: yellow is the
+colour this site uses for nothing and the colour the whole web uses for
+caution, so amber was carrying a meaning nobody intended.
+
+Replaced with **blue into purple** — both already in use on the homepage
+cards, no new hue, because the design pass is still deferred until every stage
+is done and this must not pre-empt it. It is the **saturation** that does the
+work, not the hue: everything else on `/jobs` is a white card or the pale blue
+Notify Me box directly below, so a filled, shadowed panel reads as an
+announcement while still being the site's own blue. A gradient and two
+blurred highlights supply the depth he asked for — *"flat colour reads as a
+notice, a lit surface reads as a feature."*
+
+Checked rather than assumed: the project is on **Tailwind v4**, which renamed
+the gradient utilities, so every class used was confirmed present in the
+compiled CSS before pushing.
+
+| | Then | Now |
+|---|---|---|
+| Heading | "Exclusive jobs" | **"Exclusive GCC jobs"** |
+| First sentence | "...posted directly to our website." | **"...posted directly to our community website."** |
+| Colour | amber-50 / amber-300 | blue-600 → purple-700 gradient, white text |
+
+**The line break he spotted was a real fault.** The body had `max-w-2xl`
+(672px) inside a card already constrained by the page's `max-w-6xl` column —
+a second cap doing nothing but breaking the sentence with half the line above
+it empty. Removed; the card's own width is the only constraint now.
+
+Also on his instruction, the `/gcc-jobs` subtitle became **"Posted directly by
+the people hiring for GCC roles."** The old one ("...you are not sent off to
+another site") explained the board by contrast with `/jobs`, which only makes
+sense to someone who already knows both pages.
+
+#### The card only renders when the board has live roles — and a plain count would have got that wrong
+
+Rishi's rule: *"The card only appears when the board has live roles. No live
+roles, no card."*
+
+`/jobs` makes **no database query at all** today — the listings are a static
+`/data/jobs.json` — so this needed one. The obvious version, counting
+`public.jobs` from the browser and letting RLS filter it, is wrong. Postgres
+ORs a table's SELECT policies together, and `public.jobs` has three:
+
+| Who is asking | What a plain `count(*)` returns |
+|---|---|
+| a visitor | the public roles |
+| a recruiter | public roles **plus their own** pending, closed, expired, hidden |
+| the admin | **every row in the table** |
+
+**Rishi is the admin.** On a board with no live roles but one closed test
+posting, he would have been the one person on the site seeing a card that
+promised roles and clicked through to an empty board — the exact failure the
+rule exists to prevent, found first by its author.
+
+`public.live_job_count()` (migration 022) is `security definer`, takes no
+arguments, and applies the same `private.job_is_public()` the public read
+policy uses, so the card and `/gcc-jobs` cannot disagree about what "live"
+means. Filtering client-side with `.eq('status','live')` would have needed no
+migration and missed the suspended-recruiter half of that condition.
+
+**Migration 022's checks force the roles.** The Supabase SQL editor runs as
+`postgres`, which has `BYPASSRLS`: a plain `count(*)` there returns every row
+whatever JWT claim is set, so a check written that way would prove nothing but
+its own privilege. c3 and c4 use `set local role anon` / `authenticated` —
+the two roles the browser actually uses — and measure both numbers for all
+three personas. **c4 fails when the bug is absent**, on purpose: if a plain
+count were already correct, the migration is dead weight and should be deleted
+rather than trusted.
+
+#### What the card costs a visitor
+
+One extra request per `/jobs` load: a single integer over RPC, fired in the
+**same effect** as the `jobs.json` fetch rather than after it, so the two
+overlap and nothing on the page waits for it. Rejected alternative: baking the
+count into a static file at build time (free per visitor), because the
+staleness window is up to 24 hours — the first role ever posted would not
+light the card until 02:00 the next morning, which is both wrong and
+untestable in one sitting.
+
+**Fail closed.** An error, a null, a NaN, a string or a negative all resolve to
+*no card*. The one outcome worse than a visitor not seeing the card is a
+visitor clicking it into an empty board.
+
+#### The prerender had to be taught to wait
+
+`/jobs` is prerendered, and the count is issued from an effect after
+hydration — which can start **after** `networkidle` has already been
+declared. Saving then would have put the card on `/jobs` on some builds and
+not others, with nothing in the output to say which had happened. The wrapper
+publishes its decision as `data-board-promo="pending|show|hide"` and
+`scripts/prerender.mjs` waits for it to stop saying `pending`.
+
+Proved both ways locally, 24 Nov 2026: with no function in the database the
+prerendered `/jobs` carries `data-board-promo="hide"` and no card; with a
+positive count it carries the badge, the heading, the body and a real
+`<a href="/gcc-jobs">`.
+
+#### The "New Feature" badge takes itself off
+
+Rishi's decision: `NEW_FEATURE_UNTIL`, **eight weeks, set at merge alongside
+`LAST_UPDATED`** (carried item 20). Not a role count, and not a reminder.
+
+The badge's job is to make the ~2,520 members who already know `/jobs` notice
+the page has changed; they will nearly all have passed through within a few
+weeks. A role count measures **supply**, which is a different fact — the board
+could hit 40 roles in a fortnight while the feature is still new, and worse, it
+would keep the badge shouting "New Feature" over an empty board. Rishi:
+*"Your reasoning about an empty board shouting 'New Feature' is the failure I
+wanted to avoid."* The comparison happens at render, so the live page drops the
+badge the moment the date passes and the 02:00 rebuild refreshes the
+prerendered `/jobs` within a day.
+
+#### The empty state is now mostly unreachable, and kept anyway
+
+Rishi: *"I know this is now mostly unreachable, since the card won't be there
+when the board is empty. Keep it anyway as a fallback for direct URLs."* It
+remains reachable by a bookmark, a typed URL, or a search result that outlived
+the roles it was indexed from.
+
+**He corrected the wording himself**, from "we'll notify you" to "we'll
+announce it there": *"you were right that joining the community doesn't put
+anyone on the jobs alert list, and I'd rather promise what I'll actually do."*
+The two lists are genuinely different — `/signup` creates a community account
+whose only automated email is the digest about hearts and answers, while the
+jobs alert list is the Notify Me box on `/jobs`, which posts to a Google Apps
+Script. **No new automated email is involved, so the one-Brevo-email rule is
+intact.**
+
+The **filtered** miss keeps its own answer. Someone who searched for a Pune
+finance role and found none is not asking to be told about the feature — they
+want their filters back.
+
+**Signed-in members see a different third sentence and a different first
+link**, because `/signup` *redirects a signed-in person to `/welcome`*: the
+link would not merely read oddly, it would not work. `userId` is now
+three-state (`undefined` / `null` / id) so the page says nothing rather than
+flashing the wrong sentence for half a second.
+
+#### Decision 29 — `/post-a-job` now tells a signed-in member that accounts are separate
+
+`/post-a-job` was linked from **nowhere a candidate could reach** — only a
+typed URL or `RecruiterRoute`'s redirect. The empty state's "Are you a
+recruiter or GCC leader?" is its first public entrance, which means a
+signed-in community member can land on a sign-up form while already holding a
+session; filling it in would open a second account on a different email and
+replace the session they arrived with.
+
+Rishi, 24 Nov 2026: *"yes, add the line on /post-a-job telling a signed-in
+community member that recruiter accounts are separate."* The form is left
+available — a community member may genuinely be a GCC leader who wants to post
+— it is just no longer silent about what is about to happen. **This touches a
+signed-off page: carried item 21.**
+
+#### W8 — three vocabularies for one thing
+
+Logged for the site-wide wording review, not fixed here. The same feature is
+now called **"Exclusive jobs"** (the promo card), **"posted directly to our
+website"** (its body), **"Roles posted on iWorkAtGCC"** (the page's own `h1`)
+and **"direct GCC jobs"** (the end-of-list card). Each reads well alone. W7's
+line about the nav label is moot — the nav item is gone.
+
+### Stage 10 round two (placement) — SIGNED OFF 24 Nov 2026
+
+Rishi's result, verbatim: *"Stage 10 round two (placement) passes."*
+
+| What he confirmed | Result |
+|---|---|
+| Migration 021 | 5 checks, all PASS |
+| Migration 022 | 4 checks, all PASS — **c4 showed the point: 23 as a visitor against 25 as the recruiter** |
+| Fail-closed before 022 ran | no card on `/jobs` |
+| The card | renders, links to `/gcc-jobs`, and `live_job_count()` matches the 23 the page prints |
+| Removals | no "Apply Directly" anywhere; homepage back to three cards; recruiters still see the promo card |
+| `/gcc-jobs` | end-of-list card on the last page only; `zzzz` gives "Nothing matches that", not the new-feature copy |
+| `/post-a-job` | no notice signed out; amber notice for a signed-in community member; "Your recruiter account is ready" for a recruiter |
+| Delete flow | resume gone, **6 applications anonymised, 5 saved roles removed**, community account and saved questions untouched, Roles Saved 0, Questions Saved unchanged, lower-case confirmation refused |
+| 375px | no overflow; illustration dropped on phones as intended |
+
+**c4 is the check worth remembering.** It was written to fail if the bug it
+describes were absent, and it reported 23 against 25 — a plain count really
+would have shown the admin two roles that no visitor can see. The card would
+have appeared over an empty board for exactly one person: its author.
+
+On decision 29's notice, Rishi: *"The notice also warns that posting signs
+them out of their community account on that device — good catch, that's the
+part someone would otherwise find out the hard way."*
+
+**Two items deferred to the design pass, not fixed now, on his instruction:**
+
+- The `/post-a-job` recruiter panel has a lot of empty white space under the
+  button.
+- **The illustration's yellow sparks stay.** His words: *"three accent marks
+  in a corner aren't the warning-coloured panel I objected to."* That closes
+  the colour note raised when the illustration was wired in.
+
+### Stage 10 round two — the SEO half (BUILT 24 Nov 2026)
+
+| Piece | Where |
+|---|---|
+| Per-request job page with `JobPosting` markup | `api/job-page.js` |
+| The head block, pure and tested | `src/lib/jobPageHead.js` |
+| Jobs sitemap | `api/sitemap-jobs.js` → `/sitemap-jobs.xml` |
+| Ordered rewrites | `vercel.json` |
+| `noindex` removed | `src/Pages/GccJobDetail.jsx` |
+| Description minimum 50 → 400 | `src/lib/jobFormModel.js`, `src/components/JobForm.jsx`, migration 023 |
+
+#### THE SHELL WAS FETCHED OVER HTTP, AND THAT WAS WRONG — FOUND 24 Nov 2026
+
+The first version of `api/job-page.js` fetched `/app.html` over HTTP from the
+deployment's own host and trusted it when `response.ok` was true. Rishi tested
+step 1 and got **a blank page with 70 MIME-type errors**, not the 503 I had
+predicted. His diagnosis, from View Source, was exact:
+
+```
+data-dpl-id="dpl_2pfh63eC3yPnKdmeRGgHS3stomBy"
+src="/_next/static/immutable/chunks/0c0hxoamwjsbw.js"
+data-testid="geistcn/skip-nav-link"
+```
+
+**Vercel's deployment-protection page is a Next.js app.** Protection
+intercepted the internal fetch and answered with its own login page — valid
+HTML, status 200 — so the guard passed, the markup was injected into a
+stranger's document, and that is what the browser got. The markup itself was
+correct; only the shell was someone else's.
+
+**TWO SEPARATE FAULTS, AND HE SEPARATED THEM CORRECTLY.**
+
+*1. The guard was too weak for production, not just preview.* His words:
+*"'Did I get HTML back' isn't enough — it got HTML. It needs to verify the
+shell is actually ours before injecting. If that internal fetch ever returns
+anything unexpected in production, this function will inject into it and serve
+it to candidates."*
+
+`isAppShell()` in `src/lib/jobPageHead.js` now identifies the shell
+**positively**: `<div id="root">`, a `/assets/index-*.js` bundle with this
+deployment's hash, and a `</head>` to inject before. Vercel's page has none of
+the three, so the positive checks alone refuse it. A list of markers from the
+real incident is kept as a second layer, and the test **strips every one of
+them and asserts the page is still refused** — because a guard that works only
+by recognising one known document would not survive the next unexpected one.
+
+*2. The approach changed rather than being patched.* His instruction: *"If the
+approach has to change, say so plainly rather than working around protection —
+I'd rather rebuild this than ship something that only works because production
+happens not to have protection on."*
+
+**There is no request-time network call for the shell any more.** It is read
+off the deployment's own filesystem, declared in `vercel.json`:
+
+```json
+"functions": { "api/job-page.js": { "includeFiles": "dist/app.html" } }
+```
+
+Nothing can intercept a file read, so the fault is not merely detected — it is
+out of reach. **And there is no fetch fallback, deliberately.** One would be
+safe now that the shell is identified, but it would mean a protected preview
+quietly behaving differently from production, which is the thing he asked not
+to ship.
+
+**Proved locally before pushing**, by invoking the handler with a mock
+request/response against the real database and the real built shell:
+
+| Request | Status | Markup | Notes |
+|---|---|---|---|
+| `program-manager-13` (live) | **200** | JobPosting, title intact | `index, follow` |
+| `t5-platform-engineer-17` (closed) | **404** | none | `noindex, nofollow`, full shell in the body |
+| `nonsense-99999` | **404** | none | |
+| `wrong-slug-13` | **301** | — | → `/gcc-jobs/program-manager-13` |
+| `` (empty) | **404** | none | |
+| `../../etc/passwd` | **404** | none | `parseJobParam` requires a trailing `-<digits>` |
+
+And on the served document: our mount point present, our hashed bundle
+present, **no `_next` reference**, exactly one `</head>`, markup inside it.
+
+**The one thing that cannot be verified without deploying** is whether
+`includeFiles` puts `dist/app.html` where the function can read it. If it does
+not, every job page answers **503** and nothing else on the site is affected —
+loud, bounded, and caught by step 1. The fallback would then be to have
+`scripts/prerender.mjs` write the shell into a module the function imports
+statically.
+
+#### A 404 that still serves a working page
+
+A role that is not public answers **404**, which is how Google drops a closed
+listing — **but the 404 is served with the app shell as its body.** A browser
+renders it normally: React boots, fetches the role with whatever session is in
+the browser, and a recruiter still sees their own closed or pending posting
+exactly as before. **The status code is for crawlers; the body is for people.**
+
+That matters because the recruiter preview is signed-off stage 4 behaviour —
+`src/lib/publicJobs.js` calls it *"a preview, not a leak"*. A 404 that served
+Vercel's own error page would have broken it. This way nothing a human does
+changes, and Rishi's instruction ("404 for a role that isn't public") is met
+exactly.
+
+#### A database error must NOT 404 a live role
+
+Google treats 404 as *gone*, and getting a listing back afterwards is slow and
+not in our hands. So on a Supabase error the function serves the shell
+untouched, `no-store`, with **no robots meta of its own** — the page still
+works, React fetches the role itself, and nothing has told Google anything.
+Fail-closed is right for the promo card and wrong here; the directions are
+opposite because the costs are.
+
+#### The markup is injected server-side and NOT rendered by React
+
+`src/components/Seo.jsx` already takes a `jsonLd` prop. It is deliberately not
+used on this page: two `JobPosting` objects on one page is worse than none,
+because Google's rule is one job per page. The title and description come from
+the **same helpers** the function uses, so the tags React hoists on hydration
+say exactly what the served HTML already said.
+
+#### The publishable key, not the service key
+
+The function must see exactly what a stranger sees, and the "anyone reads
+public jobs" policy already applies `private.job_is_public()` — status, expiry
+and recruiter suspension. The service key would mean re-deciding in JavaScript
+what the database already decides.
+
+#### TWO EXTENSIONLESS IMPORTS WOULD HAVE BROKEN THE FUNCTION
+
+`src/lib/jobDisplay.js` and `src/lib/jobPosting.js` both did
+`import { ... } from "./jobOptions"`. Vite resolves that; **plain Node ESM does
+not.** Both now carry the `.js`, and the whole chain was imported from plain
+Node to prove it rather than assume the bundler would cover it.
+
+#### Migration 023 had to be `NOT VALID`, and the measurement is why
+
+Measured before writing it: **24 of the 25 rows in `public.jobs` are under 400
+characters**, the shortest 197 — and all 24 are the `[T5]` test jobs queued for
+deletion. The one genuine posting is 7,085. `alter table ... add constraint`
+validates existing rows, so the plain version **fails on the first of those 24
+and changes nothing.**
+
+Two intended consequences: editing one of the 24 short test jobs is now
+refused until its description reaches 400 (which is what carried item 18's
+posting-form retest exercises), and the constraint stays marked NOT VALID
+until the pre-merge clearout, after which it is validated — **carried item 26**.
+
+`c2` inserts a 399-character row and a 400-character row and removes both.
+The columns were read off the table first rather than guessed: **`apply_mode`
+is NOT NULL with no default**, and omitting it would have raised
+`not_null_violation`, which the 399 branch would not have recognised as a
+`check_violation` — so the check would have failed for a reason unrelated to
+400 characters. The fixture recruiter also excludes suspended accounts, so
+`private.jobs_cap_guard()` cannot refuse the row for its own reasons.
+
+#### MIGRATION 023 FAILED ON ITS FIRST RUN — 24 Nov 2026
+
+```
+ERROR: 22P02: invalid input syntax for type bigint:
+       "4b7a0c43-eac2-4e52-9e9c-ea3226bf03e9"
+CONTEXT: PL/pgSQL function inline_code_block line 12 at SQL statement
+```
+
+**The database was unchanged.** A multi-statement script in the Supabase SQL
+editor runs as one implicit transaction, so the `ALTER TABLE` above the
+failing block rolled back with it. Verified rather than assumed: the
+constraint still read `>= 50` with `convalidated: true`, and there were zero
+`check023-boundary` rows and zero `[CHECK023]` titles left behind.
+
+**The fault:** `v_company` was declared `bigint`. **`jobs.id` is a bigint, and
+I generalised from it** — but `companies.id` is a **uuid**, so
+`jobs.company_id` is one too. The `select ... into` tried to put a uuid in a
+bigint. Rishi's own guess from the error text ("jobs.id is a bigint and
+posted_by is a uuid, so I'd look there first") was one column away.
+
+Fixed by declaring `v_company uuid`.
+
+**RISHI'S STANDING INSTRUCTION, and he is right to insist:** *"This is the
+second migration in two days that failed on its first real run — 017 had the
+round(double precision) error you caught by dry-running it. You caught that
+one before handing it to me; this one you didn't. Whatever you did for 017
+that you skipped here, do it every time: execute the checks against the live
+database before giving me the file."*
+
+Recorded in the project memory as a standing rule. What the read-only MCP
+connection can and cannot do, since that is what made it tempting to skip:
+
+| | |
+|---|---|
+| **can** | run every pure-`SELECT` check and read the figures |
+| **can** | execute a `DO` block's `select ... into` read-only, to prove the assignments bind |
+| **can** | **type-check every column of an `INSERT`** against the live table with `pg_typeof` + `information_schema.columns` — no write permission needed |
+| **can** | read actual constraints, defaults and nullability |
+| **cannot** | `CREATE TABLE`, even temporary — "cannot execute CREATE TABLE in a read-only transaction", so the temp-table harness itself cannot be rehearsed |
+| **cannot** | `EXPLAIN` an `INSERT` — that needs insert permission, "permission denied for table jobs" |
+
+**What was done before handing 023 over the second time:** the failing
+`select ... into` executed read-only with the corrected declarations; **all
+14 columns of both inserts type-checked against the live table** (all ok);
+and c1 and c3 run as bare queries. The worked type-check query is in the
+migration's own header, so the next person writing a `DO` block has it to
+hand.
+
+#### A FINDING FROM TESTING AGAINST A REAL ROW, NOT A FIXTURE
+
+Job 13's description is **pasted Markdown** — `# Job Description`,
+`**Job Title:**`. The detail page renders it with `whitespace-pre-wrap` and
+deliberately never parses HTML, so a candidate sees those asterisks and
+hashes literally. The markup therefore matches the page, which is the
+visibility rule satisfied — but it means **Google's snippet will begin
+"# Job Description – Finance | Record to Report"**, and the meta description
+carries the same.
+
+**Rishi corrected the severity, and he was right.** I logged this as an SEO
+snippet problem. It is not: *"a candidate reading job 13 right now sees
+`# Job Description` and `**bold**` on screen, so item 27 is a live defect on a
+signed-off page, not just a snippet problem."* The thing a candidate reads is
+the defect; the snippet is the same cause showing up somewhere else.
+
+Still not fixed **in this stage**, because rendering Markdown changes a
+signed-off page and reintroduces the HTML parsing that page was explicitly
+built to avoid — but it is now **carried item 27, due before merge**, not a
+wording-review item. Recruiters pasting from JD tools will keep doing this.
+
+#### How it was proved before handover
+
+| | |
+|---|---|
+| `scripts/stage10-head-test.mjs` | **103 assertions.** Seven attack titles — attribute breakout, element breakout, `</title>`, `</script>`, single-quote breakout, comment escape, a pre-escaped entity — each asserted to leave **no stray `<` or `>`** anywhere in the head, with the JSON-LD then **re-parsed** to prove it is still JSON and still carries the title intact |
+| The other three suites | 116 SEO + 111 saved roles + 62 promo, all still passing — **392 assertions in total** |
+| A real production row | job 13 run through the builders: all required properties present, `jobLocation` with `addressCountry: IN`, `FULL_TIME`, `monthsOfExperience: 24` from `experience_min: 2`, **no `baseSalary` because none is disclosed**, no `totalJobOpenings` because `openings` is null |
+| Node ESM | the function's whole import chain loaded by plain `node`, which is what the `.js` extensions were for |
+| The build | 87 pages, `dist/gcc-jobs` absent so the rewrite fires, `sitemap.xml` still a real file so it is served ahead of any rewrite |
+
+**Two assertions in the head test were wrong on the first run and were
+corrected rather than the code.** The `>` inside the JSON body is legitimate —
+`descriptionToHtml`'s `<p>` and `<br>` come through as `\u003cp>`, because only
+`<` needs escaping to stop an element closing early — and a description cut at
+a word boundary does legitimately end with a letter before the ellipsis. Both
+assertions now test the real property instead.
+
+### break-words WAS INERT ON A FLEX CHILD — the real cause, 24 Nov 2026
+
+Rishi after the sweep: *"The 150-character title now fails to wrap in three
+places… Everything failing at once points at the class not being emitted…
+Check whether whatever you used in this sweep actually exists in the compiled
+CSS."*
+
+**Checked against `dist/`, and the class was there all along:**
+
+```
+.break-words{overflow-wrap:break-word}
+.break-all{word-break:break-all}
+.min-w-0{min-width:0}
+```
+
+So the hypothesis was wrong, and the truth is worse than a missing class.
+
+#### THE RULE I HALF-KNEW AND DID NOT APPLY
+
+**A flex item's default `min-width` is `auto`, which resolves to its
+MIN-CONTENT size — and `overflow-wrap: break-word` DOES NOT REDUCE
+MIN-CONTENT.**
+
+So a flex child holding one unbroken word refuses to shrink, and no amount of
+`break-words` changes it. The class compiles, the computed style says
+`overflow-wrap: break-word`, and the element still blows out of the card.
+`min-w-0` on the item is what permits it to shrink below min-content, and only
+then can `break-words` act. (`break-all` and `overflow-wrap: anywhere` do
+affect min-content, which is why `break-all` worked on the admin resume path.)
+
+`/recruiter/jobs` was exactly this: the `<h2>` sits in
+`<div className="flex flex-wrap items-center gap-2">` next to the status pill.
+I added `break-words` to it in the sweep and reported it fixed. It was inert.
+
+**Nine places had the same defect**, found by scanning for *an element with a
+break class, inside a flex or grid parent, without `min-w-0`* — which is the
+check the sweep should have been:
+
+| | |
+|---|---|
+| `RecruiterJobs` | the title Rishi reported |
+| `RecruiterApplications`, `MyApplications` | the role title beside its status pill |
+| `RecruiterHome` | the company name in a `justify-between` row |
+| `AdminJobs`, `AdminRecruiters` | the same pill-beside-title pattern |
+| `GccJobCard` | the skills line in a `flex-wrap` |
+| `GccJobDetail` | each skill chip |
+| `JobForm` | `ReviewRow`'s `<dd>` — `flex-col` that becomes `flex-row` at `sm:`, so a row item at every desktop width |
+
+#### THE OTHER TWO PAGES HE REPORTED WERE NOT TOUCHED BY THE SWEEP
+
+Verified from the commit: `f5a5eb5` does not change `GccJobCard.jsx` at all,
+and in `GccJobDetail.jsx` it changes only `Fact`'s `<dd>` — **not the
+`<h1>`**. Both measure as wrapping correctly. Their titles sit in a
+`min-w-0` wrapper, so min-content never binds.
+
+The remaining explanation is that the deployment under test predates the
+fixes — and the most likely reason for that is **a failed Vercel build**,
+because the same push added a new build-time failure path
+(`scripts/prerender.mjs` now exits non-zero if `dist/app.html` is
+unidentifiable) and a new import into that script. A failed build leaves the
+previous deployment serving, which would show all three as broken, exactly as
+reported.
+
+#### DID THIS SHIP WITHOUT THE CHECK? Partly, and the honest answer matters
+
+The class **was** verified in the compiled CSS — `break-words` was confirmed
+present during the gradient check and never removed. So the check I said I had
+started doing was done, and it passed.
+
+**It was the wrong check.** Verifying that a class compiles proves that the
+class compiles. It says nothing about whether the text wraps, because a class
+can be present, applied, computed — and still inert. The gradient check
+happened to be sufficient only because a gradient has no layout interaction to
+be defeated by.
+
+**So the check is now a measurement, not a grep:**
+`scripts/check-overflow.mjs` loads six public pages at 1280, 768 and 375 with
+Playwright, including the 180-character-title role, and fails if the document
+scrolls sideways — naming the offending elements when it does. **18 checks, 0
+failed.** Pages behind a sign-in cannot be reached by a script, so
+`/recruiter/*` and `/admin` are still eyes-on; the structural scan above is
+what covers them.
+
+### THE OVERFLOW SWEEP — every place the app prints text somebody typed
+
+Rishi, after the first fix missed `/recruiter/jobs`: *"Rather than fix that one
+and find a seventh tomorrow: sweep every place in the app that prints text a
+user typed."* Right call — the first pass fixed the five places I happened to
+be looking at.
+
+**Method, so the number can be trusted.** The free-text columns were read off
+the live database rather than remembered: `jobs.title/description/skills`,
+`applications.full_name/email/phone/notice_period`, `companies.name`,
+`profiles.display_name/google_*`, `questions.title/description/author_name`,
+`answers.body`, `recruiter_profiles.*`. Dropdown-backed columns were excluded
+on purpose — `city`, `work_mode`, `job_function`, `employment_type`,
+`status`, `apply_mode`, `salary_*` come from `jobOptions`, so no recruiter can
+make them long.
+
+Then every `.jsx` under `src/` was scanned for renderings of those fields, and
+each hit resolved against **its own element and its ancestors**.
+
+**`overflow-wrap` IS AN INHERITED PROPERTY**, which the first count got wrong.
+A parent carrying `break-words` covers every child, so 21 of the 46 renderings
+were already protected — including `GccJobCard`'s title `<Link>`, covered by
+the `<h2>` around it. Fixing those again would have been noise.
+
+**Two gaps in the method, both found by running it rather than trusting it:**
+
+1. **Single-line elements were invisible to the first pattern.** The admin
+   reports render `<div className="…">{r.title}</div>` on one line, so a
+   pattern requiring the interpolation to stand alone missed every table cell
+   — exactly the pages Rishi asked about.
+2. **A column-driven list misses derived names.** `{agency}` on the job detail
+   page and in `ApplyPanel` is recruiter-supplied text that arrives from
+   `job_posting_agency()`, not from a column called `agency`. So is
+   `{chosen.name}` — the **resume filename**, which the candidate chose. Four
+   more places came from a second sweep for derived names.
+
+**28 places fixed, across 15 files.**
+
+| Where | What it prints |
+|---|---|
+| `RecruiterJobs` | the job title — **the one Rishi reported** |
+| `RecruiterApplications` | the heading naming the role and company; the error message (`break-all`, since a Postgres string has no spaces to break at) |
+| `RecruiterHome` | the recruiter's own company name |
+| `QuestionDetail` | the question title, its body, each answer's body, the author name |
+| `QuestionCard`, `TrendingQuestionCard` | title and description |
+| `Profile` | the Google name and email shown back to the member |
+| `ProfileJobBoard` | **the resume filename** |
+| `ApplyPanel` | the role, the company and the posting agency |
+| `CompanyPicker` | a result name, the resolved chip, the same-name note |
+| `JobForm` | `ReviewRow`'s `<dd>` |
+| `GccJobDetail` | `Fact`'s `<dd>` — the 270px sidebar, the narrowest column on the site |
+| `AdminReports` | three `<tr>` elements and the candidate detail heading |
+| `AdminRecruiters` | the recruiter name and email domain |
+
+**Three of those were chosen for inheritance rather than for the line that
+failed**, so they cover what is there now and what gets added later:
+`AdminReports`' three `<tr>`s (every cell in every reports table),
+`ReviewRow`'s `<dd>` (both review rows and any future one), and `Fact`'s
+`<dd>` (every row in the job sidebar).
+
+**`line-clamp` was hiding four of them rather than fixing them.** It sets
+`overflow: hidden`, so a long unbroken title was clipped instead of spilling —
+contained, but cut mid-character with no ellipsis and no wrap. Those four now
+wrap first and clamp second.
+
+### An unbroken description overflowed the card — found 24 Nov 2026
+
+Rishi, testing stage 10 round two: *"a job description with no spaces
+overflows the detail page, on desktop and mobile. The text runs past the card
+edge instead of wrapping. `whitespace-pre-wrap` doesn't break an unbroken
+string — it needs the same treatment you gave the recruiter card's email field
+in stage 7."*
+
+Both halves of that are right. `white-space: pre-wrap` preserves newlines; it
+does **not** introduce a break inside a run of characters that contains no
+space. `break-words` (`overflow-wrap: break-word`) is what does, and it is
+what `src/Pages/RecruiterApplications.jsx:400` already used on the applicant's
+email in stage 7.
+
+**And the same fault was in four other elements**, each with a `min-w-0`
+wrapper and no `break-words` — all of them printing text somebody typed:
+
+| Where | Element |
+|---|---|
+| `GccJobDetail.jsx` | the description (**reported**), the `<h1>` title, the company name, each skill chip |
+| `GccJobCard.jsx` | the title, the company name, the skills line |
+| `SavedJobs.jsx` | the inactive row's title and company name |
+
+Fixed in the same pass rather than left for a second report. His own example
+was a test description, but as he said, *"a long URL or a pasted line of
+dashes in a real JD would do it too"* — and `jobs_title_check` allows 200
+characters, so an unbroken title overflows identically.
+
+`min-w-0` was already on every wrapper and is the other half of the fix:
+without it the grid track itself widens and no amount of wrapping inside
+helps. The skill chips also needed `max-w-full`, because a `rounded-full` pill
+sizes to its content and would otherwise stretch the row.
+
+**A side-effect worth recording.** `npm run build:spa` empties `dist/`, which
+deletes `dist/app.html` — written by `scripts/prerender.mjs`, not by Vite. The
+head test's "the real built shell is accepted" assertion failed because of it,
+which is the assertion doing its job: it reads the shell off disk precisely so
+that it fails when the build stops producing one. **Only `npm run build`
+leaves a complete `dist/`.**
+
+### STAGE 10 — SIGNED OFF, BOTH HALVES, 25 Nov 2026
+
+Rishi's result, verbatim: *"Stage 10 passes, both halves."*
+
+| What he confirmed | Result |
+|---|---|
+| Migrations 023 and 024 | both PASS |
+| The company seed | **1,816 total**, Walmart present, both test companies intact, c3's fixture cleaned up |
+| The policy at scale | `set local role anon` sees **2 of 1,816** |
+| Rewrite order, on the preview | `JobPosting` and `index, follow` present on a live role; absent from `/gcc-jobs`; `/jobs` and `/questions` still prerendered with their content |
+| A closed role | **404 on the document while rendering a proper page**, `noindex` present, `JobPosting` absent |
+| Sitemaps | `sitemap-jobs.xml` lists the live roles with production URLs and excludes the closed one; `sitemap.xml` intact; `/api/` still reachable |
+| Description minimum | enforced at 400 on new posts **and on edits to the old roles**; counter trimmed |
+| The picker | `wal` returns five real matches with no create row; the hatch opens and closes; `zzzz` offers create directly; a role posted end to end under a listed company; **no junk company rows** |
+| Overflow | fixed everywhere checked — long titles, descriptions, URLs, skills, resume filenames, the 270px sidebar, the review step, all four Reports tabs, and the community pages unchanged |
+
+**The check worth remembering from this half** is 024's c3, which made its own
+negative fixture. Every company had a public role at the time, so there was
+nothing the new policy would hide; the check inserted a jobless company,
+proved `anon` could not see it, and deleted it. The real proof came later, at
+scale, from his own query: 2 of 1,816.
+
+**And the lesson from the overflow work**, which cost three rounds: a class can
+be present in the compiled CSS, applied to the element, and reported by
+`getComputedStyle` — and still be **inert**. `overflow-wrap: break-word` does
+not reduce a flex item's min-content size, so `break-words` on a flex child
+does nothing without `min-w-0`. Verifying that a class compiles proves that a
+class compiles. `scripts/check-overflow.mjs` now measures the rendered page
+instead.
+
+### Stage 10 cleanup — created while testing in production
+
+| What | Where | Removed? |
+|---|---|---|
+| **Role 41, "trial job"** | `public.jobs` | Created 24 Nov 14:36 while testing. Delete with the other test roles. |
+| **Role 42, the 180-character-title role** | `public.jobs` | Created 24 Nov 15:03, slug `trial-jobs-agaion`. **This is one row, not two** — Rishi listed "trial jobs againo" and "the 150-character-title role" separately, and they are the same posting. Its title is 180 characters, not 150. It is the fixture `scripts/check-overflow.mjs` drives, so **delete it last**, and expect that script to need a new fixture afterwards. |
+| **The resume on `iworkatgcctest3@gmail.com`** | `public.candidate_resumes` + the object in the `resumes` bucket | Uploaded 24 Nov 18:45. **The stored path is generated** (`<uuid>/<timestamp>-<uuid>.pdf`), so the long filename Rishi typed exists only in the UI — delete by `candidate_id`, not by name. That account also now has **1 application and 2 saved roles**. |
+| `job_saves` rows made while testing the Save button | `public.job_saves` | Add to the pre-merge clearout. Harmless if missed — they are bookmarks on test jobs that are themselves being deleted, and the FK cascades. |
+
+Migration 020's own check `c7` inserts three saves, reads them back and deletes
+them **before** judging the result, so a failed check cleans up after itself as
+well as a passing one does. `c8` then asserts the table is empty.
+
+## DECISION 10 DOES NOT APPLY TO /profile — settled with evidence, 25 Nov 2026
+
+Rishi: *"If recruiter accounts are genuinely separate, decision 10's reasoning
+doesn't apply to this page — there is no dual-use person to protect, because
+the dual-use person has two logins."* He asked for evidence rather than
+reasoning. Here it is, and **he is right**.
+
+### The live data: not one dual-use account in 2,656
+
+| Measured 25 Nov 2026 | |
+|---|---|
+| Accounts | **2,656** |
+| Accounts with **two identities** | **0** |
+| Google accounts holding a password | **0** |
+| Recruiters with a community `profiles` row | **0** |
+| Recruiters with a question or an answer | **0** |
+
+Both recruiter accounts are `providers: ["email"]`, with no `profiles` row, no
+display name, no questions and no saved questions.
+
+### The code: a community account cannot become a recruiter account
+
+`recruiter_profiles` rows are created in **exactly one place** —
+`RecruiterRoute` — and only when `isRecruiterUser(user)` is true, which tests
+`user_metadata.account_type === 'recruiter'`. That metadata is written in
+**exactly one place**: the `signUp` call in `PostAJob.jsx`, which creates a new
+email-and-password account. A Google session carries no such metadata, so
+`RecruiterRoute` returns `not-a-recruiter` and creates nothing.
+
+**And the database blocks the forged path.** `auth.updateUser({ data })` does
+write `user_metadata`, so a community member could forge `account_type` from
+the browser console — `src/lib/accountType.js` says as much: *"this is a
+DISPLAY and ROUTING hint only… a determined person could put anything in it."*
+But `private.handle_new_recruiter()` fires BEFORE INSERT and raises for free
+email domains, and **2,611 of the 2,654 Google accounts are on blocked free
+domains**. The other 43 are on work domains and would pass — and someone on a
+work domain who forges recruiter metadata is a recruiter, not a dual-use
+candidate anyone needs to protect.
+
+**Migration 003's "upgrade a candidate to recruiter" is about the ROLE ROW, not
+the account.** Its body is `on conflict (user_id) do update set role =
+'recruiter' where user_roles.role <> 'admin'` — it upgrades `user_roles` and
+protects an admin from being demoted. It does not turn a Google account into a
+recruiter.
+
+### So the conflation was mine, and it was between PERSON and ACCOUNT
+
+`RecruiterRoute`'s own comment reads *"one person is allowed to be both a
+candidate and a recruiter."* True — **of a person**. That person has two
+logins. Decision 10 protects a person who holds both; it says nothing about
+what a single account should be shown.
+
+**This supersedes part of decision 10 rather than reinterpreting it.** Carried
+item 10 explicitly said *"`/ask` and `/profile` stay reachable for
+recruiters"*, and that half no longer stands. Its other half — that a
+recruiter who deliberately sets a display name is choosing to join the
+community — is now unreachable for a recruiter with no profile page, which is
+a consequence to accept rather than a problem: the recruiter who wants a
+community presence has a Google login for it.
+
+**And it means the argument I used on 25 Nov against conditional rendering was
+wrong on its facts.** The conclusion survives — a separate
+`/recruiter/settings` is still right — but not for the reason I gave. The
+reason is that the candidate blocks have no audience on a recruiter account,
+not that hiding them would hurt a dual-use person.
+
+### What a recruiter should see at /profile: nothing
+
+Recommended, for stage 12:
+
+- **`show: Boolean(session) && !isRecruiter`** on the Profile nav item, so it
+  leaves the recruiter header.
+- **`blockRecruiters` on the candidate-only routes**, which is the mechanism
+  `ProtectedRoute` already has and which sends them to `/recruiter` before
+  anything mounts — no conditional rendering inside the pages at all, and
+  carried item 29's work on `Profile.jsx` becomes redundant for recruiters
+  while still serving community members missing a Google field.
+- The routes that qualify: `/profile`, `/profile/asked`, `/profile/saved`,
+  `/profile/saved-jobs`, `/profile/delete-data`, `/my-applications` and
+  `/ask`. **`/my-applications` and `/ask` carry comments justifying their
+  openness with decision 10's dual-use reasoning**, so those comments rest on
+  the premise just disproved and should be corrected in the same pass.
+
+### The privacy policy sentence: it is already candidate-scoped
+
+*"There is a **Delete my job board data** link on your profile."* It sits
+among the candidate sections — What we collect → When you apply → Who can see
+your application → How long we keep it → **Deleting your data** → Your resume
+→ Can I take an application back? — and recruiters have their own
+`<h2>If you are a recruiter</h2>`. The data it deletes (resume, applications,
+saved roles) is candidate data a recruiter cannot have.
+
+**So the sentence needs no correction for accuracy.** What is missing is on
+the recruiter side: that section says what is stored about a recruiter and
+nothing about access or deletion. Recommended addition, for Rishi's approval
+as policy wording like D3 was:
+
+> Your recruiter account is separate from a community account, even if you use
+> iWorkAtGCC as both — they are two separate logins. You can see and correct
+> what we hold about you from your recruiter settings. To delete a recruiter
+> account and its roles, email jobs@iworkatgcc.com and we will do it by hand.
+
+That is additive, leaves the candidate sentence untouched, and fills a gap
+that exists today regardless of this change.
+
+## /profile for a recruiter — SCOPED 25 Nov 2026, superseded in part by the section above
+
+Rishi: *"/profile makes no sense for a recruiter… The delete control is the
+worst of it: for a recruiter it either does nothing or reads as though it
+might delete their account."*
+
+**A recruiter's header has exactly two items** — My Dashboard and Profile — so
+this is half their navigation. `show: Boolean(session)`, and `/profile` is
+deliberately not behind `blockRecruiters`; `src/main.jsx` carries the comment
+*"Deliberately opt-in, not applied to every protected route: /profile must
+stay reachable for recruiters."*
+
+### Block by block, and what is actually dangerous
+
+| Block | A recruiter sees | Verdict |
+|---|---|---|
+| Name | **"—"** — `profiles.google_display_name` is null for a recruiter by invariant I1 | looks broken |
+| Email | **"—"** — `google_email` null for the same reason | looks broken |
+| Display Name form | works, and `saveDisplayName` upserts only `{id, display_name}`, so I1 holds | **intended** — decision 10: setting a display name is choosing to join the community |
+| Questions Asked / Saved | 0 / 0 | useless |
+| Roles Saved | 0, or more — a recruiter **can** save roles | useless, not wrong |
+| Your applications | "You have not applied to any roles yet" + a button to `/my-applications`, itself deliberately recruiter-reachable | useless |
+| Your resume | "No resume on file" **and a working upload control** | **HARMFUL — carried item 28** |
+| Delete my job board data | a link to `/profile/delete-data` | **not destructive; badly misleading** |
+
+**The delete control cannot do what it appears to.** Read out of the live
+database, `anonymise_job_data_for()` touches exactly three tables:
+`candidate_resumes`, `job_saves`, and `applications where candidate_id = me`.
+It does **not** touch `recruiter_profiles`, `jobs`, `companies` or
+`auth.users`. So for a recruiter it is a no-op apart from deleting any roles
+they bookmarked. **It cannot delete their account, their company or their
+postings.** The danger is entirely in the reading — and the confirmation page
+makes it worse, not better, by describing a resume file and applications that
+do not exist for them.
+
+**The resume upload is the one real harm**, and it is not confusion: see
+carried item 28. It is a live defect independent of this page's redesign.
+
+### What a recruiter version should hold
+
+Rishi's list — company name, work email, phone, website, verification status,
+and later the password controls — plus three things that need deciding with it:
+
+- **`recruiter_profiles.company_name` is NOT the company their roles are
+  listed under.** That is `jobs.company_id → companies.name`, and recruiters
+  cannot rename a company (only `admin_rename_company` can, because
+  `companies.slug` is immutable). A settings page that lets them edit
+  "company name" and changes nothing on their postings is a trap. Either show
+  both and label them, or make it read-only.
+- **The login email must be read-only**, or it becomes a Supabase
+  "Change email address" template — a **third** Brevo email, which the
+  restated rule does not cover. If it is ever wanted, it is a decision, not a
+  field.
+- **Verification status already lives on `/recruiter`**, with the unverified
+  explanation and the 10-role cap. Duplicating it would put the same fact on
+  two screens, which W3's reconciliation rule exists to prevent. Link to it.
+- `recruiter_profiles.gstin` exists and is unused — available if wanted.
+
+### DECIDED 25 Nov 2026, so stage 12 does not re-open them
+
+Rishi approved all three caveats. Recorded as settled:
+
+| | Decision |
+|---|---|
+| Company name | **Read-only, with both names shown and labelled.** `recruiter_profiles.company_name` (from signup) and the company their roles are listed under (`jobs.company_id → companies.name`) are different things, and only `admin_rename_company` can change the second, because `companies.slug` is immutable. |
+| Login email | **Read-only.** Editing it would trigger Supabase's "Change email address" template — a third Brevo email, which the restated transactional rule does not cover. Making it editable is a decision, not a field. |
+| Verification status | **Linked, not duplicated.** It already lives on `/recruiter` with the unverified explanation and the 10-role cap. W3's reconciliation rule exists to stop the same fact appearing on two screens. |
+
+Also settled: the header shows **Settings** in place of Profile for a
+recruiter, and the settings page carries one line linking to the community
+profile. Rishi: *"Your reasoning on decision 10 is the deciding one — hiding
+the candidate blocks from a recruiter takes it away from exactly the person
+that decision was written for."*
+
+### Rename, separate route, or conditional render? SEPARATE ROUTE
+
+**`/recruiter/settings`.** Reasons, strongest first:
+
+1. **A conditional render would break decision 10.** The project has already
+   decided one person may be both a candidate and a recruiter, and that
+   `/profile` and `/ask` stay reachable for recruiters *because of it*. Hiding
+   the candidate blocks from anyone with `account_type: recruiter` takes the
+   candidate half away from exactly the person that decision was written for.
+2. **A rename breaks links.** `/profile` is in the privacy policy as where
+   delete-my-data lives, and it is bookmarked by a community of 2,520.
+3. **`/recruiter/settings` inherits `RecruiterRoute`**, which already handles
+   the session, the `recruiter_profiles` row creation and the suspension
+   state. A new top-level route would re-implement all three.
+
+Recommended navigation: the recruiter header shows **Settings** rather than
+Profile, and the settings page carries one line — "you also have a community
+profile" — linking to `/profile`. That respects decision 10 without putting
+two near-identical links side by side.
+
+### Which stage? STAGE 12, as Rishi said
+
+His reasoning holds: the password controls are the main reason the page needs
+to exist, so building it earlier means building a page with four read-only
+fields on it.
+
+**Two things do not wait for stage 12:** carried item 28 (the resume upload
+guard, a live defect), and — if it is wanted sooner — hiding the
+delete-my-job-board-data link from an account with no job board data, which is
+one condition and could ride with any stage.
+
+## THE FOURTH FAULTY CHECK — migration 025's c1, 25 Nov 2026
+
+Rishi: *"6 of 7 PASS. c1 FAILS… But the grants are correct."* They were.
+**The check was wrong and the function was right.**
+
+### What c1 asserted that was false
+
+```sql
+and pg_get_function_identity_arguments(p.oid) = 'text'
+```
+
+That function returns argument **names and types** — `p_email text` — so the
+comparison was false and **could never be true for any function with a named
+argument.** Every other condition in c1 was true: definer, pinned at
+`search_path=public, pg_catalog`, returns text, service_role true, anon false,
+authenticated false, role list present, identity gate present.
+
+**Migration 022 used the identical line** and passed only because its function
+takes **no** arguments, where the value is `''`. Right once and wrong once for
+the same reason — the definition of a line I had not understood.
+
+Fixed to `pronargs` and `proargtypes`, which are the columns that mean what
+was intended. **The corrected c1 was then run against the live function before
+being handed back: PASS, with the full detail readable.**
+
+### The security posture is correct. The function stays.
+
+| | |
+|---|---|
+| `security definer` | true |
+| `proconfig` | `search_path=public, pg_catalog` |
+| arguments | 1, of type `text` |
+| returns | `text` |
+| `service_role` execute | **true** |
+| `anon` execute | **false** |
+| `authenticated` execute | **false** |
+| role list present | true |
+| identity gate present | true |
+
+Nothing to drop, nothing to re-run except the corrected c1.
+
+### WHAT CHANGES, because four is a pattern and not four accidents
+
+Rishi: *"The pattern isn't the individual mistakes, it's that the checks get
+less scrutiny than the code they're checking. Say what you'll do differently
+rather than just fixing this one."*
+
+The four: 015's c3 that could not fail, 017's c5 that could not pass, 020's
+eight that could not be read, and now 025's c1 that could not pass.
+
+**The rule added after 023 was half a rule.** It said *execute the migration's
+checks against the live database before handing the file over*, and for 025 I
+did execute — the function's **logic**. Every persona's verdict was computed
+read-only and every one was right. **I never evaluated what c1 asserted.** The
+dry run proved what the migration does, not what the checks claim.
+
+**The missing half, now recorded in the project memory:**
+
+> Every check that is meant to PASS must be proven to pass against a subject
+> that already satisfies it.
+
+A catalog-reading check can always be aimed at something that exists. Pointing
+025's c1 at `public.anonymise_job_data_for(uuid)` — definer, pinned,
+service_role-only, one named argument — returns `p_user uuid` and **fails**,
+in one read-only query, before the file leaves my hands. That is the test that
+catches this entire class, and it would have caught 017's c5 as well.
+
+**A check has two failure modes** — passing when it should fail, and failing
+when it should pass — and **neither is visible from reading it.** That is why
+reading them more carefully was never going to be the answer, and why the
+remedy is an executed predicate rather than more attention.
+
+## Stage 12 — BUILD SCOPE, settled 25 Nov 2026
+
+Three deliverables. The constraints, the enforcement design and the proof plan
+were settled on 24 Nov and are in the section below — this is what gets built
+and what has to be true before it starts.
+
+### What gets built
+
+| | |
+|---|---|
+| 1 | **The reset flow.** A request page (email in, one reply whatever the answer) and a landing page (set a new password). Gated server-side: only an account with the recruiter **role** gets an email, and the landing page refuses an ineligible account. |
+| 2 | **The change-password box**, for a signed-in recruiter, requiring `current_password`. `@supabase/supabase-js` is 2.112.3, past the 2.102.0 that added it. |
+| 3 | **`/recruiter/settings`**, inside `RecruiterRoute`. Company name read-only with both names shown and labelled; login email read-only; verification status linked to `/recruiter`, not duplicated. The recruiter header shows **Settings** in place of Profile. **No line linking to the community profile** — that line assumed one account could be both, and it cannot. |
+| 4 | **The candidate-only routes are closed to recruiters.** `blockRecruiters` on all seven: `/profile`, `/profile/asked`, `/profile/saved`, `/profile/saved-jobs`, `/profile/delete-data`, `/my-applications`, `/ask`. It redirects to `/recruiter` **before anything mounts**, so there is no conditional rendering inside any page and no flash. And `show: Boolean(session) && !isRecruiter` on the Profile nav item. |
+| 5 | **Two comments corrected in the same pass.** `/my-applications`'s route comment (*"one person may be both a candidate and a recruiter, and the candidate half is theirs to see"*) and `ProtectedRoute`'s (*"`/profile` must stay reachable for recruiters"*) both rest on the premise disproved on 25 Nov. Rishi: *"a wrong premise left in a comment is how the next person re-derives the same error."* `RecruiterRoute`'s *"one person is allowed to be both"* branch comment needs the person/account distinction spelled out rather than removed — the branch itself is still correct. |
+| 6 | **The privacy policy gains a recruiter paragraph**, approved as drafted 25 Nov 2026: *"Your recruiter account is separate from a community account, even if you use iWorkAtGCC as both — they are two separate logins. You can see and correct what we hold about you from your recruiter settings. To delete a recruiter account and its roles, email jobs@iworkatgcc.com and we will do it by hand."* **It commits Rishi to deleting recruiter accounts by hand on request**, which he accepted explicitly at this volume. It goes in the `<h2>If you are a recruiter</h2>` section, which today says what is stored and nothing about access or deletion. The candidate sentence about the delete link is **not** changed — it is already candidate-scoped. |
+
+Migration **025** adds the eligibility function: `security definer`, pinned
+`search_path`, granted to **service_role only**, reading `public.user_roles`
+with an eligible-roles list in one place, plus the identity check that stops a
+password being created on an OAuth-only account.
+
+#### Why `/ask` is in the blocked list
+
+Rishi's two reasons, 25 Nov 2026, and the second is the one that matters:
+
+1. *"With `/profile` blocked a recruiter can't set a display name, so a
+   question from a recruiter account has no name to show."*
+2. *"A recruiter posting into a community of 2,520 job-seekers is a channel I
+   don't want open by accident."*
+
+The second is a product decision, not a tidy-up. Nothing stops a recruiter
+asking questions today, and nothing marks their questions as coming from a
+recruiter.
+
+### Deliverable 1a — `api/request-password-reset.js`, BUILT 25 Nov 2026
+
+One reply for every outcome: `200 { ok: true }`, `no-store`, padded to a
+**1,200ms floor**. Eligible, role-not-eligible, no-identity, no-account,
+malformed input and a failed send all return the same bytes.
+
+**The gate uses the service key; the send uses the publishable key.** The
+first because `reset_eligibility_for_email` is granted to `service_role`
+alone. The second because the send is Supabase's own reset flow — it mints
+the token, applies its own rate limits, and goes through the SMTP already
+configured for the signup email. **Nothing in this file composes or delivers
+mail**, which is why this is the second permitted email rather than a new
+sending path.
+
+**Fail closed on a gate error.** An unreadable gate means no email: sending
+one anyway is the single thing the endpoint exists to prevent.
+
+**What the timing floor actually protects.** Not "does this address have an
+account" — Supabase's `/auth/v1/recover` is open to anyone holding the
+publishable key and answers identically, so that secret is not ours to keep.
+It protects the secret this endpoint *adds*: **whether the address has the
+recruiter role.** And it is mitigation, not elimination — SMTP has variance a
+fixed floor cannot fully mask.
+
+**Deliberately absent: a rate limiter.** Supabase already enforces one reset
+per user per 60 seconds and 30 requests per 5 minutes per IP on the send, and
+since every reply is identical there is nothing to learn by hammering it —
+only database load, which the RPC absorbs. If that changes, the fix belongs at
+the edge, not in the file.
+
+**Deliberately absent: the address in the logs.** The verdict is logged
+because it answers "nothing arrived"; the address is not, because a log of who
+asked for a reset is a record nobody needs. What was sent is in Brevo's log.
+
+#### How it was proved: `scripts/stage12-reset-gate-test.mjs`, 63 assertions
+
+**The test cannot send an email, by construction.** Every address it uses is
+one the gate must refuse — a real community member, the admin, an address with
+no account, and malformed input — so none can reach the send. Fixtures are
+looked up through the admin API rather than hardcoded, so no member is named
+in a committed file.
+
+Twelve refusing paths enumerated, each asserted to return **status 200, body
+`{ ok: true }`, `no-store`, and ≥1,195ms**, then every reply asserted
+**byte-identical to the first**, with the spread across all of them under
+400ms. The method guard is the one path allowed to differ, and 405 is asserted
+separately.
+
+**For the one path a test must not run**, the eligible send, the test proves it
+has nowhere else to answer from: exactly **one** `res.status(200)` in the
+file, at least five refusals routed through `sameReply`, the send reached only
+after an eligible verdict, the gate on the service key and the send on the
+publishable one.
+
+**Two bugs in the test itself, both found by running it.** The
+"send is reached only after an eligible verdict" assertion compared against
+the **header comment's** mention of `resetPasswordForEmail` rather than the
+call, and failed on correct code — now anchored on `anon.auth.`. And a
+variable named `communityEmail` actually held the admin's row, so **the
+community-member case described in the header was never run**; it is now, and
+it is the case covering 2,652 accounts. Both are the check-the-check rule from
+025 applied to a JavaScript test instead of a migration.
+
+### WHAT IS NEEDED BEFORE IT STARTS, not partway through
+
+| | Prerequisite | Why |
+|---|---|---|
+| A | **Supabase Redirect URLs must allow the reset landing path** — the preview host and `https://www.iworkatgcc.com`. | `resetPasswordForEmail`'s `redirectTo` must be on the allowlist or the link in the email dead-ends. This is a dashboard change only Rishi can make, and without it the flow cannot be tested at all. Do it together with carried item 8 (`http://localhost:5173/**`), so the allowlist is edited once. |
+| B | **Carried item 24: confirm the "Password changed" notification is OFF.** | Otherwise the change-password box ships a third Brevo email on day one. The docs name no dashboard control; the flag is `mailer_notifications_password_changed_enabled` via the Management API, which needs a Personal Access Token Rishi creates. **He runs it; the token is never pasted here.** |
+| C | ~~A decision on the reset email's template.~~ **DECIDED AND DRAFTED 25 Nov 2026: `supabase/email-templates/reset-recruiter-password.html`.** Rishi: *"A generic unsigned Supabase default arriving alongside it looks like phishing, and that's the worst possible thing for a password email to look like."* It reuses `confirm-recruiter-signup.html`'s styling exactly, so the two emails a recruiter can receive look like they come from the same place. Anti-phishing is the copy's purpose rather than a footnote: it says nothing has changed yet, that ignoring it is the correct response if unrequested, and that we never ask for a password — with no urgency language, which is what a real phish uses. It also carries a paragraph for someone who signs in with Google, because Supabase's `/auth/v1/recover` is reachable by anyone holding the publishable key, so a community member could receive it; that paragraph is what makes it harmless if they do. Paste path: **Authentication → Emails → Reset Password**.
+| D | ~~One Brevo log check after the first test send.~~ **CLOSED 25 Nov 2026** — one send at 11:57, `jobs@iworkatgcc.com` to the recruiter address, with his template; **nothing** for the nonsense address and **nothing** for the Google account. | The only place that shows what was actually sent. The claim under test in the negative cases is an **absence**, and an absence is proved at the sender, not at an inbox that may be slow. |
+
+### Carried items that land in or around stage 12
+
+- **29, before merge** — `/profile`'s Name and Email rows, and
+  `/profile/delete-data` saying there is nothing to delete. Not stage 12, but
+  it touches the same pages, so doing it first avoids two passes over them.
+- **24, before stage 12** — prerequisite B above.
+- **23, now** — the second admin account. Independent, still outstanding.
+- **22, deferred** — the admin-set-password tool. Rishi: *"Revisit when a
+  recruiter actually loses their mailbox."* Not in scope.
+
+### What stage 12 does NOT include
+
+Candidate password reset (candidates have no password — 2,623 of 2,626
+accounts are Google-only), email change, account deletion, and any automated
+email beyond the reset itself.
+
+## Stage 12 deliverables 2–6 — BUILT 25 Nov 2026, awaiting sign-off
+
+All five in one pass, because they touch the same four files and splitting
+them would have meant two passes over `main.jsx` and the header.
+
+| | Deliverable | Where |
+|---|---|---|
+| 2 | The change-password box | `src/Pages/RecruiterSettings.jsx` |
+| 3 | `/recruiter/settings` | same file, plus the route and nav item |
+| 4 | Seven routes closed | `src/main.jsx`, `src/components/SiteHeader.jsx` |
+| 5 | **Three** comments corrected | `src/main.jsx` × 3, `src/components/RecruiterRoute.jsx` |
+| 6 | The policy paragraph | `src/Pages/Privacy.jsx` |
+
+**No migration, no serverless function, no database change.** Still 10
+functions. The settings page reads `jobs → companies(name)` through RLS with
+the recruiter's own token.
+
+### `current_password` ALONE WOULD HAVE BEEN A GATE THAT DID NOTHING
+
+This is the finding worth carrying forward, and it is the `break-words`
+lesson in a second costume.
+
+`current_password` is a real field on `UserAttributes` in supabase-js
+2.112.3, exactly as the build scope said. **But auth-js's own type comment
+says it is honoured only when
+`GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD` is true**, which
+is project-wide Supabase Auth configuration and not something the browser can
+assert. If that setting is off, the field is accepted and ignored — so a box
+that sent only `current_password` would have **asked** for the current
+password, **displayed** a field for it, and **never checked it**.
+
+```
+node_modules/@supabase/auth-js/dist/module/lib/types.d.ts:423
+  /**
+   * The user's current password
+   *
+   * This is only ever present when the user is resetting
+   * their password and GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_CURRENT_PASSWORD is true.
+   */
+  current_password?: string;
+```
+
+**So the box verifies the current password TWICE, and the first one is the
+one that is certain to run:**
+
+1. `signInWithPassword({ email, password: current })` — **our** check. It
+   succeeds or returns "Invalid login credentials", and the password is never
+   touched unless it succeeded. Same user as the one already signed in, so
+   the session it returns replaces an equivalent one.
+2. `updateUser({ current_password, password })` — the change, still carrying
+   `current_password` so the **server** enforces it as well wherever that
+   setting is on.
+
+Neither substitutes for the other, and **the sign-in call must not be deleted
+as redundant** — the comment in the file says so, because that is the edit a
+later reader would make.
+
+**I could not read that setting's value.** It is not in `/auth/v1/settings`
+(checked — that endpoint returns providers, `disable_signup`,
+`mailer_autoconfirm` and the SAML/passkey flags, nothing about password
+change), and the Management API needs a Personal Access Token. **It does not
+matter, which is the point of building it this way**: the requirement is true
+from the browser either way. Turning that setting on later is hardening, not
+a fix, and needs no code change.
+
+**The one thing I could not test and he can:** whether GoTrue *rejects*
+`current_password` when the setting is off, rather than ignoring it. It is a
+known field on the request struct, so it should decode and sit unused — but
+that is reasoning, not a result, and testing it needs a recruiter account's
+password, which I do not have and did not ask for. **Checklist step 14 is
+that test.** If the password change fails with a message about
+`current_password`, the fix is one line: drop the field and keep step 1.
+
+### DELIBERATELY NOT USED: `reauthenticate()`
+
+Supabase's own answer to "prove it is really you before a password change"
+is `supabase.auth.reauthenticate()`, which **emails a one-time code**. That
+would be a **third** transactional email, which the restated one-email rule
+does not cover. The `nonce` field on `updateUser` is the other half of the
+same flow and is unused for the same reason. Both are recorded in the file,
+because reaching for `reauthenticate()` is the obvious move for whoever
+touches this next.
+
+**No email is sent by the box.** The seven Security toggles are off,
+"Password changed" among them (prerequisite B, verified 25 Nov).
+
+### THE THIRD COMMENT ON THE DISPROVED PREMISE
+
+Deliverable 5 named two, plus `RecruiterRoute`'s. **There were three in
+`main.jsx`.** The third is `/profile/saved-jobs`:
+
+> *"ProtectedRoute without blockRecruiters, for the same reason
+> /my-applications is: one person may be both a recruiter and a candidate,
+> and the candidate half is theirs."*
+
+`/profile/saved-jobs` is one of the seven, so adding the guard without
+touching the comment would have left a comment stating the exact opposite of
+the line directly above it. **It is also the only one of the seven where a
+recruiter could have had real rows to see** — a recruiter can save a role.
+
+**KNOWN CONSEQUENCE, recorded rather than fixed:** the public board is still
+reachable by URL for a signed-in recruiter (the nav item is hidden, the route
+is not), so a recruiter can still save a role and then have nowhere to see
+it. **Hiding the save button for recruiters was not decided and was
+deliberately not done** — it is a one-condition change if wanted, and it is
+in the checklist as a [DECIDE].
+
+### HOW IT WAS PROVED: 48 assertions, and all 48 PROVED ABLE TO FAIL
+
+`scripts/stage12-settings-test.mjs` — **48 assertions, static.** None of
+deliverables 2–6 has a function or a query to drive; they are a route guard,
+a nav condition, three comments and a paragraph, all of which are true or
+false in the source and any of which a later edit could quietly undo. It
+pairs each `path=` with the guard element that follows it, so it reads each
+route's **actual** wrapper rather than finding a path and a keyword near each
+other.
+
+It asserts the seven are blocked, that `/welcome` still is, that **`/admin`
+still is not** (deliberately outside the decided list — a recruiter there
+sees Admin's own "Page not found", which is what stage 9 signed off), and
+that **nothing else acquired the guard**. For each of the four comments it
+asserts the old wording is **gone** *and* a correction is **present**,
+because deleting a comment would pass an absence test while losing the
+reasoning that stops the error being re-derived.
+
+**`scripts/stage12-settings-negative-run.mjs` — 38 mutations, 38 caught.**
+It copies `src/`, applies one deliberate break, runs the suite against the
+copy, and asserts it fails **on the right assertion**. This is the
+check-the-check rule made executable rather than remembered: the subjects are
+files, so the proof can be automated.
+
+**It found two faults in my own suite on its first run, and they were the
+same fault twice:** two checks matched the prose of the file's header comment
+instead of the code it described — the "reauthenticate() is not used" check
+tripped on the comment saying it is not used, and the
+`signInWithPassword`-before-`updateUser` ordering check was comparing
+positions inside that comment. **Identical to the fault already recorded
+against `stage12-reset-gate-test.mjs`**, where an assertion was anchored on a
+comment's mention of `resetPasswordForEmail` rather than on `anon.auth.`.
+Every code check now runs on a comment-stripped copy of the source.
+
+**That is five faulty checks, not four** — and the first two the machine
+caught rather than Rishi.
+
+### Counts after this pass
+
+Unchanged and all passing: stage4 **52**, stage5 **42**, stage6 **62**,
+stage7 **56**, stage8 **44**, stage9 **90**, stage10 **121 + 62 + 111 +
+116**, stage12 reset gate **69**, check-overflow **18**. New: stage12
+settings **48**, and its negative run **38/38**.
+
+`npm run build` writes **88** pages now rather than 87 — one new community
+question, nothing to do with this work. `/recruiter/settings` is **not**
+prerendered: the prerender route list is six static paths plus the questions,
+and a signed-in `noindex` page belongs in none of them.
+
+**eslint: still exactly 8 errors**, the documented baseline, none in the new
+files.
+
+### One case trap avoided
+
+The pages directory on disk is **`src/Pages`**, capital P, and every import
+says `./Pages/`. macOS resolves `src/pages` to it as well, so a lower-case
+import would build locally and **fail on Vercel's Linux**. The suite asserts
+the import spelling for this reason.
+
+## STAGE 12 — SIGNED OFF 25 Nov 2026. **FINAL.**
+
+Rishi's result, verbatim: *"Stage 12 passes."* He confirmed, in order: the
+header showing My Dashboard and Settings with no Profile; both company rows
+separately labelled; everything plain text except the three password fields;
+the verification line correctly **not** stating his status; all seven routes
+bouncing a recruiter to `/recruiter` with no flash; all seven still working
+normally for a Google account; the password box refusing a wrong current
+password, accepting the right one and keeping him signed in; the old password
+refused and the new one working; **Brevo showing no email from the change**;
+the policy paragraph in; the date still 22 November; and Settings and
+`/privacy` clean at 375px.
+
+**Retested and confirmed.** The two fixes he found — the footer's Profile
+link and the Save control — were pushed at `86ba72c` and he walked steps 1 to
+6: no Profile in a recruiter's footer and Settings going straight through; no
+Ask button on `/questions` for a recruiter; no Save on the board cards or the
+detail page; everything restored for a Google account; and, signed out, Save
+still opening the sign-in popup and the Ask button still present.
+
+**Step 7 of that retest failed and is NOT a stage 12 regression** — the
+footer's narrow-width behaviour is pre-existing production behaviour, proved
+below. **So the sign-off is unconditional**, on his word: *"Make the stage 12
+record unconditional… Nothing outstanding against `86ba72c`."*
+
+**FINAL as of the second retest**, which covered the two decisions taken after
+the sign-off: no Save on question cards or question pages as a recruiter with
+hearts intact; Save back for a Google account and still appearing at
+`/profile/saved`; the Community column showing at 375px; and Save plus hearts
+working signed out. **Nothing in stage 12 is open.**
+
+### HE FOUND THE FOOTER, AND IT WAS THE SECOND INCOMPLETE APPLICATION
+
+Rishi: *"The header item was hidden, the footer one wasn't — so a recruiter
+clicking it gets bounced to /recruiter. Check the footer against the same rule
+as the header, and tell me whether anything else links to those seven routes
+that we've missed. **A sweep, not a one-line fix** — this is the second place
+the same rule was applied incompletely."*
+
+**He was right that it was a pattern, and the sweep found a third.**
+
+`Footer.jsx` **already computed `isRecruiter`** — it uses it to choose between
+a three-column and a five-column grid — and simply did not ask it on the
+Account list. The value was there; the question was not asked.
+
+### THE SWEEP, file by file
+
+Every file in `src/` that references one of the seven, and what it is:
+
+| File | Links to | Verdict |
+|---|---|---|
+| `components/Footer.jsx` | `/profile` | **DEFECT — FIXED.** On every page of the site |
+| `Pages/Questions.jsx` | `/ask` × 2 | **DEFECT — FIXED.** Public page, no session awareness at all |
+| `components/SiteHeader.jsx` | `/profile` | gated in this stage |
+| `Pages/GccJobDetail.jsx` | `/my-applications` | **clear — provenance.** The back-link renders only when router state says the visitor came from `/my-applications`, which a recruiter cannot reach |
+| `Pages/AskQuestion.jsx` | itself | clear — contained |
+| `Pages/AskedQuestions.jsx` | `/profile`, `/ask` | clear — contained |
+| `Pages/SavedQuestions.jsx` | `/profile` | clear — contained |
+| `Pages/SavedJobs.jsx` | `/profile`, itself | clear — contained |
+| `Pages/DeleteMyData.jsx` | `/profile` × 3 | clear — contained |
+| `Pages/MyApplications.jsx` | `/profile` | clear — contained |
+| `Pages/Profile.jsx` | three sub-routes | clear — contained |
+| `components/ProfileJobBoard.jsx` | `/my-applications`, `/profile/delete-data` | clear — rendered only by `Profile.jsx` |
+| `Pages/Welcome.jsx` | `/ask` | clear — `/welcome` is itself behind `blockRecruiters` |
+
+**`/questions` is the find worth dwelling on.** The header hides the link to
+it for a recruiter, which reads like the rule was applied — but **hiding a
+nav item does not close a URL**, and `Questions.jsx` contained no reference to
+a session, a user or an account type. A signed-in recruiter who typed the
+address was offered the page's primary button, and `/ask` had been closed
+since earlier the same day.
+
+**Deliberately left as it is:** the footer's **My Dashboard**, which points at
+`/welcome` for everyone. `/welcome` is behind `blockRecruiters`, so a
+recruiter is redirected to `/recruiter` — but that is a redirect **to a
+useful place they were asking for**, not a bounce away from one they cannot
+have. The header does the same and it was signed off that way.
+
+### DECISION F — the Save control is withheld from a recruiter
+
+Rishi: *"With /profile/saved-jobs closed they can save a role and then have
+nowhere to see it. A control that silently does nothing visible is worse than
+no control."* Done on the board list and the job detail page.
+
+### THE CAUSE, fixed rather than patched: THE RULE LIVED IN WHOEVER REMEMBERED IT
+
+Three public pages each resolved the viewer for themselves — `getUser()`,
+keep the id, discard the rest — so "a recruiter is shown no candidate-only
+control" had to be remembered separately at every one. It was remembered at
+the header and forgotten at the footer, then remembered at the job pages and
+forgotten at `/questions`. **Twice is not two accidents; the pattern is
+per-page duplication.**
+
+`src/lib/useViewer.js` now resolves the viewer once and
+`showsCandidateControls(viewer)` is the single question such a control asks.
+It is a **named function rather than an inline `!isRecruiter`** specifically
+so the sweep can find every call site.
+
+**It requires the viewer to be RESOLVED**, not merely not-a-recruiter. Before
+resolution `isRecruiter` is false, so the shorter test would draw the control
+and then take it away — the same flash that moving the recruiter redirect out
+of `Welcome.jsx` into `ProtectedRoute` existed to remove. The cost is that the
+control appears a moment after the page for everyone, which was already true
+of its state: a bookmark cannot know it is filled until the session resolves.
+**The prerendered `/questions` still carries the Ask button**, because the
+snapshot is taken signed-out and resolved.
+
+### THE CHECK THAT STOPS A THIRD OCCURRENCE
+
+The suite now holds a **table classifying every file in `src/` that links to
+one of the seven**, as `contained`, `gated`, `provenance` or `allowed` with a
+reason. A file that links to a closed route **and is not in the table fails**,
+and the failure says what to decide. A `gated` entry must import
+`isRecruiterUser` or `useViewer`. **A stale entry fails too** — which is how
+the four files that name a path only in prose were established not to need
+one, since the pattern matches a *quoted* path and not a path in a sentence.
+
+**The mutation that matters is a brand-new file that links to a closed route**
+without being classified, and it is caught. That is the difference between
+this being written down and it being enforced.
+
+**48 assertions to 97. The negative run, 38 mutations to 46, all caught.**
+
+### Counts after the sweep
+
+stage4 **52**, stage5 **42**, stage6 **62**, stage7 **56**, stage8 **44**,
+stage9 **90**, stage10 **121 + 62 + 111 + 116**, stage12 reset gate **69**,
+stage12 settings **97**, check-overflow **18**, negative run **46/46**.
+eslint still exactly **8**. Two now-unused `supabase` imports were removed
+from the two job pages, which is why their import lists shrank.
+
+### STILL OPEN — the same defect class, one decision away
+
+**A recruiter who opens `/questions` by URL still sees the heart and Save
+controls on every question card.** `QuestionCard.jsx` has no recruiter
+gating, and `/profile/saved` — where a saved question would be seen — is one
+of the seven now closed. **By Rishi's own rule this is the same defect as the
+Save button on a role**, and the fix is the same one condition.
+
+It was **not** done, because it changes a page 2,520 community members use and
+that is his decision rather than a tidy-up inside stage 12's scope. Hearts are
+a different case: a heart is a public reaction with no personal list to view,
+so it leads nowhere and dead-ends nothing.
+
+**Also noted, not a defect:** `NotificationsBell` renders for any session,
+including a recruiter's, and will always be empty for one (0 recruiters have a
+question or an answer). It navigates to `/questions/:slug`, never to one of
+the seven, so nothing bounces.
+
+## THE FOOTER AT 375px — CHECKED BEFORE FIXING, AND IT IS NOT A REGRESSION
+
+Rishi, at the stage 12 retest: *"Step 7 fails, and for both account types… at
+narrow width the EXPLORE and COMMUNITY columns disappear entirely and ACCOUNT
+collapses to one link."* And: *"Is this new, or has the footer always done
+this at narrow width? Check before you fix — if it's pre-existing it's a
+different conversation from a regression you just introduced."*
+
+**He was right to make that the first question. It is pre-existing, and it is
+live on production.**
+
+### 1. Is it new? No — it predates the branch by eight days
+
+| | |
+|---|---|
+| The four `hidden md:block` classes arrived in | **`f368c95`, 5 Sept 2026** — *"Add community Q&A feature, homepage/welcome redesign, and shared components"* |
+| This branch began at | **`4b12dbd`, 13 Sept 2026** |
+| On `main`? | **Yes** — `f368c95` is an ancestor of `main`, so **this is the live site's behaviour right now**, for every mobile visitor to the community |
+| Present before any stage 12 work? | **Yes** — all four are in `Footer.jsx` at `212ea8d` |
+
+**My footer change touched one thing: the `<Link>` INSIDE one of those
+`<li className="hidden md:block">` wrappers.** The diff is the Profile/Settings
+swap and two comments. The wrapper, the columns and every breakpoint are
+untouched.
+
+### 2. What caused it — and the viewer had nothing to do with it
+
+His instinct was right that `useViewer` could not explain Explore and
+Community. **It explains none of it.** The cause is four hard-coded Tailwind
+classes, nothing dynamic:
+
+| Element | Class |
+|---|---|
+| The **Explore** column `<div>` | `hidden md:block` |
+| The **Community** column `<div>` | `hidden md:block` |
+| The **My Dashboard** `<li>` | `hidden md:block` |
+| The **Profile / Settings** `<li>` | `hidden md:block` |
+
+### 3. Is it a defect? MEASURED, and the navigation is not lost
+
+A script rendered `/questions` signed out at both widths and listed what is
+actually visible:
+
+| | 1280px | 375px |
+|---|---|---|
+| Footer headings | iWorkAtGCC, Explore, Community, Legal, Account | **iWorkAtGCC, Legal, Account** |
+| Footer links | Explore GCC Jobs, Join the Community, Ask Answer & Connect, Privacy Policy, Recruiter Terms, Sign In | **Privacy Policy, Recruiter Terms, Sign In** |
+| Header menu | not needed (full nav in the bar) | **opens, and carries Explore GCC Jobs, Ask Answer & Connect, Sign In** |
+
+**So the four items hidden from the footer below 768px are exactly the four
+the header's menu already carries**, and the two that survive — Privacy
+Policy and Recruiter Terms — are the two that exist **nowhere else on the
+site**. That is a deliberate mobile de-duplication, not a loss.
+
+For the signed-in items the proof is structural rather than measured, and it
+is stronger than measurement would be: `SiteHeader.jsx` builds **one**
+`navItems` array and renders it **twice**, once for the desktop bar and once
+inside the mobile menu. If the desktop bar shows My Dashboard and
+Profile/Settings, the mobile menu shows them, because it is the same filtered
+array. There is no width at which the nav is unreachable — the hamburger
+exists below 640px and the full bar at 640px and up, while the footer trims at
+768px, so the bands overlap rather than leaving a hole.
+
+### THE ONE REAL GAP, which is his to decide
+
+**`Join the Community` has no mobile equivalent.** The footer's version points
+at `/signup`; the header's signed-out item is **Sign In**, which reaches
+`/signup` with `state: { mode: "signin" }`. Same route, different intent. So a
+signed-out visitor on a phone is offered *"Sign In"* and never *"Join"*.
+
+**Not changed, for two reasons.** It is a production page outside the job
+board's scope, and the premise that mobile users lose navigation turned out to
+be false — so fixing something would mean changing the live community site on
+a false alarm. **Carried item 30**, for him to decide. The options, if he wants
+one: show the Community column on mobile too; or make the signed-out header
+item read *Join* and let `/signup` handle both, which it already does.
+
+## TWO DECISIONS AFTER THE SIGN-OFF — 25 Nov 2026
+
+Both were open questions handed to him rather than things built on a hunch.
+Neither is part of stage 12; both are recorded here because they came out of
+it.
+
+### 1. The Save control on a question card is withheld from a recruiter
+
+Rishi: *"Same rule as the role Save button — `/profile/saved` is closed, so a
+recruiter saving a question has nowhere to see it. Leave hearts alone, for
+your reason: a heart is a public reaction with no list behind it, so it
+dead-ends nothing."*
+
+**Two surfaces, not one.** `QuestionCard` is one of them; the other is
+`QuestionDetail.jsx`, which has **its own save markup** rather than reusing
+the card, and `/questions/:slug` is public. `TrendingQuestionCard` was checked
+and has **no** save control, so it needed nothing.
+
+**`canSave` has no default, deliberately.** An omitted prop is `undefined` and
+therefore falsy, so a new call site that forgets it **hides** the control
+rather than showing one that leads nowhere. Hiding a control that should be
+there is a visible bug the next person fixes; showing one that dead-ends is
+invisible unless you happen to be signed in as a recruiter. **The fail-safe
+direction is the one that fails loudly.**
+
+Call sites and what each passes: `Questions.jsx` → `canSave={canAsk}`, the
+same viewer answer the Ask button uses; `AskedQuestions.jsx` and
+`SavedQuestions.jsx` → `canSave` outright, because both are behind
+`blockRecruiters` and the viewer is a community member by construction.
+
+**Hearts are untouched, and the suite asserts that** — exactly one
+`{canSave ?` in each file, with the heart toggle outside it. A later pass that
+"tidied" the hearts into the same conditional would fail.
+
+### 2. Carried item 30 — the Community column shows at every width
+
+Rishi: *"Show the Community column on mobile. Not the rename. Adding a link
+costs nothing; renaming "Sign In" to "Join" fixes the new visitor and confuses
+the 2,520 members who already know where Sign In is."*
+
+**He asked for the length cost before it was built**, which was the right
+question to ask of a footer that is on every page:
+
+| At 375px on `/questions` | Footer height |
+|---|---|
+| Before | **275px** |
+| The whole Community column | **369px** — **+94px** |
+| Only `Join the Community` | 349px — +74px |
+
+Built as he decided: the whole column, which brings `Ask, Answer & Connect`
+along with it. **That second link duplicates the header's menu**, and dropping
+it would save 20px of the 94 — noted so the trim stays a one-word change.
+
+**The asymmetry with Explore is deliberate and both halves are asserted.**
+Explore stays desktop-only because its one link is in the header's menu, so
+hiding it loses nothing. Community shows everywhere because
+`Join the Community` carries `state={{ mode: "join" }}` and **nothing else on
+a phone reaches `/signup` in join mode** — the header's signed-out item is
+`Sign In`, same route, sign-in mode. A test asserts Explore is still hidden,
+so showing it later is a decision rather than a drift.
+
+**Verified rendered, both widths, signed out:** desktop unchanged at five
+headings; 375px now reads iWorkAtGCC, **Community**, Legal, Account, with the
+footer at the predicted 369px and no horizontal overflow at either width. The
+recruiter case is unchanged by construction — both columns sit inside
+`{!isRecruiter && (…)}`, so a recruiter never saw Community at any width.
+
+### Counts after both decisions
+
+stage12 settings **109** (from 97), negative run **56/56** (from 46).
+Everything else unchanged and passing: stage4 **52**, stage5 **42**, stage6
+**62**, stage7 **56**, stage8 **44**, stage9 **90**, stage10
+**121 + 62 + 111 + 116**, stage12 reset gate **69**, check-overflow **18**,
+eslint **8**.
+
+## THE WORDING PASS — DECIDED 25 Nov 2026
+
+Held as a set since stage 7 so the words moved together rather than one screen
+at a time. His decisions, and what each turned out to involve.
+
+### W1 — "verify your company" → "verify your account". DONE
+
+All four occurrences in one change:
+
+| File | Where |
+|---|---|
+| `RecruiterApplications.jsx` | the gate panel — *"Please verify your account to see candidate details."* |
+| `RecruiterJobs.jsx` | the My jobs counter line — *"— verify your account to see who"* |
+| `PostAJob.jsx` | the signed-in recruiter notice — *"we need to verify your account first"* |
+| `PostAJob.jsx` | the **Company website** field hint — *"We use this to verify your account."* |
+
+**The row's own description was wrong about one location.** It named a "stage
+3 signup banner"; the string is not there. The fourth occurrence is the
+**Company website field hint** on the posting form. Worth recording because
+the description, not the count, is what someone would search by.
+
+**THE FOUR WERE NOT THE WHOLE OF IT — EXTENDED TO TWELVE, 25 Nov 2026.**
+W1 was scoped by a phrase, and the concept lives under several. Applying the
+four left `RecruiterApplications.jsx` saying *"verify your **account**"* at
+line 324 and *"Your **company** is verified"* ninety lines later — **the two
+branches of the same condition, on one screen.** Exactly what the item was
+written to stop.
+
+Rishi: *"Extend to all nine. You're right that the four weren't the whole of
+it."* **It turned out to be twelve**, not nine: the sweep I showed him missed
+`RecruiterTerms.jsx`'s section heading `4. Company verification` and its *"we
+may decline to verify a company"*, and `RecruiterSettings.jsx` — written
+earlier the same day — said *"Company verification… is on your dashboard."*
+
+| File | Was |
+|---|---|
+| `RecruiterApplications.jsx` | "Your company is verified, so the moment someone applies…" |
+| `RecruiterHome.jsx` | "Your company is verified" (banner heading) |
+| `RecruiterHome.jsx` | "we need to complete company verification" |
+| `RecruiterJobs.jsx` | "Your company is verified, so there is no limit…" — **removed by W2's chip** |
+| `RecruiterJobs.jsx` | "Until your company is verified you will see how many…" |
+| `JobForm.jsx` | "Until your company is verified you can keep 10 live…" |
+| `JobForm.jsx` | "Verifying your company removes the limit entirely." — **became W2's opening** |
+| `RecruiterTerms.jsx` | the meta description, the `<h2>4. Company verification</h2>`, "Before your company is verified", "decline to verify a company" |
+| `RecruiterSettings.jsx` | "Company verification, and what it changes…" |
+
+**`RecruiterHome.jsx`'s comment was updated, not deleted.** It recorded why
+the wording says "verification" and never "email verification", and that
+reasoning is unchanged — the point was never the word *company*, it was
+avoiding *email*. The comment now says which word changed and why, so the
+next reader does not restore the old one thinking it was the decision.
+
+**LEFT ALONE, because they are genuinely about the company:** "your company
+website", "the name of your company", "if your company runs its own mail",
+"Enter your company website — we use it to verify you", and
+`DeleteMyData.jsx`'s "it never touches your company". The company is the
+**evidence**; the account is what **gains access**.
+
+**The Company website field hint** — his two options, my call: **"We use this
+when we verify your account."** The shorter "to verify your account" is
+grammatical but implies the website verifies the account; *when* is accurate,
+because the website is evidence consulted during verification of the account.
+
+**The check is not a count.** Asserting "four occurrences fixed" is what let
+this happen twice. The suite now asserts that the phrases naming the verified
+**subject** — `verify your company`, `company is verified`,
+`company verification`, `verify a company`, `Verifying your company` — appear
+in **no** `.jsx` file, and separately that the replacements are present, so
+the first assertion cannot be satisfied by deleting the wording. A new string
+cannot slip past a check of that shape.
+
+### W5 — the reports tab becomes "Role performance". DONE
+
+`AdminReports.jsx`'s `VIEWS`, label only. **The `key` is untouched, so no URL
+changes.** The admin action-queue tab stays **Roles**, on his reasoning: *"The
+admin tab acts on roles; the report counts them."* The `<h3>Roles</h3>`
+grouping role figures inside the Overview tab is left alone — W5 is about two
+**tabs** with one name, and that heading is not a tab.
+
+### W6 — the anonymised figure becomes a parenthetical. DONE
+
+`1 new · 1 not selected · 3 anonymised` → **`1 new · 1 not selected (3 anonymised)`**
+
+Rishi: *"Every number is right; it's the grammar inviting the sum."* Joined by
+a separator it read as a fourth bucket; bracketed it reads as a qualifier of
+the figures before it. **Nothing about what is counted changed** — the two
+axes from W3 are intact, and the parts still deliberately need not sum to the
+card count.
+
+**ONE EDGE CASE, AND IT IS THE LIVE ONE.** With no decision parts there is
+nothing for a parenthetical to qualify, and `(3 anonymised)` alone would be
+brackets attached to nothing. It stays **bare** in that case — which was
+already stage 7's asserted behaviour, so it is preserved rather than invented.
+**That is not a hypothetical: all 18 applications in production are
+anonymised today**, so the bare form is what the page shows right now.
+
+Four assertions added to `stage7-applications-test.mjs` (**56 → 60**),
+including one that the figure never appears after a separator and one that the
+bare case grows no brackets.
+
+### W7 — SUPERSEDED, not acted on
+
+He asked for it to be checked before anything was done, and he was right:
+
+> *"It's logged as 'Apply Directly doesn't contain the word jobs', but I
+> removed that nav item and the homepage card in stage 10 round two."*
+
+**Searched: `Apply Directly` appears nowhere in the repo** — not in `src`,
+`api`, `scripts`, any `.jsx`, `.js`, `.mjs` or `.html`, case-insensitively,
+outside `node_modules` and `dist`. Both surfaces that carried it were removed
+when the board's placement changed on 24 Nov.
+
+**The entrance now reads `Exclusive GCC Jobs`**, stored in
+`src/lib/boardPromo.js` as `HEADING_LEAD = "Exclusive"` and
+`HEADING_ACCENT = "GCC Jobs"`. W7's entire concern was a label that did not
+contain the word "jobs". **The replacement contains it.** So there is nothing
+to decide and nothing to change: **closed as superseded by stage 10 round
+two**, which is a different outcome from closing it as done.
+
+This is the second item in two days that was stale because the thing it
+described had been removed — the same class as the company seed. **A logged
+wording item is about a string, so it is worth searching for the string before
+discussing it.**
+
+### W2 — the chip. DONE, AND NOTHING NEW WAS WRITTEN
+
+He asked to see the proposed wording first, and asking is what settled it:
+**the fact was already in both places it is needed**, so the premise that it
+needed a new home was wrong.
+
+| State | Where the "no limit" fact already lived |
+|---|---|
+| **Unverified** | `JobForm.jsx`'s cap panel, on the posting form, **before they type** — in both the at-cap and not-at-cap branches |
+| **Verified** | `/recruiter`'s verified banner: *"There's no limit on how many roles you can have live at once."* |
+
+Rishi: *"Good catch that the fact was already in both places; the premise was
+mine and it was wrong."* His reasoning for *where* it belongs was right and
+already satisfied: *"an unverified recruiter should learn about it at the
+moment it stops them, which is the only moment it matters."*
+
+**So: the chip, and one word of emphasis.** `My jobs` shows a plain
+**Verified** chip reusing `/recruiter`'s banner styling exactly, so the same
+fact looks the same on both screens. The form's not-at-cap sentence now opens
+**"Verification removes the limit entirely."** in bold — leading with the
+benefit rather than the condition. The unverified slot counter is untouched.
+
+**Two assertions carry the part that matters**, because the risk in shortening
+a line is losing what it carried: the no-limit fact is asserted present on the
+posting form **and** on the dashboard banner. Deleting either fails the suite.
+
+## PRE-MERGE SCOPE SETTLED — 25 Nov 2026
+
+| | Decision |
+|---|---|
+| **The design pass** | **DROPPED FROM V1.** *"It looks fine as it is and I'm not holding the launch for it."* A v2 item, **not** outstanding work. |
+| **Item 19** (remote roles and `jobLocationType`) | **V2.** Only affects Google's remote-only filter, and there are no remote roles. |
+| **Item 23** (second admin) | **V2.** The Supabase SQL editor is a second way in and can re-grant the admin row, so the failure is recoverable rather than a lockout. **Residual, his to confirm: the dashboard login must not be the same Google account.** |
+| **Item 27** (Markdown) | **BUILD IT PROPERLY.** *"I want Markdown rendering. It's the one defect a candidate actually sees."* |
+| His to do | Item 2 (Clarity masking), item 29's retest, the clearout, the three dates, P4 — all before the merge. |
+
+**So the whole of the remaining engineering work in v1 is item 27.** Everything
+else before the merge is his: a dashboard check, a retest, the clearout, three
+dates, and one environment-variable confirmation.
+
+### Item 27 — the two questions he asked before anything is built
+
+**He asked them in the right order and they constrain each other**, which is
+why neither was answered alone.
+
+#### What exists today, verified 25 Nov 2026
+
+| | |
+|---|---|
+| `dangerouslySetInnerHTML` in `src/` | **nowhere.** The page has never parsed HTML, and that is the property to keep |
+| The page's rendering | `GccJobDetail.jsx:336` — one `<p>` with `whitespace-pre-wrap break-words`, printing `{job.description}` as a text node |
+| The JSON-LD's rendering | **already HTML**, via `descriptionToHtml()` in `src/lib/jobPosting.js:86` |
+| `descriptionToHtml`'s order | **escape `&<>` first, then add `<p>` and `<br>`** — and its comment says why: *"Escaping first and marking up second is the only safe order."* |
+| `</script>` in the JSON-LD | **already handled** — both `jobPosting.js:278` and `Seo.jsx:39` do `JSON.stringify(...).replace(/</g, "\\u003c")`, so no `<` survives into the script block at all |
+| The rule the file already states | *"the markup must say what the page shows, not a tidier version of it"* |
+
+**Two facts change the shape of his second question.** The markup is *already*
+HTML rather than plain text, so moving it to stripped plain text would be a
+**change** to a signed-off behaviour, not a fix to it. And
+`descriptionToHtml` already demonstrates the safe construction order on this
+exact data — escape, then mark up — with 10 assertions in
+`stage10-seo-test.mjs` behind it, including `<b>two</b>` arriving as text.
+
+#### BUILT 25 Nov 2026 — one parse, two renderers
+
+He chose the HTML option for the JSON-LD after being told both were safe:
+*"You're right that the markup is already HTML, that Google asks for HTML, and
+that stripping to plain text would be changing signed-off stage 10 behaviour
+rather than repairing it."* And: *"strip the marks from metaDescription
+regardless."*
+
+| File | Role |
+|---|---|
+| `src/lib/descriptionMarkdown.js` | **the only parser.** Text → a plain token tree. No JSX, no HTML, no strings containing tags |
+| `src/components/JobDescription.jsx` | renderer 1 — **React elements**, for the page |
+| `src/lib/jobPosting.js` | renderer 2 — an **HTML string**, for the JSON-LD, via `blocksToHtml` |
+| `src/lib/jobPageHead.js` | the **flattening**, for `<meta name="description">` |
+
+**The subset is closed:** `#`/`##`/`###` (rendered h3/h4/h5, because the page
+owns h1 and h2), `**bold**`, `*italic*`, `-`/`*` and `1.` lists, blank line =
+paragraph, single newline = break. **No links, no images, no code, no tables,
+no blockquotes.**
+
+**Headings start at h3 deliberately.** A recruiter's `#` must not carry the
+same weight as the role title.
+
+**An unmatched marker is literal text** — `**bold` stays `**bold`, `2 * 3 * 4`
+survives, `###` alone is three characters. Asterisks appear in prose far more
+often than in markup, so that is the common case rather than the edge case.
+
+#### THE SIX PROOFS, and what the negative run found in them
+
+`scripts/item27-markdown-test.mjs` — **133 assertions**.
+`scripts/item27-markdown-negative-run.mjs` — **16 mutations, 16 caught.**
+
+| | Proof | How |
+|---|---|---|
+| 1 | **Structural** | `dangerouslySetInnerHTML` appears in **no** file in `src/`; the page renderer does not import the HTML serialiser; every tag in it is **written out literally** |
+| 2 | **Allowlist** | no node type outside a closed set, asserted **two ways** — by walking the tree for 25 adversarial inputs, **and** by scanning the parser's own source for `type:` literals |
+| 3 | **Hostile corpus** | 25 attacks — `<script>`, `onerror`, `<svg onload>`, `</script>`, `javascript:`, a `data:` URL, a null byte, template-injection braces — each asserted to arrive as text in **both** renderers, with no attribute emitted at all |
+| 4 | **Markup path** | the serialised script block contains **no `<`**, cannot be closed early, and is still valid JSON |
+| 5 | **Visibility** | the page's text **equals** the markup's text with tags stripped, for five cases — the rule `jobPosting.js` states, turned into a check |
+| 6 | **Overflow** | `check-overflow.mjs` now drives **job 13's page**, the one role whose description is real Markdown. **18 → 21 checks** |
+
+**THE NEGATIVE RUN FOUND A HOLE IN PROOF 2, which is the whole reason for
+running it.** A mutation adding a `[[` branch that emits
+`{ type: "link" }` was **not caught**: the corpus-driven check can only see
+node types some adversarial string actually produces, and nothing in the
+corpus contains `[[`. **A check that depends on having imagined the attack is
+the weak form of the assertion.** Proof 2 now also scans the parser's source
+for every `type:` literal, which does not care whether anyone thought of the
+syntax. That mutation is caught by the structural half.
+
+**And the suite's first run failed three of its own assertions, two of them
+the same fault for the third time on this project:** the
+`dangerouslySetInnerHTML` check and the literal-tags check both matched the
+**prose of a comment** explaining that those things are avoided. A file that
+documents what it does *not* do will always satisfy a naive search for that
+thing. Every code check in that suite now runs on a comment-stripped copy.
+The third was a check that **could not pass**: the visibility comparison
+replaced every tag with a space, which put one before the full stop in
+`*Bengaluru*.` — inline tags are not word boundaries and block tags are.
+
+**One harness bug worth recording:** the first negative run reported all 16
+mutations as "did not bundle", with an empty stderr. **`esbuild` is not a
+local dependency** — `HANDOVER.md` uses `npx` for exactly that reason — and
+the harness assumed a `node_modules/.bin/esbuild` that does not exist. It now
+bundles from the repo and runs from the copy.
+
+#### PROOF 6 — CLOSED 25 Nov 2026
+
+Job 13 gave the sweep real Markdown, but its longest description word was 18
+characters, and job 42's 180-character word was in its **title**, not its
+description — so no measured page had a long unbroken word inside a heading
+or a list item, which are now two different measurements from a paragraph.
+
+He ran `supabase/test-fixtures/item27-overflow-fixture.sql`: **six checks, all
+PASS**, job 42 now **968** characters with a longest word of **180**, no other
+role touched. Confirmed independently read-only: both fixtures present,
+`updated_at` 25 Nov 14:26.
+
+**`check-overflow.mjs`: 21 checks, 0 failed.** But a passing overflow check
+only means something if the page it measured actually contained the fixture,
+so the rendered DOM was inspected rather than trusted:
+
+| | element | width | scrollWidth | container | page overflow |
+|---|---|---|---|---|---|
+| 1280px | `h4` | 512 | 512 | 512 | no |
+| | `li` | 492 | 492 | 512 | no |
+| 375px | `h4` | 293 | 293 | 293 | no |
+| | `li` | 273 | 273 | 293 | no |
+
+The word is in the DOM, in an **`h4`** (from `##`, which confirms the heading
+levels start at h3 as designed) and in an **`li`**, and neither element's
+scrollWidth exceeds its client width at either size. **A missing wrap class on
+the heading or list-item branch would have shown here and nowhere else** —
+which is the whole point of measuring rather than reading the CSS.
+
+**CARRY FORWARD TO THE CLEAROUT:** the clearout deletes job 42 **and** job 13,
+so `check-overflow.mjs` loses both of its description subjects. **The
+replacement fixture must carry the long word in a heading, a list item and a
+title** — a title-only fixture would silently stop testing two of the three
+shapes.
+
+**Agreed without reservation: no links.** And a second argument for it beyond
+safety — stage 4 dropped external-apply entirely because a link to someone
+else's site yields no application, no candidate and no funnel data. A
+clickable link in a description works against what the board is for, not just
+against vouching for it. A pasted URL stays **visible as text**, which is the
+right amount of support.
+
+## A RETURNING RECRUITER HAD NO WAY IN — BUILT 25 Nov 2026
+
+Rishi: *"There's no way for a returning recruiter to sign in. The only
+entrance is /post-a-job's Sign in tab, which you only find if you know that
+posting and signing in are the same page. A recruiter who comes back a month
+later has nowhere obvious to go."*
+
+### The question he asked turned out to answer itself
+
+He asked whether a dedicated route was worth it or whether linking to the Sign
+in tab would do. **Linking to the tab was not possible.** `PostAJob.jsx` held
+it in `useState("signup")` with nothing in the URL, so **every** link to that
+page opened on *Create account* — a link labelled "Recruiter sign in" would
+have landed a returning recruiter on a form asking them to create a second
+account. His reply: *"that's worse than no link."*
+
+So something had to change either way, and the choice was only about naming.
+
+### `/recruiter/sign-in`, and why a route rather than a query parameter
+
+| | |
+|---|---|
+| **The address has to match the label** | a link called "Recruiter sign in" pointing at `/post-a-job` is W7's problem in reverse, and it is the URL a recruiter bookmarks |
+| **It is the destination for both transactional emails** | the signup confirmation and the password reset now both name it, so it is in the inbox of every recruiter who has one |
+| **The family already exists outside `RecruiterRoute`** | `/recruiter/forgot-password` and `/recruiter/reset-password` are `/recruiter/*` paths rendered **without** the session guard. A sign-in page must be reachable with no session, so this fits a pattern rather than inventing one |
+| **It costs nothing** | client routing only, rendering the existing page with the tab preset |
+
+**It renders `PostAJob` with `initialMode="signin"` rather than being a second
+page.** The form, the free-provider block, the already-signed-in notice and
+the confirmation-sent state are all there, and a copy of them would be a copy
+of the one path on the site that must not drift. **The default is `"signup"`,
+which is what keeps `/post-a-job` behaving exactly as before.**
+
+**The head follows the route, not the component.** Two routes rendering one
+component must not claim the same canonical path, so `/recruiter/sign-in`
+carries its own title, description and **`noindex`** — an entrance for people
+who already have an account does not belong in a search result — while
+`/post-a-job` stays indexable as the pitch. The H1 changes with it: *"Sign in
+to your recruiter account"* rather than promising posting to someone who came
+to sign in.
+
+### The two entrances, and the one he ruled out
+
+**No header item**, on his decision: *"the header is for the community, and a
+permanent recruiter link there is clutter for 2,520 people who'll never use
+it."* A test asserts the header has no such item, so adding one later is a
+decision rather than a drift.
+
+| | Entrance | Why there |
+|---|---|---|
+| 1 | **The community sign-in page**, a quiet line under the join/sign-in toggle | A recruiter who has forgotten where to sign in tries the sign-in page first, and it told them nothing. It **states the separation** rather than only linking, because the common confusion is not "where do I sign in" but "why won't my recruiter password work here" — the same sentence as the privacy policy's recruiter paragraph |
+| 2 | **The footer**, in the Account column | **Signed-out only**, which is the whole design: a signed-in recruiter already has Settings and My Dashboard in the header, and a signed-in candidate has no use for it |
+
+**Measured rendered, signed out:** `/recruiter/sign-in` opens with the **Sign
+in tab selected**, titled "Recruiter Sign In", `noindex`, no overflow at
+375px; `/post-a-job` unchanged with *Create account* selected and still
+indexable. **The footer at 375px is now 395px**, up from 369 — the new link
+costs 26px. On `/signup` both entrances are visible at once, which is
+intended rather than accidental.
+
+### W1 reached the emails too — the thirteenth and fourteenth occurrences
+
+Both templates had to be re-pasted for the sign-in address anyway, so the
+verification wording went with them: `confirm-recruiter-signup.html` said
+*"we verify the company"* and *"While your company is unverified"*. **Nothing
+in `src/` would ever have caught those** — the suite scans `.jsx` files, and
+these are HTML pasted into a dashboard. A string that lives outside the
+repository's test surface needs a human to remember it, which is why it is
+written down here.
+
+**He must re-paste both templates** for any of this to reach a recruiter.
+
+### Proof 6's fixture — `supabase/test-fixtures/item27-overflow-fixture.sql`
+
+**The MCP connection refused the UPDATE**, as it should: *cannot execute
+UPDATE in a read-only transaction*. So it is a file he runs, with a result
+table, like a migration.
+
+**Dry-run completed read-only, both ways** — the row as it stands and as it
+would stand, simulated in a `SELECT`:
+
+| check | now | after | |
+|---|---|---|---|
+| c2 heading carries the word | 0 | 1 | **can fail**, will pass |
+| c3 list item carries it | 0 | 1 | **can fail**, will pass |
+| c4 longest unbroken word | 4 | 180 | **can fail**, will pass |
+| c6 only this role touched | 0 | 1 | **can fail**, will pass |
+| c1 row exists | 1 | 1 | passes both, deliberately |
+| c5 description length | 599 | 968 | passes both, deliberately |
+| the idempotence guard | matches | does not | re-running is a no-op |
+
+**c1 and c5 pass before and after on purpose**, and the file says so: they do
+not assert the fixture, they guard the two things that would make it
+meaningless — the row still existing, and the description still clearing the
+400-character minimum. **A check that cannot fail in this run is fine when
+what it guards can change in another; what is not fine is a check nobody has
+evaluated.**
+
+## THE FIFTH FAULTY CHECK — AND IT WAS THE FILE, NOT THE CHECK, 25 Nov 2026
+
+Rishi: *"ERROR: 42601: syntax error at or near "check". LINE 108: order by
+check. `check` is a reserved keyword in Postgres. That's the same class as the
+current_role trap you hit in migration 025 and recorded in that file's
+header."*
+
+### 1. What state job 42 is in: UNTOUCHED. Nothing ran.
+
+Verified read-only immediately after: description **599 characters**, no
+fixture heading, no fixture bullet, longest word **4**, and `updated_at` still
+**24 Nov 15:05** — unchanged from before the file was handed over. **The
+timestamp is the proof**, not the reasoning.
+
+Two independent reasons, either of which alone would be enough:
+
+1. **Postgres parses an entire statement batch before executing any of it.**
+   A syntax error anywhere in the file means **nothing** executes — not even
+   statements before the error.
+2. **The SQL editor runs a multi-statement file as one implicit
+   transaction**, already in this file's trap list, so the UPDATE would have
+   been rolled back even if it had run.
+
+### 2. Why the dry run did not catch it: IT NEVER RAN THE FILE
+
+**The dry run executed a hand-written simulation of the checks, not the
+file's own text.** It was a `with sim as (...) select ... union all ...` that
+reproduced each predicate's *logic* against both the current row and a
+simulated post-update row. Every predicate was right. **No statement from the
+file was ever sent to the server**, so its syntax was never parsed by
+anything.
+
+**That is the half-rule failing again, in a third form.** The rule after 023
+was *execute the migration's checks against the live database before handing
+the file over*. After 025 it gained *and prove a check meant to pass passes*.
+Both were satisfied. **Neither says "run the text you are about to hand
+over"** — and a paraphrase of a file cannot surface a syntax error in the
+file.
+
+**`AS check` is why it reached line 108 at all.** Postgres permits a reserved
+word as a column label after `AS`, so `'c1 ...' as check` parsed cleanly.
+Only the bare `check` in `ORDER BY` is parsed as the keyword. The file was
+wrong from line 60 and failed at line 108.
+
+**And the project already had a convention I did not follow.** Applied
+migrations return `label, result, detail` and sort by a numeric `seq` — see
+025. **There is no reserved word anywhere in it.** The fixture now uses it.
+
+### THE METHOD FIX: parse-check the statements you cannot execute
+
+`EXPLAIN <write statement>` parses and plans without performing it, so it is
+permitted where the write itself is not — and **the error code separates the
+two cases**:
+
+| | |
+|---|---|
+| `EXPLAIN` the fixture's real UPDATE | **42501 permission denied** → it parsed; parsing precedes the privilege check |
+| `EXPLAIN` the same UPDATE with `order by check` appended | **42601 syntax error** → the method detects a parse error |
+
+**Both were run, so the method itself is proved able to fail.** And the
+fixture's SELECT was then executed **verbatim, as the text in the file**,
+returning the before-state: c1 and c5 PASS, c2/c3/c4/c6 FAIL. Which is what it
+must do before the UPDATE, and proves those four can fail.
+
+### 3. Other reserved words in files nothing has ever parsed
+
+**His question was the right one, and the answer starts with an inventory.**
+Of the **53** `.sql` files in `supabase/`, roughly **half have never been
+parsed by anything**: every migration ships a matching `_rollback.sql` that is
+never run, and `post-merge/drop_question_authors.sql` runs only after the
+merge. **A reserved word in a rollback script surfaces during a rollback — an
+emergency, and the worst possible moment to meet a syntax error.**
+
+**Scanned: clean.** `scripts/sql-reserved-words-test.mjs`, now committed, reads
+the 101 reserved words from `pg_get_keywords()` (`catcode in ('R','T')`) and
+checks seven identifier positions across every `.sql` file. **0 findings**
+outside the fixture, which is fixed.
+
+**One false positive worth recording** so nobody "fixes" it: migration
+`020_job_saves.sql:216` has `order by case k.availability when 'open' ...
+end`. That is a **CASE expression**, not an alias, and the migration is
+applied and working. The scanner excludes it explicitly.
+
+**The scanner's own self-test caught a hole in the scanner on its first
+run**, and it was the first incident: the alias pattern required the alias to
+be followed by a comma, bracket or newline, so it **missed
+`as current_role from public.user_roles`** — the silent trap this whole class
+is named after. The lookahead now accepts a following keyword. **Eleven
+self-tests run before the repository scan**, six that must be flagged and five
+that must not, because a scanner that quietly matches nothing reports a clean
+repository and a clean repository looks identical.
+
+### What is different about this one
+
+The four before it were checks that asserted the wrong thing. **This one was a
+check that asserted the right thing in a file that could not run.** The
+remedy is the same shape as all of them — execute it — but applied to a
+different object: **the artefact, not the assertion.**
+
+## THE RECRUITER AREA WAS CRAWLABLE WITH NO SERVER-SIDE noindex — 25 Nov 2026
+
+Rishi, testing the sign-in route: *"Step 4 fails. view-source: on
+/recruiter/sign-in finds no noindex — 0 matches. The page is the bare SPA
+shell… So the noindex is presumably set client-side after React mounts, which
+View Source can't see."* And the question that mattered: *"What else is in the
+same position? /recruiter/forgot-password and /recruiter/reset-password are the
+same family… a password reset page in Google's index is worse than a sign-in
+page."*
+
+**All three of his points were right, and the third was the one worth having.**
+
+### 1. Is it actually being set? YES — read from the rendered DOM
+
+| Route | rendered `robots` | rendered title | prerendered |
+|---|---|---|---|
+| `/recruiter/sign-in` | `noindex, nofollow` | Recruiter Sign In — iWorkAtGCC | **no** |
+| `/recruiter/forgot-password` | `noindex, nofollow` | Forgot your recruiter password | **no** |
+| `/recruiter/reset-password` | `noindex, nofollow` | Set a new password | **no** |
+
+Each also carries a correct canonical. **So nothing was broken — it was
+weaker than it looked.**
+
+### 2. Which did I intend? SERVER-SIDE. The step was written for a check the page could not pass
+
+I wrote *"View source and it should be there"*, which is a server-side test,
+against a page that is not prerendered. **The step was right and the
+implementation did not meet it** — the inverse of the usual fault here, and
+the reason it surfaced at all.
+
+**Client-side is *usually* enough**: Googlebot renders JavaScript, and it would
+see this on its rendering pass. It is not enough **here**, for three reasons
+that compound:
+
+1. **`robots.txt` is `Allow: /`**, with only `/app.html` disallowed. Every
+   `/recruiter/*` path is fully crawlable.
+2. **The SPA fallback serves `dist/app.html`**, which has **no head tags at
+   all** — no title, no description, no robots. The first fetch of any
+   recruiter page yields a document with nothing in it.
+3. **`/recruiter/sign-in` is now linked from the footer of every page**, which
+   I added in the same session. It went from undiscoverable to as
+   discoverable as a URL on this site gets, in one commit.
+
+### THE FIX: `X-Robots-Tag` on the whole family, not three names on a list
+
+```
+"source": "/recruiter",        -> X-Robots-Tag: noindex, nofollow
+"source": "/recruiter/(.*)",   -> X-Robots-Tag: noindex, nofollow
+```
+
+**A header rather than three more prerendered routes, deliberately.** A
+prerender list is a list somebody has to remember to add to, and **that is the
+failure mode this project keeps meeting** — the seven blocked routes, the
+footer link, `/questions`, and now this. The header covers the three unguarded
+routes, the entire signed-in recruiter area, and **every route added later**,
+without anyone remembering anything.
+
+**THE SLASH IS LOAD-BEARING, and it is why there are two patterns.**
+`/recruiter-terms` is a **public** page that must stay indexable, and it
+matches `/recruiter(.*)` but **not** `/recruiter/(.*)`. A later
+"simplification" to one pattern would quietly deindex the terms of service. A
+test asserts ten paths on the right side of that line.
+
+**`robots.txt` must stay `Allow: /` for these paths.** Disallowing them would
+stop Google fetching the page and therefore stop it seeing the header — and a
+disallowed URL can still be indexed as a bare link. **Allow the crawl, serve
+the refusal.** A test asserts no `Disallow: /recruiter` appears.
+
+**The client-side tag stays** as the belt to the header's braces, and is
+asserted present in all three pages: the header is what a crawler sees, the
+meta tag is what a human reading the page sees.
+
+### A `_comment` key was written into `vercel.json` and then removed
+
+The first version explained all of the above inside the headers entry as a
+`_comment` array. **Removed before committing:** Vercel validates this file's
+schema, a header entry's keys are `source`, `headers`, `has` and `missing`,
+and an unknown key risks **failing the deployment**. JSON has no comments, so
+the reasoning lives here instead. **An invalid `vercel.json` is the one
+mistake in this file that takes the whole site down**, and the existing trap
+note about re-keying `functions` wrongly is about the same file.
+
+### IT CANNOT BE VERIFIED LOCALLY
+
+`vite preview` does not read `vercel.json`, so the assertions check the
+**configuration** and the response header itself is a step on his checklist
+against the deployed preview:
+
+```sh
+curl -sI https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app/recruiter/sign-in | grep -i x-robots
+curl -sI https://gcc-job-board-git-job-board-rishigccs-projects.vercel.app/recruiter-terms | grep -i x-robots
+```
+
+The first must print `noindex, nofollow`; the second must print **nothing**.
+
+### The harness had the same shape of bug, and the mutations found it
+
+The first run of the new mutations reported **"SUITE STILL PASSED"** on
+breaks that were genuinely there. The harness copies `src/` and ran the suite
+with the **repo** as its working directory, so a mutated `vercel.json` was
+written to the copy while the suite read the real one. It now copies
+`vercel.json` and `public/`, supports a `../` prefix to target the copy's
+root, and runs the suite with its **cwd set to the copy**. **209 assertions,
+80/80 mutations.**
+
+## THE CLEAROUT RAN, THE THREE DATES ARE SET, P4 PASSED — 26 Nov 2026
+
+### Item 29 — CLOSED. Passed, with a correction worth more than the result.
+
+Rishi: *"Item 29 passes — Name and Email populated for a Google account, the
+nothing-to-delete state when there's nothing, and 'your resume has been
+deleted' rather than the empty state when deleting a resume alone."* All three
+behaviours confirmed exactly as built.
+
+**The correction: half the checklist he was handed was already obsolete when
+he ran it.** Four of its steps described what a **recruiter** sees on
+`/profile` and `/profile/delete-data` — and stage 12 had closed both routes
+to recruiters in between. Rishi: *"A checklist written before a change that
+invalidates it is the same stale-list problem as the company seed."*
+
+That is sharper than the company-seed case, and worth stating precisely: a
+**fact** goes stale when the world moves. A **checklist** goes stale when the
+world moves **in the direction the checklist was testing** — so it does not
+look wrong. It still reads as a sensible set of steps; it is only wrong at the
+step that cannot be performed, by then several steps in. The general rule is
+now in `HANDOVER.md` §9: re-derive a checklist against the code as it is,
+not against the code it was written for.
+
+### The clearout — RUN 26 Nov 2026. Complete, with one decision read as a check.
+
+Full procedure and outcome: `CLEAROUT.md`. Steps 1–7 ran clean. **14 of 15
+final-verification rows PASS**; the fifteenth, `c11`, read **FAIL**, and it is
+a decision rather than a defect — it checks for the Google test accounts'
+absence, and Rishi kept both:
+
+> *"I kept both test Google accounts — iworkatgcctest2 and iworkatgcctest3 —
+> because I'll want a candidate account to test v2 with and creating one later
+> is more work than keeping one now."*
+
+**Worth separating, because the two accounts were kept for different
+reasons.** `test3` was always going to be kept on my recommendation — it holds
+one real answer to a real member's question, and `answers.user_id` cascades,
+so deleting the account would delete that reply. `test2` holds nothing of the
+kind; it is kept purely as a convenience for work that has not started. **A
+check reading FAIL for a decision that was made on purpose is the check doing
+its job** — the alternative, a kept account passing silently, would read as
+though nothing had been decided at all.
+
+**Consequence, recorded rather than acted on:** both accounts have real Google
+addresses, so **both will receive the community digest** going forward. The
+digest predates the job board and is out of its scope; this is not a new
+email, only a new recipient of an existing one.
+
+Final figures, as reported: 0 jobs, 0 applications, 0 candidate resumes, 0
+storage objects, 0 saved roles, 0 recruiter profiles, 0 recruiter role rows,
+both test companies gone, 1,814 companies intact, Walmart survived, the admin
+row untouched, `convalidated = true`, and **2,643** profiles — one more than
+`CLEAROUT.md` expected, because someone joined the community while the
+procedure was running. Not a discrepancy; the count was never going to hold
+still for fifteen minutes.
+
+**`check-overflow.mjs` now reports its expected post-clearout state**: 15
+checks, 0 failed, 3 pages skipped with a named-and-explained banner rather
+than a silent drop. The overflow fixture pair
+(`supabase/test-fixtures/overflow-fixture-create.sql` /
+`overflow-fixture-remove.sql`) is unused until `JobDescription.jsx`,
+`descriptionMarkdown.js` or a job-page wrap class changes again.
+
+### Items 1 and 20 — CLOSED. The three dates, set together.
+
+`LAST_UPDATED` in `Privacy.jsx` and `RecruiterTerms.jsx` → **25 November
+2026**. `NEW_FEATURE_UNTIL` in `boardPromo.js` → **2027-01-20**, eight weeks
+from that same date. Same edit, same moment, as carried item 1 required.
+
+**Two suite assertions had to change, not just the code**, because they had
+been written to guard the OPPOSITE state — that the dates must **not** move
+before the merge. `stage12-settings-test.mjs` asserted
+`"LAST_UPDATED is untouched at 22 November 2026"`; it now asserts both files
+carry the **merge** date and that `NEW_FEATURE_UNTIL` is eight weeks past it.
+The matching mutation in the negative run, which used to simulate the date
+being bumped **early**, now simulates it being left on its stale placeholder
+or reverted to it — the real risk once the bump is the correct state rather
+than a violation of it. Both files found by grep, both fixed, both proved to
+fail: **three mutations, all caught.**
+
+**One omission in the old assertion, found while fixing it:**
+`RecruiterTerms.jsx`'s date was never checked at all — only `Privacy.jsx`'s
+was. It now is, and it is checked against a **different** stale value
+(16 November, not 22) than Privacy's, so a mutation that leaves one file
+unedited while fixing the other is caught by name rather than by coincidence.
+
+### P4 — CHECKED, PASSES. One structural note for v2, not for now.
+
+Rishi confirmed every variable production needs is correctly scoped:
+`SUPABASE_SERVICE_ROLE_KEY`, `DEPLOY_HOOK_URL`, `CRON_SECRET`, `BREVO_API_KEY`
+on Production; `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` and
+`VITE_GA_ID` on both.
+
+**Noted, not acted on:** `SUPABASE_SERVICE_ROLE_KEY` exists as **two separate
+entries** — Production added 10 Sep 2026, Preview added 18 Nov 2026 — rather
+than one value scoped to both environments. Both work today. The risk is not
+today's behaviour; it is that **two independent entries under one name can
+diverge silently**. If the key is ever rotated in Supabase, whoever rotates it
+has to remember there are two places to update it in Vercel, and an entry left
+behind fails only the environment nobody was looking at.
+
+**Why this is a v2 item and not a pre-merge one:** Supabase is one shared
+project for both environments (recorded since stage 1 — *"db: Supabase
+(shared, live)"*), so the key is the same secret by definition, and both
+entries authenticating successfully today is itself evidence they already
+hold the same value — Supabase does not serve two live service-role keys at
+once outside a rotation window. There is nothing to reconcile **now**; the
+value is to remove the two-places-to-update structure before it is ever
+tested by a real rotation. **The v2 fix:** delete both entries, re-add one
+value with Production, Preview and Development all ticked in the same add
+action, which is what stops them from ever being two entries again.
+
+## THE MERGE PROCEDURE — `MERGE.md`, written 26 Nov 2026
+
+Rishi: *"Correction: you've listed the design pass as 'the only piece of real
+work left' before the merge. I dropped it from v1 — it's a v2 item. Nothing is
+blocking the merge."*
+
+**He is right and I contradicted this file.** The design pass was recorded here
+on 25 Nov as *"V2, NOT OUTSTANDING"* on his explicit decision, and I then
+listed it as the last piece of work before the merge — a stale read of a
+decision recorded in the same file I was summarising. **Nothing is blocking
+the merge.**
+
+### What the derivation found, and what changed in the procedure because of it
+
+| Finding | Where it came from | Effect |
+|---|---|---|
+| **`main` has 12 commits the branch lacks**, all "Weekly GCC jobs update", all touching **only** `public/data/jobs.json`, which the branch never modifies | `git diff --name-only job-board...origin/main` | The merge is **not** a fast-forward, and makes a merge commit. **No conflicts**, confirmed with `git merge-tree`, which writes nothing |
+| **`main`'s `api/` is a strict subset of the branch's** — `rebuild`, `send-digest`, `send-welcome-email`, all three already on the branch | `git ls-tree` both sides | The merge adds **no** functions from `main`. Final count **10** of Hobby's 12 |
+| **`main`'s `vercel.json` already carries both crons on identical schedules** | `git show origin/main:vercel.json` | Cron **registration** does not change at merge. What changes is `api/rebuild.js`'s **behaviour** — it now sweeps as well as firing the hook |
+| **`send-digest.js` differs by comments only** | diff with comment and blank lines stripped — empty | The 03:30 send to ~2,500 people is byte-for-byte the code that has been working for months. The one change that would have been worst is not a change |
+| **`/gcc-jobs` is in neither sitemap** | `STATIC_SITEMAP_PATHS` is six paths plus questions; `sitemap-jobs.xml` lists roles | The board index is reachable by **link** from `/jobs`'s promo card — and that card is hidden while `live_job_count()` is 0. **Merging does not make the board findable. The first posting does.** |
+| **`sitemap-jobs.xml` returns a valid empty `<urlset>` at 200** with 0 rows, not the 503 it returns on error | read the handler | Expected post-merge state, not a fault |
+
+### The sweep writes an audit row ONLY when it deletes something
+
+`purge_expired_applications()` ends with
+`if v_count > 0 then perform private.audit(...)`. **With 0 applications it
+will delete nothing and write no audit row, every night, for at least twelve
+months.**
+
+**So the absence of a `retention_purge` row is not evidence of anything** — it
+does not distinguish "ran and found nothing" from "never ran". That matters
+because P1's whole problem was Hobby's one-hour log retention, and the audit
+row looked like the durable answer. It is not.
+
+**The durable answer is the deployment list.** The sweep and the deploy hook
+are the *same request*, so a production deployment created around 02:00 UTC
+that nobody triggered **is** the cron having fired — and Vercel keeps
+deployments indefinitely. Plus `api/rebuild.js` returns the sweep's result in
+its own response body, so calling it by hand proves the whole chain with no
+log dependency at all.
+
+**I nearly contradicted carried item 17 over this.** Grepping the function's
+definition for `admin_audit` returned nothing, which looked like item 17's
+*"verified: the function's body writes an audit row"* being wrong. It is not —
+the write goes through the `private.audit()` helper, which the grep could not
+see through. **The record was right and my check was the wrong check.**
+
+### THE CHECK ORDER IS NOT THE ORDER HE ASKED FOR, and the reason is the rollback
+
+He asked for P2, P5, P6, P3. **P5 is last of the four in `MERGE.md`.**
+
+**Vercel's Instant Rollback on Hobby reaches only the immediately previous
+deployment** (Pro and Enterprise can pick any). **P5 fires the deploy hook,
+and the hook creates a production deployment** — so running P5 early spends
+the single rollback slot before the checks that might make you want it. Every
+read-only check therefore comes first, and the one step that creates a
+deployment comes last.
+
+**The window also closes on its own at 02:00 UTC**, when the nightly cron
+fires the same hook. After that the rollback path is `git revert -m 1` plus a
+rebuild — plan-independent, but minutes rather than a second.
+
+**Two more Instant Rollback facts worth having before they are needed:** it
+**switches off auto-assignment of the production domain**, so a later push to
+`main` builds but does not take over until **Undo Rollback** is pressed; and
+it **does not touch the repository**, so `main` still holds the merge and the
+next push would ship it again. A rollback buys time; it is not the fix.
+
+### Item 14 is the only step that makes a rollback destructive
+
+`main`'s `src/lib/authors.js` does `.from("question_authors")`. The branch's
+does not — it uses a function, and only mentions the view in comments.
+**Dropping the view and then rolling back breaks author names on every
+question page for all 2,643 members.** Recreate it from
+`supabase/migrations/010_author_names.sql` first if that ever happens.
+
+That is why item 14's own instruction has always been *"after the merge is
+deployed and verified"*, and why it is the last step rather than an early one.
+
+### A recorded "before" for P6
+
+The step 8 loop was run against production on 26 Nov while it still served
+`main`: **every path returned `(none)`** — no `X-Robots-Tag` anywhere. So the
+production check is a before-and-after rather than a judgement: the four
+`/recruiter/*` paths must **change** to `noindex, nofollow` and every public
+path must **stay** `(none)`. Any public page that changes is caused by the
+merge and nothing else.
+
+### Carried item 2 is a POST-merge item, not a pre-merge one
+
+Verifying Clarity's form-input masking **could never have been done before
+the merge** — Clarity's loader is behind the same hostname guard as analytics
+and cannot run on a preview by construction. It is folded into P2 in
+`MERGE.md` step 6, which is the first moment it becomes possible.
+
+## Stage 12 — the constraints and proof plan (SCOPED 24 Nov 2026)
+
+Found by Rishi while testing stage 10: **there is no "forgot password" on
+recruiter sign-in.** A recruiter who forgets their password has no way back
+into their account. Today that means emailing `jobs@iworkatgcc.com` and Rishi
+fixing it by hand — *"which works at two recruiters and doesn't at twenty."*
+
+### THE ONE-EMAIL RULE IS RESTATED, NOT BROKEN
+
+The old rule: *"Brevo sends exactly ONE email in this entire project: the
+recruiter signup email. Nothing else."*
+
+The new rule, Rishi's decision 24 Nov 2026: **"transactional account-access
+emails only, both user-initiated."**
+
+**ANYONE READING THE OLD WORDING LATER SHOULD NOT CONCLUDE THE RESET BROKE
+IT.** The rule was never about a count. Its purpose is to stop this project
+growing an email notification system — digests, application alerts,
+saved-search pings. A password reset is not that: it is user-initiated, one
+per request, carries no content but a link, and goes to an address that
+already received the signup email. It creates no channel; it answers a
+request.
+
+The sharper form of the argument, and the one Rishi accepted: **the signup
+email and the reset email are the same mechanism doing the same job** —
+proving control of an email address. One proves it at the start, the other
+proves it again later. And `/post-a-job` already re-sends the signup email
+through `supabase.auth.resend`, so the project has always sent that one email
+more than once. The rule is about **kinds** of email, not sends.
+
+Permitted, exhaustively: the recruiter signup confirmation, and the recruiter
+password reset. Nothing else, ever, without a new decision.
+
+### WHY IT IS A LAUNCH BLOCKER
+
+Rishi's instinct, and I agreed. But the reason is stronger than "an account
+people can be locked out of":
+
+**A locked-out recruiter still has live roles, and candidates keep applying to
+them.** Those applications pile up unread, for the role's full 30 days, and
+the candidates have no way of knowing. So the cost of this gap does not land
+on the recruiter who forgot their password — **it lands on candidates who
+applied in good faith and are waiting on someone who cannot get in.** That
+argument survives "we only have two recruiters, I'll handle it by hand."
+
+It is not a stage 10 item, and it does not belong on the launch checklist
+below either: those are things that can only be *verified* in production, and
+this is code to write. So: **its own stage, after stage 11, before the
+merge.**
+
+### SCOPE
+
+- The reset request page and the reset landing page.
+- **The change-password box** for a signed-in recruiter — Rishi's decision,
+  *"since it's the same code"*. The last step of a reset is
+  `updateUser({ password })`, so the dashboard box reuses it.
+  `@supabase/supabase-js` is **2.112.3**, past the 2.102.0 that added
+  `current_password` verification, so the box can require the old password.
+- **The admin-set-password tool is LOGGED, NOT BUILT** — carried item 22.
+  Rishi: *"Revisit when a recruiter actually loses their mailbox."*
+
+### THE CONSTRAINTS, AND HOW THEY WILL BE ENFORCED
+
+Rishi's conditions, 24 Nov 2026:
+
+1. Send a reset **only if the email belongs to an account with the recruiter
+   role**. Explicitly NOT "only if the account has a password" — he plans to
+   let community members join by email later, at which point the password test
+   stops distinguishing anything. **Role is the condition that stays true.**
+2. Everything else — a community member's email, an unknown address, no
+   account at all — gets **no email and the same reply**. No "email not
+   found". *"I don't want this page to become a way of discovering which
+   emails are registered here."*
+3. The deeper reason: a community member who received a reset link could **set
+   a password on a Google account**, giving it a second sign-in method nobody
+   asked for — the identity-linking risk investigated in stage 3.
+4. **Role-aware, not hardcoded to recruiters**, so community email sign-up is
+   a case to add rather than a flow to rewrite.
+
+#### Supabase's own client call cannot be used
+
+`supabase.auth.resetPasswordForEmail()` runs in the browser with the
+publishable key and sends to **any** existing account. It has no notion of a
+role. So the gate has to sit in front of it, server-side.
+
+#### public.user_roles is the right gate, and it fails closed
+
+Checked against the live database, 24 Nov 2026:
+
+| role | rows | with a password | Google |
+|---|---|---|---|
+| recruiter | 2 | 2 | 0 |
+| admin | 1 | 0 | 1 |
+| candidate | 1 | 0 | 1 |
+| *(no user_roles row)* | **2,622** | 0 | 0 |
+
+`user_roles` is `PRIMARY KEY (user_id)` with `role in ('candidate',
+'recruiter', 'admin')`, and it is **sparse** — 2,622 of 2,626 accounts have no
+row at all. That sparseness is the feature: **absence means ineligible**, so
+every community member is refused by default rather than by a rule someone
+has to remember to write.
+
+Recruiters reliably have a row: `private.handle_new_recruiter()` fires on
+`recruiter_profiles` insert and writes it, and `recruiter_profiles` is created
+by `RecruiterRoute` on the recruiter's first signed-in visit — which is where
+the confirmation email lands (`emailRedirectTo` is `/recruiter`).
+
+#### TWO gates, not one — and this is where Rishi's framing needs a correction
+
+He is right that role is the policy test. But role alone does not prevent the
+outcome he named in point 3. Once community email sign-up exists and
+`candidate` joins the eligible list, **the one existing Google-only account
+that already has a `candidate` row would become eligible** — and handing it a
+reset link is exactly the identity-linking risk.
+
+So the predicate is two conditions from the start, with two different jobs:
+
+| Gate | Question | Why |
+|---|---|---|
+| **role** | is this role allowed to reset? | the policy, extended by adding a case |
+| **identity** | does this account have an email/password identity at all? | stops a password being created on an OAuth-only account |
+
+Today both gates agree for all 2,626 accounts, so the second costs nothing
+now and is the one that still holds when the first is widened.
+
+#### A USABILITY TRAP THE ENUMERATION-SAFE DESIGN CREATES
+
+A recruiter who signed up but **never confirmed** has no `recruiter_profiles`
+row, so no `user_roles` row, so no reset email — correct, because their real
+problem is confirmation, not the password. But the identical-reply rule means
+they are told "if that email has a recruiter account, we've sent a reset
+link", and then nothing arrives, with no hint of why.
+
+Fix, which gives nothing away: the success message also names the other path
+— *"If you signed up but never confirmed your email, use Resend confirmation
+instead."* One sentence, no information disclosure.
+
+#### THE GATE IS NOT AIRTIGHT, AND THAT IS A DELIBERATE CHOICE
+
+Supabase's `/auth/v1/recover` endpoint is open to anyone holding the
+publishable key, which is in our JavaScript bundle. **So a direct call to
+Supabase bypasses our endpoint entirely.** The honest accounting:
+
+- **No enumeration is gained.** Supabase's own endpoint already returns the
+  same response whether or not the account exists.
+- **No privilege is gained.** To use a reset link sent to a community member,
+  an attacker needs that person's mailbox — and with their mailbox they could
+  already take the Google account directly.
+- **What is actually risked is confusion**, not compromise: a community member
+  receiving an unexpected password email from our domain.
+
+The only true closure is a **Send Email Hook**, which the docs confirm is
+available on the **Free** plan, can see `email_action_type` (`recovery` is one
+of its values), and sits in the Auth server's own send path. **Rejected, and
+the reason matters:** the docs also say *"The Send Email Hook replaces
+Supabase's built-in email sending"* — with it enabled, *"SMTP not used"*. So
+turning it on makes us responsible for delivering **every** auth email,
+including the signup confirmation that already works and is signed off. That
+trades a confusion risk for rewriting the one email path in the project that
+is finished. Not worth it.
+
+Mitigation instead, on our side of the line: **the landing page is ours**, and
+it refuses to set a password for an ineligible account — telling a confused
+community member "this account signs in with Google, no password is needed"
+rather than silently giving them one. That protects the realistic case; the
+adversarial case stays Supabase's surface, documented here rather than
+pretended away.
+
+#### A timing side channel, and the floor that mitigates it
+
+The eligible path does a lookup and sends an email (hundreds of milliseconds);
+the ineligible path can return at once. **That difference is itself an
+enumeration oracle**, regardless of the identical response body. The endpoint
+will do the same lookup on every path and pad every response to a fixed floor.
+Mitigation, not elimination — stated as such.
+
+### HOW IT WILL BE PROVED
+
+**Migration checks** (result-table form, per the standing rule):
+
+| | Check |
+|---|---|
+| c1 | the eligibility function is `security definer`, `search_path` pinned, and granted to **service_role only** — not anon, not authenticated. *If anon can call it, the function IS the enumeration oracle the design exists to prevent.* |
+| c2 | a recruiter's address returns eligible |
+| c3 | a community member's address returns ineligible — a real Google account, read-only |
+| c4 | an address with no account returns "none", distinctly from "ineligible" |
+| c5 | `  Recruiter@Example.COM  ` behaves identically to the stored address (case and whitespace normalised) |
+| c6 | the **admin's** address returns ineligible, proving the eligible set is a list rather than "any account that exists" |
+| c7 | exactly one role is eligible today, read from the single list, so widening it later is one line in one place |
+
+**Node test** (pure, enumerated): the response is byte-identical across
+eligible / ineligible / unknown / malformed / empty input, and the eligibility
+decision enumerated over every role × identity combination.
+
+**On the preview**: a real end-to-end reset for a test recruiter; a community
+address returning the same message with **nothing arriving**; an unknown
+address the same; the landing page refusing an ineligible account; mixed-case
+addresses; and the change-password box refusing a wrong current password.
+
+**The one proof no code can give him: Brevo's transactional log.** The claim
+under test is an absence — that nothing was sent — and absence is proved at
+the sender, not at an inbox that may simply be slow.
+
+## Stage 11 (analytics) — DEFERRED TO v2, 24 Nov 2026
+
+Recorded 24 Nov 2026, because Rishi is weighing deferring it to v2 and asked
+to be told exactly what is in it and what would be left.
+
+**RISHI'S DECISION, 24 Nov 2026, verbatim:** *"Stage 11 is deferred to v2.
+GA4 already records per-role page views, so what I'd be deferring is a number
+shown inside the product, not the ability to measure."*
+
+### WHAT IS BEING GIVEN UP: THE DATA IS NOT RETROACTIVE
+
+Views not collected in v1 **cannot be recovered in v2**. If the board runs for
+six months without stage 11, there is no view history for those six months —
+not in the product, and not reconstructible from anything else, because no
+table is recording it. GA4 will hold its own page-view history for the
+retention period configured on that property, which is a different thing from
+per-role counts the product can read and show a recruiter.
+
+Everything else about the work gets *easier* by waiting, not harder: there will
+be real roles and real traffic to measure instead of a board with none. The
+non-retroactivity is the whole of the cost, and it is recorded here so it is a
+known trade rather than a surprise.
+
+### WHAT IT CONTAINED
+
+**Analytics and nothing else.** Four events through a serverless
+function, so the visitor hash can use the real IP while the salt stays
+server-side, and no raw IP is stored. There is no migration, no policy, no
+page and no cleanup bundled into it.
+
+**Nothing launch-critical is inside it.** The merge, the test-data clearout,
+the policy date, the second admin and the constraint validation are all
+carried items with their own due points, none of which is "stage 11". Stage 12
+(recruiter password reset) is now the last stage before the merge, so dropping
+11 does not move the merge at all.
+
+**NOTHING IN STAGES 1–10 DEPENDS ON IT.** Checked rather than recalled:
+
+| Checked | Result |
+|---|---|
+| A views table, or any table named for analytics or events | **none exists** |
+| A `view_count` column, or any UI reading one | **none anywhere** in `src/`, `api/` or the migrations |
+| Job-board analytics already shipped | exactly one call — `exclusive_jobs_promo_clicked` in `BoardPromoCard.jsx` |
+| What `trackEvent` is | GA4 only (`window.gtag`), no server and no database, and guarded to `www.iworkatgcc.com` so previews never pollute it |
+
+**And the funnel already excludes views on purpose.** Stage 9b recorded it:
+*"all of these come from existing tables plus the audit log. Nothing needs new
+collection except 'did anyone look at the role', which needs stage 11. So the
+honest funnel in 9b is applications → shortlisted → not selected."* The admin
+reports were built around its absence, so deferring changes nothing there.
+
+**The one thing GA4 already gives him for free.** `src/main.jsx` fires a
+global `page_view` with `page_path` on every route change, so once the board is
+live, GA4 records views of `/gcc-jobs/<slug>-<id>` with no stage 11 at all.
+What stage 11 would add is a **de-duplicated per-role count inside the product**
+— the number a recruiter could be shown on their own dashboard — not the
+existence of view data.
+
+**The only real cost of deferring: the data is not retroactive.** Views not
+collected in v1 cannot be recovered in v2. Everything else about the work gets
+*easier* later, because by then there are real roles and real traffic to
+measure instead of a board with no roles.
+
+## public.companies read policy — migration 024, 24 Nov 2026
+
+Rishi's decision: **option (a)**, and run it **before** the seed — *"No reason
+to have a window where all 1,814 are public when the ordering is free."*
+
+| Who | Sees |
+|---|---|
+| a visitor (`anon`) | only a company that has **at least one public role** |
+| a signed-in user (`authenticated`) | every company |
+
+### *** THIS IS NOT PROTECTION OF THE LIST ***
+
+**Recorded at Rishi's explicit request**, so nobody later mistakes the policy
+for something stronger than it is. His words, accepting the caveat: *"a Google
+sign-in is a speed bump, not a lock. I'm accepting that — the list isn't worth
+building a server-side search for today. Record the caveat so the next person
+doesn't mistake (a) for protection."*
+
+**Any community account can read all 1,814 rows, and anyone can create one in
+seconds with a Google sign-in.** The policy stops the list being handed to
+anonymous crawlers and scrapers. It does not stop a determined person, and it
+is not meant to. If it ever needs real protection, the shape is: keep this
+policy and replace the picker's direct table read with a `security definer`
+search function that returns matches rather than letting a client page through
+the table. **Deliberately not built.**
+
+### Why not simply restrict the table to `authenticated`
+
+`/gcc-jobs` and every job page are public and **embed the company name**.
+PostgREST applies the policy to an embedded table too, so a blanket
+restriction would show a visitor every role with no employer on it — and strip
+`hiringOrganization` out of the `JobPosting` markup, one of Google's five
+**required** properties. `buildJobPosting()` refuses to emit anything without
+it, so the board would quietly vanish from Google's job results. What is being
+protected is not the names on the roles we publish; those are public already.
+
+### The index is part of the policy, not a tidy-up
+
+The visitor policy runs `exists (select 1 from public.jobs where company_id =
+…)` per candidate row, and **`public.jobs` had no index on `company_id`** —
+checked. At 25 jobs that is free; at 1,816 companies it is a sequential scan
+per row evaluated, on the hottest read path the site has. `jobs_company_id_idx`
+is created in the same migration, and the rollback deliberately leaves it.
+
+### Dry-run before handing it over
+
+| Checked | Result |
+|---|---|
+| Companies visible to a visitor after the change | **2 of 2** — both current companies have live roles, so nothing visible today disappears |
+| `private.job_is_public` | `SECURITY DEFINER`, `STABLE` — which is what lets it answer for `anon` without `anon` being able to read `recruiter_profiles` |
+| Grants behind both policies | `anon` select ✓, `authenticated` select ✓ |
+| The c3 fixture insert | `name` and `slug` both `text`; `returning id into` a `uuid`, and `companies.id` is a uuid |
+| Server-side readers | only `api/job-page.js`, and it uses the **publishable** key, so policy 1 covers it for exactly the public roles it serves markup for |
+
+**c3 makes its own negative fixture.** Every company currently has a public
+role, so there is nothing the policy would hide — the check inserts a company
+with no jobs, confirms `anon` cannot see it, and deletes it. Without that, the
+protective half of this migration would be unproven at the moment it is
+applied.
+
+### A grant I misread, recorded so the next person does not repeat it
+
+`has_table_privilege('authenticated','public.companies','insert')` returns
+**false**, which looked like the grant trap that has caught this project three
+times — an INSERT policy with no grant behind it, making the policy
+decoration. It is not. Migration 001 line 374 grants **column-level** insert:
+
+```sql
+revoke insert, update, delete on public.companies from anon, authenticated;
+grant insert (name, slug) on public.companies to authenticated;
+-- Recruiters may name a company but not attach a logo to it.
+```
+
+`has_table_privilege` reports false for a column-level grant because the
+table-level privilege genuinely is not held. **`has_column_privilege` is the
+right instrument**: `name` true, `slug` true, `logo_url` false. And
+`src/lib/jobMutations.js` inserts exactly `{ name, slug }`, so the picker's
+"add a new company" works and is correctly unable to set a logo.
+
+## The picker offered "add as new" next to a match — fixed 24 Nov 2026
+
+Rishi, after running the seed: *"typing `wal` shows Walmart and 'Add "wal" as
+a new company' directly beneath it — one misclick from a permanent company
+called "wal". That's the duplicate-creation problem the picker was built to
+stop."*
+
+**And I had told him it already behaved correctly.** I read this comment —
+
+```
+// Enter picks a highlighted row, or adds a new company only when the
+// search has come back empty.
+```
+
+— and described it as the **render** rule. It is the **Enter key** rule. The
+keyboard path was always safe; the mouse path never was, and that asymmetry is
+why nobody had noticed in four stages of testing. `canAddNew` was
+`showPanel && slug.length > 0 && !slugTwin` — nothing about whether the list
+had matches in it.
+
+The damage is permanent by design: `companies.slug` is immutable (migration
+001, *"a live URL must never change"*), recruiters cannot delete, so junk
+created here needs `admin_rename_company` to clear up.
+
+### WHY IT IS NOT SIMPLY "EMPTY RESULTS ONLY"
+
+That was the obvious fix and it has a worse failure mode. The search is
+`ilike %term%`, so **a company whose full name is a proper substring of a
+listed one can never produce an empty result.** A recruiter at a company
+called "Sonic" sees "SonicWall", gets no way to add their own, and **cannot
+post at all** — `jobs.company_id` is NOT NULL. A recruiter blocked from the
+product is worse than a misnamed company an admin can rename in one call.
+
+### WHAT IT DOES NOW
+
+| Results | What is offered |
+|---|---|
+| none | "Add '<name>' as a new company", prominent, as before |
+| matches | **no create row.** A muted "None of these is my company" instead |
+| matches, after that is clicked | a note to check the list again, **then** the create button |
+
+Three properties worth keeping:
+
+- **The common case resolves itself.** Because the match is on a substring,
+  typing the FULL company name empties the list — so anyone whose company is
+  genuinely absent reaches the prominent offer by typing what they were going
+  to type anyway.
+- **The reveal is stored as the term it was opened for**, not a boolean, so
+  typing one more character closes it again with no effect and no stale state.
+- **The note above the revealed button is a spacer as well as a sentence.**
+  Without it the create button would appear exactly where the recruiter just
+  clicked, and a double-click would reveal and create in one gesture —
+  reintroducing the misclick the arrangement exists to stop.
+
+`Enter` now honours a deliberately opened hatch too, so the keyboard and the
+mouse finally agree about when a company can be created.
+
+## The company seed — RUN 24 Nov 2026, VERIFIED. **DONE**
+
+**CLOSED.** Rishi ran `supabase/seed/companies.sql` on **24 Nov 2026** and
+tested the picker end to end. **This heading said "NOT YET RUN" for a day
+after it had been run**, and on 25 Nov I repeated that heading into a
+pre-merge list instead of checking the database — see "A LIST THAT WAS WRONG
+IN ONE PLACE" below.
+
+| Verified read-only against live, 25 Nov 2026 | |
+|---|---|
+| Companies | **1,816** |
+| `Walmart` | present |
+| `wal` in the picker | Great Wall Motor Co, SonicWall, Walgreen, Walmart, Walt Disney — **exactly the five he reported** |
+| `Test Co A` / `Test Co B` | both intact |
+| Roles posted under `Walmart` | **1** — job 42, picked from the list |
+| Migration 024's read policy | went in before the seed; `set local role anon` sees 2 of 1,816 |
+
+His words: *"zzzz offers create-new, and I posted a role under Walmart picked
+from the list."* Both halves of the picker's behaviour — resolving a match and
+offering create-new only when there is none — were therefore exercised against
+the full list rather than the four-row table.
+
+### The original note, kept for the reasoning
+
+Rishi, 24 Nov 2026: *"The company seed was never run. Typing 'walmart' offers
+to create it as a new company — the 1,814-name list is still just a file on
+disk. You said generating companies.sql was a one-command step independent of
+stage 9, and then it never happened."*
+
+He is right, and it was mine to do. `scripts/build-company-seed.mjs` has
+existed since stage 4; it had simply never been run against
+`supabase/seed/gcc-companies.txt`.
+
+```
+read       1815 lines
+kept       1814 companies
+collisions 0
+rejected   0
+wrote      supabase/seed/companies.sql
+```
+
+**Zero collisions and zero rejections**, which is the result worth noting: no
+two names in that list slugify the same way, so nothing had to be chosen by
+hand and no name was silently dropped.
+
+**Dry-run before handing it over** (the rule from migration 023, applied):
+
+| Checked | Result |
+|---|---|
+| `on conflict (slug)` has something to conflict on | `companies_slug_key :: UNIQUE (slug)` exists |
+| Columns the insert must satisfy | only `name` and `slug` — `id` defaults to `gen_random_uuid()`, `created_at` to `now()`, `logo_url` is nullable |
+| Apostrophe escaping | `Hudson''s Bay`, `L''Oréal`, `Lowe''s`, `Moody''s Analytics`, `Sonny''s Enterprises` all doubled correctly |
+| Existing rows that could be overwritten | 2 — `Test Co A` and `Test Co B`. Neither slug appears in the list, and `do nothing` would protect them anyway |
+| Size | 61 KB, 1,839 lines — one statement, well inside what the SQL editor takes |
+| `walmart` | present at line 1,764 as `('Walmart', 'walmart')`, which is the case he reported |
+
+**What it does to the picker.** `CompanyPicker` searches on two characters,
+debounced 250ms, `ilike` on both name and slug, capped at 8 results. Today
+every search returns nothing and the only option offered is "Add … as a new
+company". After the seed, a recruiter typing `walm` gets `Walmart` to click,
+and the create-new option appears **only when the search comes back empty** —
+which is the behaviour it was built for and has never been able to show.
+
+**Note, not a blocker:** `public.companies` is readable by anon, so all 1,814
+names are on the public API the moment this runs. They are company names, not
+anyone's data, but it is not a private staging area.
+
+## Launch checklist — production-dependent verification
+
+**This is the list, so it does not live only in a conversation.** Each item
+says what to check and *when it first becomes checkable*, because two of them
+cannot be done before the merge and two must be done before it.
+
+| # | What to check | When it becomes checkable | Done |
+|---|---|---|---|
+| **P1** | The 12-month retention sweep ran. `curl` the rebuild endpoint with `CRON_SECRET` and read `purged` out of the response body — never a log. | **After the merge deploy.** A cron cannot run on a preview at all. | ☐ |
+| **P2** | Analytics and Clarity actually fire: a `gtag` collect request in the network tab, the Clarity script loading, GA4 realtime showing the session. Plus **carried item 2**, Clarity's form-input masking. | **After the merge deploy.** Both guards are hostname-gated to the live host, so on a preview they only ever take the deny path. | ☐ |
+| **P3** | Crawlability: `robots.txt`, `sitemap.xml` and JSON-LD fetchable, via Search Console URL inspection. | **After the merge deploy.** Deployment protection serves an unauthenticated client Vercel's login page, so Googlebot cannot reach a preview. | ☐ |
+| **P4** | All six environment variables are ticked for **Production**, not only Preview. | **Now, and again immediately before the merge.** | ☐ |
+| **P5** | `DEPLOY_HOOK_URL` works from `api/rebuild.js` as this branch writes it. | **After the merge deploy** — P1's single `curl` proves both at once. | ☐ |
+
+**The rule these came from, worth keeping:** a check that ends in "look at the
+log tomorrow" is not a check. Hobby keeps runtime logs for about an hour, and
+crons only run against production.
+
+### Detail
+
+
+
+**Raised by Rishi on 23 Nov 2026, and it invalidated a check rather than
+delaying it.** The stage 8 checklist asked him to read the retention sweep's
+log line after the 02:00 cron. That could never have printed: **Vercel runs
+cron jobs only against the production deployment, and production builds from
+`main`.** The sweep lives in `api/rebuild.js` on the branch, which does not
+merge until stage 11, so the 02:00 run executed the old rebuild code.
+
+**Two separate constraints, both worth remembering when writing any future
+check:**
+
+1. A cron cannot be tested on a preview deployment at all. Not slowly — not at
+   all.
+2. **Hobby retains runtime logs for about an hour**, so even after the merge a
+   02:00 UTC run cannot be read the following morning. Any check that ends in
+   "look at the log tomorrow" is not a check.
+
+### P1 — the 12-month retention sweep
+
+**Status: not verified, and not verifiable before the merge.** Moved here out
+of stage 8, where it was wrongly listed as an open test.
+
+**How to verify it without depending on logs — do this straight after the
+merge deploy:**
+
+```bash
+# CRON_SECRET is in Vercel's environment variables.
+curl -s -X POST https://www.iworkatgcc.com/api/rebuild \
+  -H "Authorization: Bearer $CRON_SECRET" | jq
+```
+
+Expect `{"triggered": true, "purged": 0}`. That is the whole check: the
+response body carries the sweep's own return value, so nothing depends on log
+retention and it can be run at any hour. The one side effect is that it fires
+the deploy hook and production rebuilds — which is exactly what happens every
+night anyway, so it costs one build and nothing else.
+
+**And make it permanently checkable.** Stage 9 builds an audit table, and a
+nightly retention purge is an administrative action by any reasonable
+definition. If `purge_expired_applications()` writes an audit row, the nightly
+run becomes a SQL query rather than a log hunt — verifiable forever instead of
+within an hour. Added to stage 9 scope.
+
+### P2 — analytics and Clarity will fire for the first time at merge
+
+Both guards are **new on this branch** and both key off the hostname:
+
+| Guard | Where |
+|---|---|
+| `trackEvent()` returns early unless the host matches | `src/analytics.js` |
+| Clarity's loader only runs if the host matches | `index.html` |
+
+On every preview deployment they take the **deny** path. So "zero analytics
+requests", tested in every stage since 2, only ever proved the guard blocks.
+**The allow path has never run once.**
+
+The failure mode is the quiet kind: if the hostname were wrong, analytics would
+simply stop at merge and look like a run of quiet days.
+
+**The hostname itself is verified correct**, checked 23 Nov 2026: `iworkatgcc.com`
+returns **308** to `https://www.iworkatgcc.com/`, which answers with 200. So the
+constant matches what production serves, and every other canonical host in the
+repo agrees — `src/lib/seo.js`, `scripts/prerender.mjs`, `public/robots.txt`.
+
+**Still to do at merge**, two minutes: load the live site, confirm a `gtag`
+collect request fires in the network tab and a Clarity script loads, and that
+GA4 realtime shows the session. **Carried item 2 — verifying Clarity's
+form-input masking — belongs here too**, because Clarity cannot load on a
+preview by construction, so that item was never completable before merge.
+
+### P3 — crawlability cannot be tested on a preview
+
+The preview deployment sits behind Vercel's deployment protection: an
+unauthenticated client gets Vercel's sign-in page, not the app. Confirmed on
+22 Nov when a scripted fetch of the preview returned the login screen.
+
+So nothing about Googlebot, `robots.txt`, `sitemap.xml` or JSON-LD being
+*fetchable* can be proved on the branch. **Stage 10 has to be planned knowing
+its central claim is only testable after merge**, via Search Console's URL
+inspection on the live site.
+
+### P4 — environment variables are scoped per environment. CHECKED, PASSES.
+
+Every function added by this branch reads `SUPABASE_SERVICE_ROLE_KEY`, and
+`/api/resume-url` also reads `VITE_SUPABASE_PUBLISHABLE_KEY`. A variable set
+for Preview only would work throughout testing and fail the moment production
+served it.
+
+**Pre-merge check:** in Vercel → Settings → Environment Variables, confirm all
+six are ticked for **Production** as well as Preview: `SUPABASE_SERVICE_ROLE_KEY`,
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `BREVO_API_KEY`,
+`CRON_SECRET`, `DEPLOY_HOOK_URL`.
+
+**CLOSED 26 Nov 2026.** All confirmed by Rishi. **One structural note carried
+to v2, not acted on now:** `SUPABASE_SERVICE_ROLE_KEY` exists as two separate
+entries rather than one value scoped to both environments — detail in "THE
+CLEAROUT RAN, THE THREE DATES ARE SET, P4 PASSED".
+
+### P5 — `DEPLOY_HOOK_URL` has never been fired from this branch's code
+
+The rebuild cron's only job before stage 8 was to hit that hook, and it has
+been doing so nightly from `main`, so the hook works. What has not been
+exercised is `api/rebuild.js` **as the branch now writes it**, which fires the
+hook and then sweeps. P1's curl covers both in one request.
+
+### P6 — the recruiter area's `X-Robots-Tag`, and what a preview CAN prove
+
+Rishi checked the three paths in DevTools (`curl` is 302'd by deployment
+protection) and found:
+
+| Path | `X-Robots-Tag` on the preview |
+|---|---|
+| `/recruiter/sign-in` | `noindex, nofollow` |
+| `/recruiter/reset-password` | `noindex, nofollow` |
+| `/recruiter-terms` | **`noindex`** — a header, but a different one |
+
+**He was right about what it is.** Vercel adds `X-Robots-Tag: noindex` to
+**every** preview deployment automatically, to keep previews out of search.
+Confirmed against Vercel's own documentation, which also notes that the header
+is dropped once a production domain is assigned, that an outdated production
+deployment gets it too, and that `vercel.json` can override it — which is why
+our value wins where our pattern matches.
+
+**BUT THE CHECK IS NOT UNTESTABLE, AND HE ALMOST SAID SO HIMSELF:** *"the
+difference in values is itself evidence."* It is better than evidence — it is
+the test.
+
+**THE VALUE IS THE DISCRIMINATOR:**
+
+| | emits |
+|---|---|
+| Our rule | `noindex, nofollow` |
+| Vercel's preview header | `noindex` |
+
+So `nofollow` is present **only** where our pattern matched. `/recruiter-terms`
+returning a **bare** `noindex` proves our pattern did **not** catch it —
+because if it had, `nofollow` would be in the value. **That is a conclusive
+negative result for the question that actually matters**, which was never "does
+the terms page have any header" but "does our recruiter pattern reach a public
+page". It does not.
+
+**What genuinely waits for production** is only the cosmetic half: whether
+`/recruiter-terms` ends up with **no** `X-Robots-Tag` at all. On the preview it
+will always have Vercel's. **At production, after the merge:**
+
+| Path | Expected |
+|---|---|
+| `/recruiter/sign-in` | `noindex, nofollow` |
+| `/recruiter/forgot-password` | `noindex, nofollow` |
+| `/recruiter/reset-password` | `noindex, nofollow` |
+| `/recruiter` and the signed-in area | `noindex, nofollow` |
+| `/recruiter-terms` | **no `X-Robots-Tag` at all** |
+| `/post-a-job`, `/gcc-jobs`, `/jobs`, `/` | **no `X-Robots-Tag` at all** |
+
+**This is why the configured value keeps `nofollow`.** It is not only correct
+policy for an auth page — it is what makes the rule distinguishable from
+Vercel's injected one on every preview from now on. Collapsing it to a bare
+`noindex` would make the two indistinguishable and this check unrunnable
+before production.
+
+#### `X-Vercel-Cache: HIT` — his question, and the check for it
+
+He asked whether a response cached before the rule existed could be served
+with the old headers. **Vercel's cache is keyed per deployment**, so a new
+deployment cannot serve a previous deployment's cached responses, and the rule
+shipped in a new deployment — a HIT there is a hit on a response that
+deployment produced. **That is the mechanism, not a measurement**, so the
+measurement is worth taking:
+
+Add any query string to force a distinct cache key, and compare. `source`
+patterns match the **path**, so the rule still applies:
+
+```
+/recruiter/sign-in?cachebust=1     -> expect MISS, and noindex, nofollow
+/recruiter-terms?cachebust=1       -> expect MISS, and a bare noindex
+```
+
+**If the values are the same on a MISS as on a HIT, the cache is not masking
+anything.** If they differ, the cache is serving pre-rule responses and the
+fix is a redeploy rather than a config change.
+
+### Checked and found to be a non-issue
+
+- **`api/send-digest.js`** shows 24 added lines on this branch and runs only
+  against production at 03:30 — so on the face of it, the same problem. **It
+  is comment-only.** Every added line is a `//` comment explaining invariant
+  I1 at the line that depends on it. No behaviour changed, so there is nothing
+  to verify. Worth recording that it was checked rather than assumed.
+- **`scripts/prerender.mjs`** also changed, but it runs at build time on every
+  deployment including previews, so it has been exercised on every stage.
+- **`vercel.json` is unchanged on this branch**, so neither cron's schedule nor
+  the rewrite rules differ from what production already runs.
+
+## A LIST THAT WAS WRONG IN ONE PLACE — 25 Nov 2026
+
+Rishi: *"Correction: the company seed is done. I ran `supabase/seed/companies.sql`
+on 24 November… Close that item with the evidence, and check whether anything
+else on your pre-merge list is stale the same way. **A list that's wrong in one
+place is worth re-reading before I start working through it.**"*
+
+**He was right, and the method I used to build that list was wrong.** I read
+this file's prose — including a section heading that still said
+`NOT YET RUN` — and reported it as the state of the world. **There is a rule
+in `HANDOVER.md` for exactly this:** *"He runs every migration. Never assume
+one has been applied; check with the read-only MCP connection."* The seed is a
+migration he runs. I had the connection open in the same session and did not
+use it.
+
+**The tracker is a record of decisions and reasoning. It is not a source of
+truth about current state.** Anything countable — rows, objects, accounts,
+constraint validity — is only true as of the day someone typed it, and this
+file is a month old in places. **Counts get verified, not quoted.**
+
+### What the re-read found, all verified read-only against live
+
+| Item | My list said | Live says |
+|---|---|---|
+| The company seed | not yet run | **DONE 24 Nov.** 1,816 companies, Walmart present, policy in place |
+| 13 — `candidate_resumes` | one row again, in scope | **0 rows** |
+| 13 — the `resumes` bucket | one object, by hand | **0 objects** |
+| 13 — the jobs to delete | "the 24 `[T5]` jobs" + role 42 | **27 jobs.** Jobs 13 and 41 were in neither count |
+| 13 / 5 — test Google accounts | `iworkatgcctest3@gmail.com` | **two of them**, `test2` as well |
+| 13 — companies | "`Test Co A` and `Test Co B`" | correct, **but role 42 is under `Walmart`**, which must survive |
+| 8, 18, 21 | open | **already done**, closed on 25 Nov with their evidence |
+
+### What the re-read CONFIRMED, so the rest of the list stands
+
+| Item | Verified |
+|---|---|
+| 26 — `jobs_description_check` | **still `NOT VALID`** |
+| 14 — `public.question_authors` | **still present**, so still to drop after the merge |
+| 23 — admin accounts | **exactly 1 row**, so the second account is still needed |
+| 27 — the Markdown defect | **1 job description** carries it: job 13, `Program manager` |
+| 1 / 20 — the three dates | `Privacy.jsx` 22 Nov, `RecruiterTerms.jsx` **16 Nov**, `NEW_FEATURE_UNTIL` `2027-01-19` — all three still placeholders |
+| W1 | **4 occurrences** of "verify your company", in `RecruiterApplications.jsx`, `RecruiterJobs.jsx` and `PostAJob.jsx` — note the row's description names a "stage 3 signup banner", and the string is not there |
+| W5 | **both `Roles` tabs still exist** — `Admin.jsx` (`key: "jobs"`) and `AdminReports.jsx` (`key: "roles"`) |
+| 29 | the built code is present and **still unverified by him** |
+
+### The two numbers that moved in opposite directions
+
+Worth noticing, because it is the argument against ever trusting a written
+count: the resume row and storage object had been recorded as **reopened** and
+were in fact **gone**, while the job count had been recorded as **24** and was
+in fact **27**. A stale list is not uniformly pessimistic or optimistic. **It
+is simply not current**, and the direction of its error is unpredictable —
+which is why the fix is to re-derive counts rather than to adjust them.
+
+## Carried-forward items (must be done before the final merge)
+
+| # | Item | Raised in | Due |
+|---|---|---|---|
+| ~~1~~ **DONE 26 Nov 2026** — both set to 25 November 2026, same moment as item 20. See "THE CLEAROUT RAN, THE THREE DATES ARE SET, P4 PASSED". | ~~Change `LAST_UPDATED` in `src/Pages/Privacy.jsx` and `src/Pages/RecruiterTerms.jsx` to the real launch date~~ | Stage 2 | Closed |
+| 2 | Verify in the Microsoft Clarity dashboard that form-input masking is ON. The privacy policy states that text typed into forms is masked. | Stage 2 | Stage 6 |
+| 3 | ~~Fix `private.handle_new_recruiter()` `on conflict do nothing`.~~ **DONE** — migration 003 upgrades a candidate to recruiter and never demotes an admin. | Stage 1 review | Closed |
+| 4 | ~~Decide the test recruiter email address.~~ **DONE** — `community@` and `feedback@iworkatgcc.com`. | Stage 1 review | Closed |
+| ~~5~~ **RESOLVED 26 Nov 2026 — NOT by deletion.** Rishi kept **both** deliberately: `test3` for the real answer that cascading deletion would take with it, `test2` as a v2 candidate account. Both now receive the community digest. See the clearout section for the reasoning split between the two. | ~~Delete the test Google accounts from Authentication → Users.~~ | Stage 1 | Closed |
+| ~~29~~ **DONE — PASSED 26 Nov 2026**, with a correction about the checklist itself: see "Item 29 — CLOSED" above. (a) `/profile`'s Name and Email rows render only when their own value exists — conditioned on the absence of the data, never on `account_type`, because keying off the role is the conditional-render mistake decision 10 rules out. (b) `/profile/delete-data` now has a **nothing-to-delete state**: no resume, no identifiable applications and no saved roles means a panel saying so and no confirmation box. The link itself is untouched, so the policy's sentence stays true. `my_applications()` returns only rows whose `candidate_id` is the caller, and anonymising NULLs that column, so its count is already the count of applications this page could still delete — no new column needed. A `notice` guard keeps the "resume deleted" confirmation visible instead of flipping straight to the empty state. | Rishi, 25 Nov 2026 | Closed |
+| 30 | **A PRODUCTION PAGE, NOT A JOB BOARD ONE — for his decision, not a fix.** Below 768px the footer hides four items via hard-coded `hidden md:block`: the whole **Explore** and **Community** columns, and the **My Dashboard** and **Profile** rows. It is **pre-existing and live on `main`** — the classes arrived in `f368c95`, 5 Sept 2026, eight days before this branch began at `4b12dbd`. **Navigation is NOT lost** (measured at 375px: the header's menu carries Explore GCC Jobs, Ask Answer & Connect and Sign In/Out, and signed in it carries My Dashboard and Profile/Settings from the same `navItems` array), so the four hidden items are exactly the four the header menu duplicates, while the two that survive — Privacy Policy and Recruiter Terms — exist nowhere else. **The one real gap:** `Join the Community` (`/signup` in join mode) has no mobile equivalent; the header's Sign In reaches the same route in **sign-in** mode, so a signed-out phone visitor is offered "Sign In" and never "Join". | Rishi at the stage 12 retest, 25 Nov 2026 | **DONE 25 Nov 2026** — he chose showing the column over renaming the header item. Measured cost: the mobile footer 275px → 369px. |
+| 28 | ~~**LIVE DEFECT: a recruiter can upload a resume from `/profile`, and it poisons an admin report.**~~ **WITHDRAWN 25 Nov 2026 — I WAS WRONG, and Rishi agreed to it on the strength of my claim.** Checked against the live `public.admin_report_totals()` rather than the tracker's summary of it: `no_resume` counts *candidates who HAVE applications but NO resume row*, so a resume with no applications never enters it; `orph` counts storage objects with **no** `candidate_resumes` row, and an upload creates both. **Neither risk figure moves.** And the state is not anomalous anyway: any candidate may upload a resume before applying, and `ApplyPanel` blocks only *your own* posting (`job.posted_by === session.user.id`), so **a recruiter can apply to another company's role** — which makes a resume on file legitimate for them under decision 10. The resume block is one of the few on `/profile` that genuinely does apply to a recruiter. | Withdrawn | No action |
+| 27 | **LIVE DEFECT ON A SIGNED-OFF PAGE: pasted Markdown is rendered literally to candidates.** Rishi's correction, 24 Nov 2026: *"a candidate reading job 13 right now sees `# Job Description` and `**bold**` on screen, so item 27 is a live defect on a signed-off page, not just a snippet problem."* He is right, and I had filed it a category too low. **The defect is what a candidate reads**; the Google snippet beginning `# Job Description` is a symptom of the same cause, not the problem. Job 13's description opens `# Job Description – Finance | Record to Report (R2R)` with `**bold**` markers throughout, and `/gcc-jobs/:slugId` renders it with `whitespace-pre-wrap`, which deliberately never parses HTML. Options: render a safe Markdown subset; strip the markers for display and for the meta description; or change the field hint and let recruiters paste plain text. Whichever is chosen, note that the markup must keep matching the page — Google requires everything in the markup to be visible on it — so display and markup have to change together. | Found 24 Nov 2026 testing against a real row; severity corrected by Rishi the same day | **Before merge** |
+| 26 | **`alter table public.jobs validate constraint jobs_description_check;` after the pre-merge clearout.** Migration 023 added it `NOT VALID` because 24 of 25 existing rows are under 400 characters — all of them `[T5]` test jobs deleted by carried item 13. Once those are gone, validate it, and confirm `convalidated` is true. The statement is at the bottom of the migration file. It fails loudly if anything short remains, which is the point. | Migration 023 | **After carried item 13, before merge** |
+| ~~25~~ **V2, NOT OUTSTANDING — decided 25 Nov 2026.** Rishi: *"Dropped from v1 entirely: the design pass. It looks fine as it is and I'm not holding the launch for it. Record it as a v2 item, not as outstanding."* **The visual identity — muted plum, mauve, warm rose, amber — is not applied in v1 and that is a decision, not a gap.** Original: ~~**DESIGN PASS: two items from stage 10's sign-off.** (a) The `/post-a-job` recruiter panel has a lot of empty white space under the sign-up button. (b) The promo card's illustration keeps its yellow sparks — decided, not outstanding; recorded so the design pass does not reopen it. | Rishi, 24 Nov 2026 | Design pass |
+| 24 | ~~**The "Password changed" security notification must be confirmed OFF before stage 12 ships.**~~ **DONE 25 Nov 2026, and MY ANSWER WAS WRONG ABOUT WHERE.** I said the docs name no dashboard control and the only mechanism was the Management API flag `mailer_notifications_password_changed_enabled`, needing a Personal Access Token. The docs do not name it — **the dashboard does have it.** Rishi found it: **Authentication → Emails**, a **Security** section below the templates list, with toggles for Password changed, Email address changed, Phone number changed, Sign-in method linked/removed and MFA method added/removed. **All seven were already off.** No API call and no token. Recorded here as the location, because the next person will look where I told them to look and not find it. | Rishi, 25 Nov 2026 | Closed |
+| ~~23~~ **CLOSED — DEFERRED TO V2, residual resolved 25 Nov 2026.** Rishi: *"you established the Supabase dashboard is a separate way in, so I can't actually be locked out."* **Checked rather than accepted:** `/admin` needs the one `admin` row in `public.user_roles`, which has no write policy — but the Supabase SQL editor can insert one for any account, so losing the Google account costs *the in-app queue until he re-grants it*, which is recoverable, not a lockout. **The residual was whether the two ways in share a mailbox**, since a shared mailbox would collapse them into one. **It does not: the Supabase account is on an Outlook address and the admin row is on a Gmail one** — two different providers, two different mailboxes, confirmed by him on 25 Nov. The admin row's account was separately verified read-only as Google-only with a single identity, so it has no password of its own to lose. **The deferral stands on evidence rather than on reasoning.** (The addresses are deliberately not written here — re-derive the admin row's with `select u.email from public.user_roles r join auth.users u on u.id = r.user_id where r.role = 'admin';`) Original: ~~**Add a second admin account that Rishi alone controls.** `public.user_roles` has exactly one `admin` row, on a Google-only account. Losing that Google account loses the admin role, with no second admin to grant it back. A data change, not a migration. **The real break-glass is the Supabase dashboard**, from which an admin row can always be inserted — so the higher-value action is hardening his Supabase account (2FA, recovery), and the second admin covers the narrower case of losing the Google account. Note both admins would share one failure mode (Google suspending him) but not the common ones. The second account sees all applications, so it must be an account only he controls, never a shared mailbox. | Rishi, 24 Nov 2026 | **Now** |
+| 22 | **An admin-set-password tool, LOGGED NOT BUILT.** `auth.admin.updateUserById(uid, { password })` sets a password with no email — the docs say *"Changes are applied directly without confirmation flows"* — service-role and server-side only. Paired with the phone number already collected and validated at recruiter signup, it is a reset with zero emails. Rishi's decision, 24 Nov 2026: *"log it, don't build it. Revisit when a recruiter actually loses their mailbox."* It is the only thing that helps a recruiter whose **mailbox** is gone, which a reset email by definition cannot fix. | Rishi, 24 Nov 2026 | Deferred |
+| 21 | ~~**`/post-a-job` NEEDS RETESTING — decision 29 touches a signed-off page.**~~ **DONE** — covered in stage 10 round two's sign-off, which records `/post-a-job` showing *"no notice signed out; amber notice for a signed-in community member; \"Your recruiter account is ready\" for a recruiter"*. Row left open by mistake. Original note: `src/Pages/PostAJob.jsx` now shows a signed-in community member a notice that recruiter accounts are separate. The page is stage 3/4 work and signed off. Retest: the recruiter sign-up still works signed out, an already-signed-in recruiter still sees "Your recruiter account is ready", and the new notice appears only for a signed-in non-recruiter. | Rishi, 24 Nov 2026 | **Stage 10 round two** |
+| ~~20~~ **DONE 26 Nov 2026** — `2027-01-20`, eight weeks from 25 November 2026, set in the same edit as item 1. | ~~**Set `NEW_FEATURE_UNTIL` in `src/lib/boardPromo.js` to eight weeks after the real launch date.**~~ | Rishi, 24 Nov 2026 | Closed |
+| ~~19~~ **DEFERRED TO V2 — decided 25 Nov 2026.** Rishi: *"it only affects Google's remote filter and I have no remote roles."* The cost is bounded and known: a fully remote role will not appear in Google's remote-only filter until this is done, and GCC roles are overwhelmingly on-site or hybrid — which is the same evidence that made experience band a filter instead of work mode in stage 5. Original: ~~**STAGE 4 CHANGE, TO BE DECIDED SEPARATELY: tell recruiters that a 100% remote role must say so in the description.** Google requires `jobLocationType: TELECOMMUTE` *and* that the description clearly states the role is remote. v1 does not ask recruiters for that, so a "remote" role whose description never says the word gets markup Google may disregard. Logged rather than built, because it changes a signed-off form. | Rishi, 23 Nov 2026 | **Stage 4 change** |
+| 18 | ~~**THE POSTING FORM NEEDS RETESTING AS PART OF STAGE 10.**~~ **DONE** — covered in stage 10's sign-off, which records the description minimum *"enforced at 400 on new posts and on edits to the old roles; counter trimmed"*. Row left open by mistake. Original note: Raising the description minimum from 50 to 400 characters touches signed-off stage 4: `src/lib/jobFormModel.js`, the field hint, and the CHECK constraint on `jobs.description`. Rishi, 23 Nov 2026: "Raising it touches signed-off stage 4, so record that the posting form needs retesting as part of stage 10." | Rishi, 23 Nov 2026 | **Stage 10 round two** |
+| 17 | ~~**STAGE 9 SCOPE: `purge_expired_applications()` writes an audit row.**~~ **DONE in stage 9** — verified against the live database 24 Nov 2026: the function's body writes an audit row. Was still shown as open. Originally: A nightly retention purge is an administrative action, and on Hobby a log line is unreadable an hour later. An audit row turns "did the sweep run" into a SQL query that is answerable forever rather than within the hour after 02:00 UTC. | Rishi, 23 Nov 2026 | **Stage 9** |
+| 16 | ~~**STAGE 9 SCOPE: a global orphan sweep in the admin queue, reporting before it deletes.**~~ **DONE in stage 9** — verified 24 Nov 2026 while answering what remains before launch: `AdminReports.jsx` shows `orphaned_files` with a risk tone, and `api/admin-delete-orphan.js` does the deleting, so it reports first and deletes second as decided. Was still shown as open, which would have made the pre-launch list two items longer than it is. Originally: Stage 8's folder-clearing covers everyone who *asks* to be deleted. It does nothing about files belonging to people who never ask — which is what the three 19 Nov orphans were. The sweep compares `storage.objects` against `candidate_resumes` across every folder. Rishi's decision, 22 Nov 2026: **it reports first and deletes second**, reviewed by a human for the first few runs, rather than being trusted straight into the nightly cron. | Rishi, 22 Nov 2026 | **Stage 9** |
+| 15 | **DONE, BUT NOT AS BUILT — see "the board's placement changed, 24 Nov 2026".** Shipped in round one as an "Apply Directly" nav item and a homepage card; **both removed 24 Nov 2026** and replaced by a single promo card at the top of `/jobs`. The item's requirement — the board must be findable in the same stage that makes it public — is met by that card. D1 (the label) is closed by removal. Originally recorded as: *STAGE 10 SCOPE, RECORDED SO IT IS NOT ASSUMED: link `/gcc-jobs` in the navigation.* The board going public and the board being findable must happen in the same stage. Today `/gcc-jobs` is linked from exactly one place in the whole app — the empty state of `/my-applications`. "Explore GCC Jobs" in the header goes to `/jobs`, the collated page of external listings, and always has. Stage 10 makes the board indexable; if it does not also link it, the board is public to Google and invisible to a visitor. The two nav labels need settling at the same time, because "Explore GCC Jobs" is taken. | Rishi, 22 Nov 2026 | **Stage 10** |
+| 14 | **Run `supabase/post-merge/drop_question_authors.sql`** — AFTER the merge is deployed and a live question page is confirmed to show author names, not before. Clears the Security Advisor's Security Definer View finding for good. | question_authors review | **After** merge |
+| ~~13~~ **DONE 26 Nov 2026 — CLEAROUT RUN.** Full procedure in `CLEAROUT.md`, outcome in "THE CLEAROUT RAN, THE THREE DATES ARE SET, P4 PASSED": 14 of 15 verification rows PASS, the one FAIL a deliberate decision (kept both test Google accounts, see item 5). | ~~RE-INVENTORIED AGAINST THE LIVE DATABASE~~ — superseded by the run itself. | Stage 6 sign-off | Closed |
+| 7 | **Turn on leaked-password protection** (Auth → Policies). Pro-plan only and Rishi is on Free, so it is skipped for now. It checks new passwords against HaveIBeenPwned. Only affects password accounts, i.e. recruiters. Do this if the plan is ever upgraded. | Rishi, stage 3 setup | If/when on Pro |
+| 8 | ~~**Add `http://localhost:5173/**` to Supabase Redirect URLs before changing Site URL.**~~ **DONE 25 Nov 2026** — closed by stage 12's prerequisite A, which added it alongside the preview host and `https://www.iworkatgcc.com/**`. The row was left open by mistake; the allowlist edit is recorded in the stage 12 prerequisites. | Stage 3 review | Closed |
+| 6 | ~~**10-live-roles cap: the error message.**~~ **DONE in stage 4.** Migration 004 adds a `BEFORE INSERT` trigger, `private.jobs_cap_guard()`, which raises a readable sentence before the insert policy is evaluated. The policy from migration 001 is untouched and remains the enforcement; the trigger only supplies the message. It also gives a suspended recruiter a plain explanation instead of the same opaque RLS error. The cap number appears in two places now — the policy and the trigger — and each carries a comment saying to keep them in step. | Rishi, stage 2 sign-off | Closed |
+| 9 | ~~**`auth.signUp` is not domain-restricted.**~~ **DEFERRED by Rishi, 18 Nov 2026.** The free-provider blocklist lives in the client form and in the `handle_new_recruiter` trigger, but the trigger only fires when the `recruiter_profiles` row is inserted, so a scripted call to `/auth/v1/signup` can still create an **unconfirmed** `auth.users` row on any domain and burn one Brevo send. Rishi's call: the trigger still stops them becoming a recruiter, so it is a junk account that can do nothing. Not worth a Before User Created auth hook. Revisit only if junk signups or send quota ever become a real problem. | Stage 3 review | Deferred — no action |
+| 10 | **HALF SUPERSEDED 25 Nov 2026 — see "Decision 10 does not apply to /profile".** The half that said *"`/ask` and `/profile` stay reachable for recruiters"* **no longer stands**: stage 12 blocks both, because the dual-use account that reasoning protected does not exist and cannot be created (0 of 2,656 accounts have two identities; `recruiter_profiles` rows are only ever created from `PostAJob.jsx`'s signUp metadata, and `handle_new_recruiter()` raises for free email domains). Decision 10 protects a **person** who holds two logins, not one account. The consequence accepted with it: a recruiter can no longer set a display name, so the "recruiter chooses to join the community" path closes — that person uses their Google login instead. The rest of the item stands as the record of what was decided on 18 Nov. Originally: **A recruiter can create a community `profiles` row — and that is now intended.** `saveDisplayName()` in `src/lib/useDisplayName.js` upserts one, reachable from `/profile`, `/ask` and any question page. **Rishi's decision, 18 Nov 2026: leave the behaviour as it is.** Someone who deliberately sets a display name is choosing to join the community, which matches the "one person can be both" decision. `/ask` and `/profile` stay reachable for recruiters. **The guard is the invariant below, not a code change.** | Stage 3 review | Decided — see the invariant |
+| 11 | ~~**Stale unconfirmed `auth.users` rows / pre-account-takeover.**~~ **CLOSED 18 Nov 2026 by test T2 — outcome B.** A pre-registered unconfirmed password account was merged into the same user id when the real owner signed in with Google, and Supabase wiped **both** the attacker's password (`has_password` false, `providers` google only) **and** the attacker's `user_metadata`. `signInWithPassword` with the attacker's password returned 400 "Invalid login credentials". No cleanup cron is needed. | Stage 3 review | Closed |
+| 12 | **`user_activity` now skips recruiters.** `ActivityTracker` is mounted at the app root and ran `record_activity()` for every signed-in user, recruiters included — proven by the one row `community@iworkatgcc.com` had accumulated. That table feeds the digest's active-user set and the community stats, so recruiters were inflating both. Guarded in stage 3. The guard keys off `account_type` metadata; if one account ever needs to be both candidate and recruiter, change it to key off the presence of a `profiles` row instead. | Rishi, stage 3 retest | Closed (guard shipped); stray row listed above for cleanup |
+
+## SIGNED OFF 25 Nov 2026 — the consolidation and the reset flow
+
+Rishi's result, verbatim: *"The consolidation and the reset flow both pass."*
+
+| What he confirmed | Result |
+|---|---|
+| The build | ready at `ed0dd49`, **10 functions** |
+| **Merge 2** (`public`) | job page renders with `JobPosting`; `sitemap-jobs.xml` lists roles with production URLs; `sitemap.xml` intact; a closed role renders with `noindex` and no markup. **"The includeFiles key is right."** |
+| **Merge 3** (`admin`) | **typing `ANONYMISE` into the orphan-delete box does not enable it** — the two confirmations have not crossed. Both actions work, and a candidate opening `/admin` is still refused, **so the guard is still before the branch** |
+| **Merge 4** (`my-data`) | download, delete-resume, re-upload, and the untouched full delete-my-job-board-data flow all work |
+| **The reset flow** | the link is on the sign-in tab; nonsense, Google and recruiter addresses all return the **identical panel**; the link sets a new password, the old one is refused, the link is single-use; and `/recruiter/reset-password` as a Google account says "This account has no password" with no password field |
+| 375px | forgot, reset and sign-in all clean; `/questions` unchanged |
+
+**He verified the two merges that have no automated test in exactly the way
+that mattered.** Merge 3's real risk was the two confirmations crossing now
+that they share a file — he tested it directly by typing one action's
+confirmation into the other's box. Merge 4's risk was three response shapes
+read field by field, and he walked all of them.
+
+### PREREQUISITE D — CLOSED
+
+*"Brevo shows exactly one send at 11:57, jobs@iworkatgcc.com → the recruiter
+address, with my template. Nothing for the nonsense address, nothing for the
+Google account."*
+
+**That is the identical-reply rule proved where it can only be proved.** The
+claim under test for the refused addresses is an **absence**, and an absence
+is provable at the sender, not at an inbox that might simply be slow. One
+send, two silences.
+
+All four prerequisites are now closed: A (redirect URLs), B (the Security
+toggles, all off), C (the template), D (the Brevo log).
+
+### THE ONE FIX HE FOUND: the subject line
+
+The email arrived with Supabase's default subject, **"Reset your password"**,
+not the one in the template file. Rishi: *"Generic is both harder to find in
+an inbox and easier to imitate"* — the two things a password email must not
+be.
+
+**Cause: the subject is a separate dashboard field and pasting the body does
+not touch it.** My template file documented the subject in its header, but as
+one line among many, and it was missed. The header now says so in terms that
+cannot be skimmed past, and notes that **the signup template has the same
+trap**.
+
+**To fix, in the dashboard:** Authentication → Emails → Reset Password → the
+**Subject** field above the body editor →
+`Reset your iWorkAtGCC recruiter password`. Nothing in the repo changes.
+
+**CLOSED 25 Nov 2026.** He re-pasted **both** templates with **both** subject
+lines. That one paste closed three separate things: the default subject, the
+`/recruiter/sign-in` address added to each email, and W1's wording, which had
+survived in the signup template because **the templates are outside every
+test in this repository** — they are HTML pasted into a dashboard, so no suite
+can see them and nothing can detect that an edit has not been re-pasted.
+
+### THE DATE WAS WRONG BY ONE DAY — corrected 25 Nov 2026
+
+Rishi: *"Today is 25 November. Check where that date came from and fix it — a
+wrong date in the tracker will outlive the mistake."*
+
+**Everything this section describes happened on 25 November 2026**, not the
+26th. Seven references across three files said 26 Nov and are now corrected:
+five in `HANDOVER.md`, this section's heading and prerequisite D here, and one
+comment in `supabase/email-templates/reset-recruiter-password.html`.
+
+**The proof is in the commit timestamps**, which no one typed:
+
+| | |
+|---|---|
+| `ed0dd49` HANDOVER.md | 2026-11-25 11:39 +0530, and its text says "Written 25 November" |
+| `212ea8d` the sign-off | 2026-11-25 12:26 +0530, and its text says "26 Nov 2026" |
+
+**Two commits 47 minutes apart, dated a day apart in their own prose.** The
+Brevo send at 11:57 sits between them, so that was 25 Nov too.
+
+**Where it came from: a session that ran across midnight and counted the
+rollover twice.** Commits `fc51c2b` and `36865b1` are stamped 00:58 and 01:06
+on 25 Nov, so the session began on the 24th while already calling the date the
+25th; when the real midnight passed it advanced to the 26th. The error is not
+a typo, which matters — **a long session cannot tell the date from the inside,
+so it must read it rather than increment it.**
+
+**`212ea8d`'s commit message still says 26 Nov and was deliberately left
+alone.** It is pushed to `origin/job-board`, and rewriting a pushed commit to
+fix a message is a worse trade than one wrong date in the log. **The commit
+log is therefore the one place the wrong date survives** — which is why it is
+written down here instead.
+
+## CONSOLIDATION — 14 serverless functions to 10, Hobby's limit is 12
+
+The build stopped: *"No more than 12 Serverless Functions can be added to a
+Deployment on the Hobby plan."* Rishi, 25 Nov 2026: *"I'm not upgrading to
+Pro. Consolidate."*
+
+**It was 14, not the 13 he saw.** `36865b1` made it 13; `fc51c2b` (the landing
+page) added `may-set-password.js` and made it 14.
+
+| New file | Absorbs | Saves | Status |
+|---|---|---|---|
+| `api/password.js` | `request-password-reset`, `may-set-password` | 2 → 1 | **DONE 25 Nov 2026** |
+| `api/public.js` | `job-page`, `sitemap-jobs` | 2 → 1 | planned |
+| `api/admin.js` | `admin-anonymise`, `admin-delete-orphan` | 2 → 1 | planned |
+| `api/my-data.js` | `my-resume-url`, `delete-my-resume` | 2 → 1 | planned |
+
+**Lands at 10, two spare.** Rishi's decision on the fourth: *"Leave
+delete-my-data alone… One slot isn't worth touching the file that erases
+people's data."* Agreed — that merge would have bought exactly one slot in the
+most security-sensitive file in the set.
+
+**THE DISPATCH IS THE POINT, NOT THE SAVING.** Each merged file branches on an
+`action`, so the next endpoint joins an existing file instead of adding a
+fifteenth. Carried item 22's admin-set-password tool becomes an action on
+`api/admin.js` if it is ever built. Rishi: *"the dispatch convention means the
+count stops growing anyway."*
+
+### Deliberate non-merges, each for a reason
+
+- **`upload-resume`** declares `export const config = { api: { bodyParser:
+  false } }` and reads the raw stream. **That config is per-file**, so merging
+  it with JSON endpoints would force three signed-off endpoints to parse raw
+  streams themselves — a change to working security code for one slot.
+- **`resume-url`** is the only endpoint where a *recruiter* reads a
+  *candidate's* file, and its design is two clients: the database decides
+  whether, the service key only decides how. Folding that into the candidate's
+  own-data function would put two authorisation models in one file.
+- **The two crons.** Not because they could not merge, but because **crons only
+  run against production and cannot be tested on a preview**. Any change to
+  them is unverifiable until live.
+- **The dynamic sitemap stays dynamic.** It could be written at build time,
+  but Rishi: *"Up to 24 hours stale defeats the point of building it."*
+- **`may-set` stays server-side.** It could be dropped entirely — `user_roles`
+  has a `read own role` policy and `app_metadata.providers` reveals the
+  identity — but that makes the gate a client-side guess. Rishi: *"You argued
+  against a client-side gate when you designed it and the grouping doesn't
+  need the slot."*
+
+### `api/password.js` — the first merge, done
+
+Two actions, `request` and `may-set`, each checking its own auth: `request`
+takes no token because the person asking cannot sign in, `may-set` requires
+one because the only account it answers about is the bearer's own. **Nothing
+is checked once and assumed for both.**
+
+**A missing or unknown action is a loud 400**, never a default. A client that
+forgot the field would otherwise ask for a reset with no address and get the
+same cheerful reply as everyone else, and nobody would ever find out.
+
+**`maySetPassword` was restructured to have ONE reply site.** The first
+version had two 200s — a gate-error branch and a normal one — which was
+correct but the wrong shape: a second reply site is a second place a future
+edit can answer differently. `allowed` now initialises to `false`, so the
+unreadable-gate case falls out of the structure rather than out of a branch.
+**The test asserts one 200 per action**, which is what caught it.
+
+`looksLikePdf` also moves to `api/_lib/pdf.js` — `_lib` does not count toward
+the limit, a pure validator has no business in a handler, and
+`stage6-apply-test.mjs` then imports from a file that can never become a
+function.
+
+**69 assertions, all passing**, up from 63. The test is action-scoped now:
+counting 200s across the file would prove nothing with two actions in it, so
+it extracts the `requestReset` source and counts within that.
+
+**One probe of mine misfired and is worth recording**, because the conclusion
+looked like a bug: a Playwright check reported the "Forgot your password?"
+link missing from `/post-a-job`. It was clicking the *submit* button ("Sign
+In") rather than the *tab* ("Sign in") — a case-insensitive match that hit the
+wrong element and submitted the sign-up form. Clicking the tab by role shows
+the link. **The probe was wrong, not the page.**
+
+## KNOWN GAP — the serverless endpoints are almost entirely untested
+
+**Recorded at Rishi's instruction, 25 Nov 2026:** *"Put both in the tracker as
+a known gap, so the next person doesn't read '392 assertions passing' and
+think the endpoints are covered."*
+
+**They are not.** The suites test the **pure modules beside** the endpoints,
+not the endpoints themselves. Anyone reading an assertion count should read
+this table first.
+
+| Suite | What it actually covers | What it does NOT cover |
+|---|---|---|
+| `stage6-apply-test.mjs` | `applicationModel.js`, and `looksLikePdf` (moving to `api/_lib/pdf.js`) | the upload handler: streaming, storage writes, the `candidate_resumes` upsert |
+| `stage7-applications-test.mjs` | `applicationDisplay.js`, `jobOptions.js` | `api/resume-url.js` — the recruiter's signed-URL path, its two-client design |
+| `stage8-candidate-test.mjs` | `_lib/resumeStorage.js`, `applicationDisplay.js` | `my-resume-url`, `delete-my-resume`, `delete-my-data` |
+| `stage9-admin-test.mjs` | `confirmations.js`, `adminFormat.js`, `reportFormat.js` | `admin-anonymise`, `admin-delete-orphan` — **the confirmation strings are tested; the wiring that reads them is not** |
+| `stage10-head-test.mjs` | `jobPageHead.js`, 121 assertions | `api/job-page.js`'s routing, status codes and shell read |
+| `stage12-reset-gate-test.mjs` | **the handler itself**, 63 assertions | — the only endpoint with real coverage |
+| `check-overflow.mjs` | six public pages through the real rewrites | anything behind a sign-in |
+
+### The two that need a human, because nothing else reaches them
+
+**`api/admin.js`** — `stage9-admin-test.mjs` proves the confirmation strings
+and nothing about the handler that reads them. The guard could end up after
+the branch, or the two confirmations could be crossed, and no test would
+notice. **Browser retest required:** anonymise an application and delete an
+orphan, each with a correct and an incorrect confirmation, plus one attempt as
+a non-admin.
+
+**`api/my-data.js`** — `stage8-candidate-test.mjs` does not reach it. Three
+response shapes that the client reads field by field. **Browser retest
+required:** view a resume URL, delete a resume on its own, and confirm the
+other actions still behave.
+
+### Why this is a gap and not a decision
+
+An endpoint test needs a request, a response and a database, and the two
+written so far (`stage12-reset-gate-test.mjs`, and `job-page` via a mock
+`req`/`res`) show it is perfectly possible — it was simply never done for the
+endpoints built in stages 6 to 9. **The consolidation does not make this
+worse**, but it does move signed-off code, which is exactly when the absence
+of a test costs something. Worth building out if these endpoints are ever
+changed again.
+
+## Invariants — things a later stage must not quietly break
+
+### I3 — a forged `account_type` must stay unable to create a recruiter
+
+**Recorded 25 Nov 2026 as a known abuse case with no action needed.** Rishi
+asked for it in the record rather than in a conversation.
+
+`src/lib/accountType.js` is explicit that `isRecruiterUser()` is *"a DISPLAY
+and ROUTING hint only… never a security boundary"*, and
+`auth.updateUser({ data })` does let a signed-in person write their own
+`user_metadata`. So a community member **can** forge
+`account_type: "recruiter"` from the browser console, and `RecruiterRoute`
+would then try to create a `recruiter_profiles` row for their Google account.
+
+**What stops it is in the database.** `private.handle_new_recruiter()` fires
+BEFORE INSERT and raises for free email domains. Measured 25 Nov 2026:
+**2,611 of the 2,654 Google accounts are on blocked free domains**, so the
+forge fails for all of them.
+
+**The 43 remaining are on work domains and would succeed** — ending up with a
+Google identity and a recruiter row on one account, the only way a single
+account can be both. Accepted, because a person on a work domain who
+deliberately forges recruiter metadata **is** a recruiter, not a dual-use
+candidate anyone needs to design around. The blast radius is junk postings,
+which stage 9's admin hide already covers, and candidate details stay withheld
+until the company is verified.
+
+**Stage 12 already refuses this account**, which is why the reset gate has two
+halves rather than one: such an account has `user_roles.role = 'recruiter'`
+(so the **role** gate passes) and **no password** (so the **identity** gate
+refuses). A role-only test would have emailed a reset link to a Google
+account, which is precisely the identity-linking risk the second gate exists
+for.
+
+**What a later stage must not do:** collapse the reset gate to the role test
+alone, or move the free-domain check out of
+`private.handle_new_recruiter()` into client code.
+
+
+
+These are not to-do items. They are rules that currently hold, that nothing
+enforces mechanically, and that a reasonable-looking future change could
+break without any test failing.
+
+### I2 — deletion means the folder is empty, not that the named file is gone
+
+**The rule.** `/api/delete-my-resume` and `/api/delete-my-data` must clear
+**every** object under `resumes/<candidate_id>/`. Neither may go back to
+deleting the single path held in `candidate_resumes.resume_path`.
+
+**Why it is a rule and not a preference.** A file can exist with no row
+pointing at it, for reasons no error handling prevents:
+
+| How | Can it be prevented? |
+|---|---|
+| The upload succeeded and the function died before the row was written — a timeout or an evicted instance | **No.** There is no process left to run a cleanup. |
+| The row was replaced and deleting the superseded file failed | **No**, not without making it worse: that failure is deliberately non-fatal, because the new resume is already live and failing the request would tell a candidate their upload did not work when it did. |
+| Two uploads landed at once, so the loser is referenced by nothing and was never the "previous" path either | Not without locking an upload path that does not need it. |
+| The row write failed outright | Fixed — migration 009. This is what produced the three real orphans on 19 Nov 2026, before the service key had write access: *every* upload orphaned a file. |
+
+So an orphan is not an error state to be designed out. It is a state that will
+occur, which means deletion has to be defined by the end state of the folder
+rather than by what we believe is in it. **Deleting by row name can only ever
+be as reliable as the row.**
+
+**What depends on it.** The privacy policy says *"Your resume file is
+permanently deleted from our storage. This cannot be undone."* Deleting by row
+name leaves orphans behind and makes that sentence false for exactly the
+candidates whose upload once half-failed.
+
+**How it breaks.** Any of these would silently reintroduce it:
+
+- "simplifying" either endpoint back to `remove([row.resume_path])`
+- removing the pagination loop in `clearResumeFolder`, so a deletion stops at
+  100 objects
+- adding a third deletion path that does not use the helper
+
+**How to check it still holds.** After any change to either endpoint, or to
+`api/_lib/resumeStorage.js`:
+
+```sql
+-- orphans MUST be 0 after any delete-my-data or delete-my-resume test.
+-- Before launch, objects_total and resume_rows should also agree.
+select
+  (select count(*) from storage.objects where bucket_id = 'resumes') as objects_total,
+  (select count(*) from public.candidate_resumes)                   as resume_rows,
+  (select count(*) from storage.objects o
+     where o.bucket_id = 'resumes'
+       and not exists (select 1 from public.candidate_resumes cr
+                        where cr.resume_path = o.name))             as orphans;
+```
+
+`scripts/stage8-candidate-test.mjs` covers the helper against a fake client,
+including the cases production will not produce on demand: a second page of
+results, three files where the row names one, a prefix placeholder, and a
+listing entry that is not a plain filename.
+
+**Not covered by this, on purpose.** Orphans belonging to people who never ask
+for deletion. Those need a sweep across every folder, which is stage 9 — see
+carried-forward item 16.
+
+### I1 — `profiles.google_email` must stay null for recruiters
+
+**Corrected 20 Nov 2026.** The earlier wording said the null `google_email`
+is what keeps recruiters out of the weekly digest. That was the wrong reason
+for the right outcome, as Rishi spotted: **neither recruiter has a `profiles`
+row at all**, and `api/send-digest.js` iterates `profiles`, so they are never
+considered in the first place. The column filter does not even run on them
+today.
+
+The invariant still matters, though, and the correction is to its *trigger
+condition* rather than to the rule:
+
+**The rule.** `profiles.google_email` is written by exactly one thing: the
+Google sign-in sync in `src/Pages/Welcome.jsx`. Nothing else may write it.
+
+**What actually keeps recruiters out of the digest, in order:**
+
+1. **Today: they have no `profiles` row.** Verified 20 Nov 2026 — both
+   recruiter accounts return `has_profile_row = 0`. Nothing to iterate, so
+   nothing to filter.
+2. **The moment one creates a row, the null column is the only thing left.**
+   And a recruiter *is allowed* to create one: `saveDisplayName()` upserts a
+   `profiles` row and is reachable from `/profile`, `/ask` and any question
+   page. That is item 10 — Rishi's deliberate decision, because someone who
+   sets a display name is choosing to join the community.
+
+So the row's existence cannot be the filter, and layer 1 is luck rather than
+design: it holds only for as long as no recruiter ever sets a display name.
+Layer 2 is the actual guarantee, which is why this invariant exists and why
+the reasoning is written at the check in `api/send-digest.js` where whoever
+edits that line will see it.
+
+**How it breaks.** Any of these would silently start emailing recruiters —
+but only once a recruiter has a `profiles` row, which is why this can sit
+latent and look fine:
+
+- backfilling `google_email` from `auth.users.email`
+- setting `google_email` in `saveDisplayName()` or anywhere in the recruiter
+  signup path
+- a migration that adds a `not null` default or copies `email` into it
+- a new "complete your profile" screen that asks for and saves an email
+
+**Why not just filter on role.** One person is allowed to be both a candidate
+and a recruiter, and that person *should* get the digest. The real question is
+"did they join the community through Google", and a non-null `google_email` is
+exactly that. A role-based filter would exclude the dual-role case wrongly.
+
+**How to check it still holds.** Before any stage that touches `profiles`,
+the digest, or recruiter signup. The old check was a single `0`, which could
+not tell "no rows" apart from "rows, all safe" — the two cases this
+correction is about. This reports both:
+
+```sql
+-- recruiters_with_a_profile_row: 0 today. Not required to stay 0 -- a
+--   recruiter may legitimately join the community.
+-- recruiters_who_would_be_emailed: MUST be 0. Any row here is a recruiter
+--   who will receive the next digest.
+select
+  count(*) filter (where p.id is not null)                              as recruiters_with_a_profile_row,
+  count(*) filter (where p.google_email is not null)                    as recruiters_who_would_be_emailed
+  from public.user_roles r
+  left join public.profiles p on p.id = r.user_id
+ where r.role = 'recruiter';
+```
+
+## Project-wide settings changed (NOT undone by the rollback scripts)
+
+| Setting | Changed in stage | Previous value | Reverted? |
+|---|---|---|---|
+| **Site URL** → `https://www.iworkatgcc.com` | Stage 3 setup | `http://localhost:5173` | No — and should stay changed. The old value was unused by any code path (the one `signInWithOAuth` call passes `redirectTo` explicitly), but it was the fallback for every auth email. |
+| **Redirect URLs** — added 2 preview wildcards | Stage 3 setup | `http://localhost:5173/**` only | No — keep. Harmless after launch; remove the preview wildcards then if you want to tidy up. |
+| **Auth SMTP** → Brevo, sender `jobs@iworkatgcc.com`, port 587 | Stage 3 setup | Supabase default sender | No — keep. Nothing used it before: all existing identities are Google OAuth and never trigger a Supabase auth email. |
+| **Email provider + Confirm email** | — | Already enabled before this project | n/a |
+| **Confirm signup email template** | Stage 3 | Supabase default copy | No — keep. Draft is in `supabase/email-templates/confirm-recruiter-signup.html`. Note this template is project-wide and would also reach any candidate who ever signs up with a password. |

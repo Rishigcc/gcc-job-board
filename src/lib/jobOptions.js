@@ -1,0 +1,329 @@
+// ===========================================================================
+// The fixed lists a job posting is built from.
+//
+// WHY FIXED AND NOT FREE TEXT
+//   Free text produces "Bangalore", "Bengaluru" and "blr" for one city, and
+//   then a filter that matches none of them. The existing collated jobs page
+//   normalises this after the fact, with a mapping table and some guessing.
+//   On data we control at the point of entry, a dropdown is simply correct.
+//
+// THESE ARE NOT DATABASE CONSTRAINTS
+//   `jobs.city` and `jobs.job_function` are plain `text not null` columns with
+//   no check constraint, deliberately. Revising either list is an edit to this
+//   file and a redeploy -- never a migration. Existing rows keep whatever they
+//   were posted with, so removing an entry here does not corrupt old jobs; it
+//   only stops new ones using it.
+//
+//   WORK_MODES, EMPLOYMENT_TYPES, SALARY_CURRENCIES and SALARY_PERIODS are
+//   different: those four ARE check constraints in migration 001, so the
+//   values below must match the constraint exactly. Changing one of those
+//   needs a migration.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Job functions.
+//
+// Built on the 15 the collated jobs page already uses, which have been proven
+// against 348 real GCC postings. Keeping the same spine matters: stage 5's
+// filter will eventually need to sit over both the collated jobs and the
+// directly-posted ones, and two different vocabularies would make that
+// impossible.
+//
+// Three deliberate changes from those 15:
+//   * "HR" is spelled out. It reads as a label in a dropdown, not a column
+//     heading.
+//   * "Procurement" (1 posting) is folded into Supply Chain. One posting does
+//     not earn its own filter entry.
+//   * "Quality & Compliance" (1 posting) is folded into Risk & Compliance,
+//     which already had 37.
+//
+// Two additions the scraped data could not show, because it is scraped from
+// generic job boards rather than from GCCs:
+//   * Clinical & Medical Affairs -- pharma GCCs are a real and growing
+//     segment in Hyderabad and Bengaluru, and those roles currently have
+//     nowhere sensible to go.
+//   * Program & Project Management -- very common in GCCs and currently
+//     invisible inside "Operations".
+//
+// Ordered by expected volume, not alphabetically, so the common choice is
+// near the top of the list. "Other" is last.
+// ---------------------------------------------------------------------------
+export const JOB_FUNCTIONS = [
+  "IT & Engineering",
+  "Data & AI",
+  "Operations",
+  "Finance & Accounting",
+  "Risk & Compliance",
+  "Sales & Marketing",
+  "Program & Project Management",
+  "Cybersecurity",
+  "Product",
+  "Human Resources",
+  "Supply Chain & Procurement",
+  "Customer Support",
+  "Clinical & Medical Affairs",
+  "Legal",
+  "Other",
+];
+
+// ---------------------------------------------------------------------------
+// Cities.
+//
+// Grouped so the dropdown is scannable rather than a flat list of twenty.
+//
+// The eight tier-2 locations named in the brief are all present: Coimbatore,
+// Indore, Jaipur, Visakhapatnam, Kochi, Bhubaneswar, Chandigarh, Nagpur.
+//
+// Suburb names are deliberately absent. The collated data contains Thane,
+// Navi Mumbai, Pimpri-Chinchwad, Bidadi, Makali and others; every one of them
+// is a filter entry that would split a city's results in two. A role in Thane
+// is posted as Mumbai, and the description can say Thane.
+//
+// "Anywhere in India" exists because 46 of the 348 collated postings had no
+// city at all. It is a city value, not a work mode -- a role can be
+// "Anywhere in India" and onsite (a travelling role), or Bengaluru and
+// remote (remote, but you must be able to reach the office). The two
+// questions are genuinely separate and the form asks both.
+// ---------------------------------------------------------------------------
+export const CITY_GROUPS = [
+  {
+    label: "Major GCC hubs",
+    cities: [
+      "Bengaluru",
+      "Hyderabad",
+      "Pune",
+      "Chennai",
+      "Mumbai",
+      "Gurugram",
+      "Noida",
+      "Delhi",
+    ],
+  },
+  {
+    label: "Established locations",
+    cities: ["Ahmedabad", "Kolkata", "Thiruvananthapuram", "Mysuru"],
+  },
+  {
+    label: "Emerging locations",
+    cities: [
+      "Coimbatore",
+      "Indore",
+      "Jaipur",
+      "Visakhapatnam",
+      "Kochi",
+      "Bhubaneswar",
+      "Chandigarh",
+      "Nagpur",
+    ],
+  },
+  {
+    label: "No fixed location",
+    cities: ["Anywhere in India"],
+  },
+];
+
+// Flat list, for validating a submitted value.
+export const CITIES = CITY_GROUPS.flatMap((g) => g.cities);
+
+// ---------------------------------------------------------------------------
+// The four lists below mirror CHECK constraints in migration 001. The stored
+// value is on the left; the label is only ever shown to a person. Never
+// display a raw stored value.
+// ---------------------------------------------------------------------------
+export const WORK_MODES = [
+  { value: "onsite", label: "On-site" },
+  { value: "hybrid", label: "Hybrid" },
+  { value: "remote", label: "Remote" },
+];
+
+export const EMPLOYMENT_TYPES = [
+  { value: "full_time", label: "Full time" },
+  { value: "part_time", label: "Part time" },
+  { value: "contract", label: "Contract" },
+  { value: "internship", label: "Internship" },
+];
+
+export const SALARY_CURRENCIES = [
+  { value: "INR", label: "₹ INR" },
+  { value: "USD", label: "$ USD" },
+];
+
+export const SALARY_PERIODS = [
+  { value: "year", label: "per year" },
+  { value: "month", label: "per month" },
+];
+
+// ---------------------------------------------------------------------------
+// How a job's status reads to a person.
+//
+// `status` is one of live / pending / expired / closed / hidden, but "expired"
+// is never stored -- it is derived from expires_at at read time, which is why
+// no cron job is needed. jobDisplayStatus() is the single place that derives
+// it, so the recruiter's table and the public page can never disagree.
+//
+// Never render a raw status value anywhere.
+// ---------------------------------------------------------------------------
+export function jobDisplayStatus(job) {
+  if (!job) return { key: "unknown", label: "Unknown", tone: "muted" };
+
+  if (job.status === "hidden") {
+    return { key: "hidden", label: "Hidden by iWorkAtGCC", tone: "risk" };
+  }
+  if (job.status === "pending") {
+    return { key: "pending", label: "Awaiting review", tone: "wait" };
+  }
+  if (job.status === "closed") {
+    return { key: "closed", label: "Closed", tone: "muted" };
+  }
+  if (job.status === "live" && new Date(job.expires_at) <= new Date()) {
+    return { key: "expired", label: "Expired", tone: "muted" };
+  }
+  if (job.status === "live") {
+    return { key: "live", label: "Live", tone: "good" };
+  }
+  return { key: job.status, label: "Not live", tone: "muted" };
+}
+
+// Does this job count against the 10-live-roles cap? Mirrors
+// private.recruiter_live_job_count: live AND not yet expired.
+export function countsTowardCap(job) {
+  return job.status === "live" && new Date(job.expires_at) > new Date();
+}
+
+export const FREE_LIVE_CAP = 10;
+
+// "3 of 10 roles live." -- except when the count is somehow ABOVE the cap,
+// where "25 of 10 roles live" reads as a broken counter rather than as a
+// number worth trusting.
+//
+// It can genuinely happen. The cap is enforced in the insert policy, so
+// anything written another way -- a seeded batch, an admin fix, a future
+// bulk import -- bypasses it, and the count is then honest while the phrasing
+// is not. Verification also lifts the cap without lowering the count. So the
+// label states the live count first and the limit as an aside.
+export function liveSlotsLabel(liveCount, cap = FREE_LIVE_CAP) {
+  if (liveCount > cap) {
+    // "25 roles live" -- the noun belongs to the count.
+    return `${liveCount} ${liveCount === 1 ? "role" : "roles"} live (limit ${cap}).`;
+  }
+
+  // "1 of 10 roles live" -- the noun belongs to the CAP, not the count, which
+  // is what "1 of 10 role live" got wrong.
+  return `${liveCount} of ${cap} ${cap === 1 ? "role" : "roles"} live.`;
+}
+
+// ---------------------------------------------------------------------------
+// Slugs.
+//
+// Must satisfy the database's own check: ^[a-z0-9]+(-[a-z0-9]+)*$
+// A job slug need not be unique -- the public URL is /gcc-jobs/<slug>-<id>,
+// and the id disambiguates. A COMPANY slug must be unique; the caller handles
+// that collision.
+// ---------------------------------------------------------------------------
+export function slugify(input) {
+  return (input || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+    .replace(/-+$/g, "");
+}
+
+// Skills are stored as text[]. A comma-separated input is what recruiters
+// expect, and 20 is a cap on the stored array rather than a database rule.
+export function splitSkills(raw) {
+  return (raw || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+export const DAYS_LIVE = 30;
+
+// ---------------------------------------------------------------------------
+// Company slugs need a stricter rule than job slugs.
+//
+// `slugify` turns every run of non-alphanumeric characters into a hyphen, so
+// "H.S.B.C." becomes "h-s-b-c" and does NOT collide with "hsbc". For job
+// titles that is right. For company names it is the difference between one
+// company page and two.
+//
+// So for companies, characters that sit INSIDE a word -- full stops,
+// apostrophes, the typographic apostrophe -- are deleted rather than turned
+// into separators:
+//
+//   "H.S.B.C."   -> hsbc      (collides with "HSBC", which is what we want)
+//   "Macy's"     -> macys     (collides with "Macys")
+//   "AT&T"       -> at-and-t  (unchanged; & is still a word separator)
+//
+// This is a backstop, not the fix. It catches punctuation and casing only.
+// It cannot know that "Walmart Global Tech India" and "Walmart" are the same
+// employer -- that is what the company picker is for.
+// ---------------------------------------------------------------------------
+export function companySlug(input) {
+  return slugify((input || "").replace(/[.'\u2018\u2019\u02bc`]/g, ""));
+}
+
+// ---------------------------------------------------------------------------
+// Notice periods. These ARE a check constraint, on
+// public.applications.notice_period in migration 007, so the values below
+// must match it exactly. Changing one needs a migration.
+// ---------------------------------------------------------------------------
+export const NOTICE_PERIODS = [
+  { value: "immediate", label: "Immediate" },
+  { value: "15_days", label: "15 days" },
+  { value: "30_days", label: "30 days" },
+  { value: "60_days", label: "60 days" },
+  { value: "90_days", label: "90 days" },
+  { value: "serving_notice", label: "Serving notice" },
+];
+
+export function noticePeriodLabel(value) {
+  return NOTICE_PERIODS.find((n) => n.value === value)?.label || value;
+}
+
+// ---------------------------------------------------------------------------
+// Ordering a recruiter's own roles.
+//
+// Here rather than in the page so it can be tested in plain Node: an ordering
+// bug is silent -- the list still renders, just wrong -- and "most
+// applications" in particular has a tie-break that no amount of looking at
+// the screen would confirm.
+//
+// Sorting is client-side because "most applications" is not a column. The
+// counts come from public.recruiter_application_counts(), a separate call, so
+// the database cannot order by them without a join this page does not need.
+// A recruiter has at most a few dozen roles.
+// ---------------------------------------------------------------------------
+export const RECRUITER_JOB_SORTS = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "applications", label: "Most applications" },
+];
+
+export function sortRecruiterJobs(jobs, counts = {}, sort = "newest") {
+  const copy = [...(jobs || [])];
+  const applied = (job) => counts[job.id]?.count || 0;
+  const posted = (job) => {
+    const time = new Date(job.published_at).getTime();
+    // A row with no usable date sorts to the bottom of every order rather
+    // than landing wherever NaN happens to put it.
+    return Number.isNaN(time) ? 0 : time;
+  };
+
+  if (sort === "oldest") {
+    copy.sort((a, b) => posted(a) - posted(b));
+  } else if (sort === "applications") {
+    // Ties fall back to newest, so the order is stable and a role with no
+    // applications never sits above one that has some.
+    copy.sort((a, b) => applied(b) - applied(a) || posted(b) - posted(a));
+  } else {
+    copy.sort((a, b) => posted(b) - posted(a));
+  }
+
+  return copy;
+}

@@ -53,6 +53,9 @@ function MailIcon(props) {
   );
 }
 
+// A paper plane, for the board where an application is actually sent. Not a
+// second briefcase: two briefcases side by side read as one feature split in
+// half rather than as two different things.
 const ACTION_ITEMS = [
   {
     key: "jobs",
@@ -206,6 +209,11 @@ function Header() {
 
         {/* Feature cards */}
         <div className="order-2 md:order-3 md:col-span-2">
+        {/* Four cards now, not three. Two across on a tablet and four on a
+            wide screen, because three columns with a fourth card leaves one
+            card sitting alone on a second row at a third of the width. This
+            is a visible change to the homepage layout for everyone, which is
+            why it is a step in the checklist rather than a quiet edit. */}
         <div className="grid gap-5 md:grid-cols-3 md:gap-6">
           {ACTION_ITEMS.map((item) => (
             <FeatureCard

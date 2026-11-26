@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { setPostLoginRedirect } from "../lib/postLoginRedirect";
+import { isRecruiterUser } from "../lib/accountType";
 
 function Footer() {
   const navigate = useNavigate();
@@ -37,12 +38,28 @@ function Footer() {
     navigate("/", { replace: true });
   };
 
+  // Same rule as the header: a recruiter account does not get the
+  // community signposts. Dropping two of the five columns would leave an
+  // odd grid, so the column count changes with them.
+  //
+  // THIS VALUE WAS COMPUTED AND THEN NOT USED ON THE ACCOUNT COLUMN, which
+  // is how a recruiter kept a Profile link in the footer after the header's
+  // was taken away on 25 Nov 2026 — one that bounced them straight back to
+  // /recruiter. Rishi: *"A control that silently does nothing visible is
+  // worse than no control."* The Account list below now asks the same
+  // question the grid does.
+  const isRecruiter = session ? isRecruiterUser(session.user) : false;
+
+  const gridClass = isRecruiter
+    ? "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3"
+    : "grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-5";
+
   return (
     <footer className="mt-6 border-t border-slate-200 bg-white">
 
       <div className="max-w-6xl mx-auto px-6 py-5">
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-4">
+        <div className={gridClass}>
 
           <div>
             <h3 className="text-xl font-bold text-slate-900">
@@ -62,6 +79,7 @@ function Footer() {
             </a>
           </div>
 
+          {!isRecruiter && (
           <div className="hidden md:block">
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
               Explore
@@ -78,8 +96,25 @@ function Footer() {
               </li>
             </ul>
           </div>
+          )}
 
-          <div className="hidden md:block">
+          {/* CARRIED ITEM 30, decided 25 Nov 2026: this column shows at every
+              width, unlike Explore above, which stays desktop-only.
+              Not symmetry — a reason. Every other item the footer hides below
+              768px is also in the header's menu, so hiding it loses nothing.
+              `Join the Community` is the exception: it points at /signup in
+              JOIN mode, and the header's signed-out item is `Sign In`, which
+              reaches the same route in SIGN-IN mode. So a signed-out visitor
+              on a phone was offered "Sign In" and never "Join" — a funnel gap
+              on the live site, found while checking a different complaint.
+              Renaming the header item was the alternative and was rejected:
+              it fixes the new visitor and confuses the 2,520 members who
+              already know where Sign In is.
+              MEASURED COST: the mobile footer goes 275px to 369px on
+              /questions at 375px. The second link here duplicates the
+              header's menu; dropping it would save 20px of that. */}
+          {!isRecruiter && (
+          <div>
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
               Community
             </h4>
@@ -104,6 +139,32 @@ function Footer() {
               </li>
             </ul>
           </div>
+          )}
+
+          <div>
+            <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
+              Legal
+            </h4>
+
+            <ul className="mt-2 space-y-1.5 text-sm">
+              <li>
+                <Link
+                  to="/privacy"
+                  className="text-slate-600 transition hover:text-blue-600"
+                >
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/recruiter-terms"
+                  className="text-slate-600 transition hover:text-blue-600"
+                >
+                  Recruiter Terms
+                </Link>
+              </li>
+            </ul>
+          </div>
 
           <div>
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-400">
@@ -121,13 +182,27 @@ function Footer() {
                       My Dashboard
                     </Link>
                   </li>
+                  {/* Profile for a community member, Settings for a
+                      recruiter — one slot, never both, exactly as in
+                      SiteHeader.jsx. /profile is behind blockRecruiters, so
+                      offering it to a recruiter is offering a link that
+                      bounces. */}
                   <li className="hidden md:block">
-                    <Link
-                      to="/profile"
-                      className="text-slate-600 transition hover:text-blue-600"
-                    >
-                      Profile
-                    </Link>
+                    {isRecruiter ? (
+                      <Link
+                        to="/recruiter/settings"
+                        className="text-slate-600 transition hover:text-blue-600"
+                      >
+                        Settings
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/profile"
+                        className="text-slate-600 transition hover:text-blue-600"
+                      >
+                        Profile
+                      </Link>
+                    )}
                   </li>
                   <li>
                     <button
@@ -140,15 +215,38 @@ function Footer() {
                   </li>
                 </>
               ) : (
-                <li>
-                  <button
-                    type="button"
-                    onClick={handleSignIn}
-                    className="text-slate-600 transition hover:text-blue-600"
-                  >
-                    Sign In
-                  </button>
-                </li>
+                <>
+                  <li>
+                    <button
+                      type="button"
+                      onClick={handleSignIn}
+                      className="text-slate-600 transition hover:text-blue-600"
+                    >
+                      Sign In
+                    </button>
+                  </li>
+
+                  {/* ENTRANCE 2 OF 2 for a returning recruiter, 25 Nov 2026.
+                      SIGNED-OUT ONLY, which is the whole design: a recruiter
+                      who is already signed in has Settings and My Dashboard
+                      in the header, and a candidate who is signed in has no
+                      use for it. It appears for exactly the visitor who
+                      might need it and for nobody else.
+
+                      NOT IN THE HEADER, on Rishi's decision: the header is
+                      for the community, and a permanent recruiter link there
+                      is clutter for 2,520 people who will never use it.
+                      The footer is where a returning visitor looks for the
+                      thing the header does not offer. */}
+                  <li>
+                    <Link
+                      to="/recruiter/sign-in"
+                      className="text-slate-600 transition hover:text-blue-600"
+                    >
+                      Recruiter sign in
+                    </Link>
+                  </li>
+                </>
               )}
             </ul>
           </div>

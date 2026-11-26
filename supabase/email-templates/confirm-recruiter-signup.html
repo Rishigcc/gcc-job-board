@@ -1,0 +1,96 @@
+<!--
+  ===========================================================================
+  RECRUITER SIGNUP CONFIRMATION — the only email this project sends.
+
+  THIS FILE IS A DRAFT FOR YOU TO PASTE. It is not read by any code.
+  The live copy lives in the Supabase dashboard:
+
+      Authentication  ->  Emails  ->  Confirm signup
+
+  SUBJECT LINE (paste into the Subject field, above the body):
+
+      Confirm your iWorkAtGCC recruiter account
+
+  Then paste everything below the closing comment marker into the body.
+  Edit the wording freely -- just keep {{ .ConfirmationURL }} exactly as it
+  is, in both places. That is the token Supabase substitutes, and the account
+  cannot be confirmed without it.
+
+  NOTES
+  - Sender and reply-to are set in Project Settings -> Auth -> SMTP, already
+    configured as jobs@iworkatgcc.com / "iWorkAtGCC Jobs". Deliberately not a
+    no-reply address: the whole verification flow depends on them replying.
+  - This template is project-wide, applying to any email/password signup.
+    Recruiters are the only password signups, so in practice it is theirs
+    alone. If email signup is ever offered to candidates, this copy would
+    reach them too and would need splitting.
+  - The link is single-use and expires. Supabase's default is 24 hours,
+    set under Authentication -> Sign In / Providers -> Email.
+  ===========================================================================
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fc;padding:24px 0;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;padding:32px;font-family:Arial,Helvetica,sans-serif;">
+        <tr>
+          <td>
+
+            <p style="font-size:16px;line-height:1.6;color:#334155;margin:0 0 16px;">Hi,</p>
+
+            <p style="font-size:16px;line-height:1.6;color:#334155;margin:0 0 16px;">
+              Thanks for creating a recruiter account on iWorkAtGCC. Please confirm your email address to activate it:
+            </p>
+
+            <p style="margin:0 0 24px;">
+              <a href="{{ .ConfirmationURL }}" clicktracking="off" style="display:inline-block;background:#2563eb;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:12px 24px;border-radius:8px;">
+                Confirm my account
+              </a>
+            </p>
+
+            <p style="font-size:13px;line-height:1.6;color:#64748b;margin:0 0 24px;">
+              If the button doesn't work, copy this link into your browser:<br />
+              <a href="{{ .ConfirmationURL }}" clicktracking="off" style="color:#2563eb;word-break:break-all;">{{ .ConfirmationURL }}</a>
+            </p>
+
+            <div style="border-top:1px solid #e2e8f0;margin:0 0 24px;"></div>
+
+            <p style="font-size:16px;line-height:1.6;color:#0f172a;margin:0 0 12px;font-weight:bold;">
+              What happens next
+            </p>
+
+            <p style="font-size:16px;line-height:1.6;color:#334155;margin:0 0 16px;">
+              <strong>You can post jobs straight away</strong>, and candidates can apply to them immediately. There's no review queue and nothing to wait for.
+            </p>
+
+            <p style="font-size:16px;line-height:1.6;color:#334155;margin:0 0 16px;">
+              <strong>Before we release applicant details, we verify the account.</strong> Until that's done you'll see how many people applied to each role and when — but not their names, email addresses or resumes.
+            </p>
+
+            <p style="font-size:16px;line-height:1.6;color:#334155;margin:0 0 16px;">
+              <strong>Reply to this email with your company website and GSTIN</strong>, and we'll verify you within two working days of your reply.
+            </p>
+
+            <p style="font-size:14px;line-height:1.6;color:#64748b;margin:0 0 16px;">
+              While your account is unverified you can keep up to 10 roles live at a time. Closing a role, or letting one expire, frees up a slot.
+            </p>
+
+            <p style="font-size:16px;line-height:1.6;color:#334155;margin:0 0 16px;">
+              <strong>Coming back later?</strong> Sign in at <a href="https://www.iworkatgcc.com/recruiter/sign-in" clicktracking="off" style="color:#2563eb;">iworkatgcc.com/recruiter/sign-in</a>. Your recruiter account is separate from a community account, so use the email and password you just set here.
+            </p>
+
+            <div style="border-top:1px solid #e2e8f0;margin:24px 0;"></div>
+
+            <p style="font-size:14px;line-height:1.6;color:#64748b;margin:0 0 14px;">
+              Didn't create this account? You can ignore this email — nothing is activated until the link above is clicked.
+            </p>
+
+            <p style="font-size:16px;line-height:1.6;color:#334155;margin:0;">
+              Regards,<br />Rishi Nigam<br />iWorkAtGCC
+            </p>
+
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

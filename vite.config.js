@@ -88,8 +88,14 @@ function gaPlugin(env) {
           children: [
             "window.dataLayer = window.dataLayer || [];",
             "function gtag(){dataLayer.push(arguments);}",
-            "gtag('js', new Date());",
-            `gtag('config', '${measurementId}');`,
+            // Preview deployments are built with the same measurement ID, so
+            // the config call -- which is what sends the initial pageview --
+            // is gated on the live hostname. gtag.js itself sends nothing
+            // until it is configured, so loading it on a preview is inert.
+            "if (location.hostname === 'www.iworkatgcc.com') {",
+            "  gtag('js', new Date());",
+            `  gtag('config', '${measurementId}');`,
+            "}",
           ].join("\n"),
           injectTo: "head",
         },

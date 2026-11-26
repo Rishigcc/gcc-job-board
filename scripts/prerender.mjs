@@ -1,7 +1,8 @@
 import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { preview, loadEnv } from "vite";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, writeFile, readFile } from "node:fs/promises";
+import { isAppShell } from "../src/lib/jobPageHead.js";
 import path from "node:path";
 
 const DIST = path.resolve("dist");
@@ -115,6 +116,13 @@ function buildRoutes(questions) {
     { path: "/", kind: "home", out: "index.html" },
     { path: "/jobs", kind: "jobs", out: "jobs/index.html" },
     { path: "/questions", kind: "questions", out: "questions/index.html" },
+    { path: "/post-a-job", kind: "static", out: "post-a-job/index.html" },
+    { path: "/privacy", kind: "static", out: "privacy/index.html" },
+    {
+      path: "/recruiter-terms",
+      kind: "static",
+      out: "recruiter-terms/index.html",
+    },
     ...questions.map((q) => ({
       path: `/questions/${q.slug}`,
       kind: "question",
@@ -184,12 +192,50 @@ async function waitForContent(page, route) {
     return;
   }
 
-  if (route.kind === "jobs") {
+  if (route.kind === "static") {
+    // These pages fetch nothing, so the only failure mode worth waiting for
+    // is a render that never produced its heading. The default predicate
+    // below would pass on a blank page.
     await page.waitForFunction(
-      () =>
-        !Array.from(document.querySelectorAll("h2")).some((h) =>
-          h.textContent.trim().startsWith("Loading")
-        ) && document.querySelectorAll("h2").length > 0,
+      () => {
+        const h1 = document.querySelector("h1");
+        return !!h1 && h1.textContent.trim().length > 0;
+      },
+      undefined,
+      options
+    );
+    return;
+  }
+
+  if (route.kind === "jobs") {
+    // Two things have to resolve here, not one.
+    //
+    // The listings come from a static file, and the old condition -- no
+    // "Loading" heading, at least one heading -- covers them.
+    //
+    // The promo card above them asks the database how many roles the board
+    // is showing, and renders nothing at all until it knows. Saving the HTML
+    // before that answer arrives would put the card on /jobs on some builds
+    // and not others, with nothing in the output to say which had happened.
+    // So the wrapper publishes its decision as data-board-promo, and this
+    // waits for it to stop saying "pending".
+    //
+    // networkidle alone was not enough: the count is issued from an effect
+    // after hydration, which can start after the idle window has already
+    // been declared.
+    await page.waitForFunction(
+      () => {
+        const headings = Array.from(document.querySelectorAll("h2"));
+        if (headings.some((h) => h.textContent.trim().startsWith("Loading"))) {
+          return false;
+        }
+        if (headings.length === 0) return false;
+
+        const promo = document.querySelector("[data-board-promo]");
+        if (!promo) return false;
+
+        return promo.getAttribute("data-board-promo") !== "pending";
+      },
       undefined,
       options
     );
@@ -291,13 +337,23 @@ function escapeXml(value) {
     .replace(/'/g, "&apos;");
 }
 
-function buildSitemap(questions) {
+const STATIC_SITEMAP_PATHS = [
+  "/",
+  "/jobs",
+  "/questions",
+  "/post-a-job",
+  "/privacy",
+  "/recruiter-terms",
+];
+
+function buildSitemap(questions, skippedPaths = new Set()) {
   const today = new Date().toISOString().slice(0, 10);
 
   const entries = [
-    { loc: `${SITE_URL}/`, lastmod: today },
-    { loc: `${SITE_URL}/jobs`, lastmod: today },
-    { loc: `${SITE_URL}/questions`, lastmod: today },
+    ...STATIC_SITEMAP_PATHS.filter((p) => !skippedPaths.has(p)).map((p) => ({
+      loc: `${SITE_URL}${p}`,
+      lastmod: today,
+    })),
     ...questions.map((q) => ({
       loc: `${SITE_URL}/questions/${q.slug}`,
       lastmod: new Date(q.createdAt).toISOString().slice(0, 10),
@@ -352,7 +408,33 @@ async function main() {
   // Preserve an un-prerendered shell for the SPA catch-all rewrite. Without
   // it, unmatched routes (a question posted since the last build) would be
   // served the prerendered homepage, including its canonical URL.
-  await copyFile(path.join(DIST, "index.html"), path.join(DIST, "app.html"));
+  const shellPath = path.join(DIST, "app.html");
+  await copyFile(path.join(DIST, "index.html"), shellPath);
+
+  // THE BUILD FAILS HERE RATHER THAN THE SITE FAILING LATER.
+  //
+  // api/public.js reads dist/app.html to assemble every job page, and
+  // refuses to serve a document it cannot identify -- so a deploy that
+  // somehow produced no app.html, or a foreign one, would answer 503 on
+  // every /gcc-jobs/<role> URL while the rest of the site looked fine.
+  //
+  // That is a silent-ish failure nobody is watching for, and it costs one
+  // read to turn it into a failed deploy. Checked with the SAME function the
+  // serverless function uses, so the two cannot disagree about what counts
+  // as our shell.
+  const shell = await readFile(shellPath, "utf8");
+
+  if (!isAppShell(shell)) {
+    console.error(
+      `[prerender] FAILED: ${shellPath} is not a usable app shell.\n` +
+        "  api/public.js would answer 503 on every job page.\n" +
+        "  It must contain <div id=\"root\">, an /assets/index-*.js bundle " +
+        "and a </head>."
+    );
+    process.exit(1);
+  }
+
+  console.log(`[prerender] app.html verified (${shell.length} bytes)`);
 
   const server = await preview({
     preview: { port: 4183, strictPort: true },
@@ -442,12 +524,14 @@ async function main() {
   // A skipped route serves the shell, so advertising it would point crawlers
   // at a contentless 200. Carried-forward routes keep their entry: they have
   // a real page, just an older one.
-  const skippedSlugs = new Set(skipped.map(({ route }) => route.slug));
-  const publishedQuestions = questions.filter((q) => !skippedSlugs.has(q.slug));
+  const skippedPaths = new Set(skipped.map(({ route }) => route.path));
+  const publishedQuestions = questions.filter(
+    (q) => !skippedPaths.has(`/questions/${q.slug}`)
+  );
 
   await writeFile(
     path.join(DIST, "sitemap.xml"),
-    buildSitemap(publishedQuestions),
+    buildSitemap(publishedQuestions, skippedPaths),
     "utf8"
   );
 

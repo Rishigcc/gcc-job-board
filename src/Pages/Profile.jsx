@@ -5,6 +5,7 @@ import { saveDisplayName } from "../lib/useDisplayName";
 import Footer from "../components/Footer";
 import SiteHeader from "../components/SiteHeader";
 import Seo from "../components/Seo";
+import ProfileJobBoard from "../components/ProfileJobBoard";
 
 function Profile() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ function Profile() {
 
   const [askedCount, setAskedCount] = useState(0);
   const [savedCount, setSavedCount] = useState(0);
+  const [savedJobsCount, setSavedJobsCount] = useState(0);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -52,7 +54,7 @@ function Profile() {
         setDisplayNameInput(data?.display_name || "");
       }
 
-      const [askedResult, savedResult] = await Promise.all([
+      const [askedResult, savedResult, savedJobsResult] = await Promise.all([
         supabase
           .from("questions")
           .select("id", { count: "exact", head: true })
@@ -60,6 +62,14 @@ function Profile() {
         supabase
           .from("question_saves")
           .select("question_id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+        // Counted straight off the table, like question_saves above, and not
+        // through my_saved_jobs(). The number has to be the number of rows,
+        // because /profile/saved-jobs accounts for every one of them --
+        // including the roles that have since closed.
+        supabase
+          .from("job_saves")
+          .select("job_id", { count: "exact", head: true })
           .eq("user_id", user.id),
       ]);
 
@@ -73,6 +83,12 @@ function Profile() {
         console.error("Error loading saved count:", savedResult.error);
       } else {
         setSavedCount(savedResult.count || 0);
+      }
+
+      if (savedJobsResult.error) {
+        console.error("Error loading saved roles count:", savedJobsResult.error);
+      } else {
+        setSavedJobsCount(savedJobsResult.count || 0);
       }
 
       setLoading(false);
@@ -130,25 +146,42 @@ function Profile() {
           ) : (
             <div className="space-y-5">
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-800">
-                  Name
-                </label>
+              {/* RENDERED ONLY WHEN THERE IS SOMETHING TO SHOW.
+                  Both come from the Google identity -- profiles
+                  .google_display_name and .google_email -- which invariant I1
+                  keeps NULL for a recruiter. So a recruiter saw two rows
+                  reading "—", which is half of what they see at the top of
+                  this page and reads as broken software. Rishi, 25 Nov 2026.
 
-                <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
-                  {name || "—"}
-                </p>
-              </div>
+                  THE CONDITION IS THE ABSENCE OF THE DATA, NOT account_type.
+                  Keying off the role is the conditional-render mistake
+                  decision 10 rules out -- one person may be both a candidate
+                  and a recruiter, and this page is deliberately reachable for
+                  recruiters because of it. Testing the value also tidies the
+                  page for any community member missing one. */}
+              {name ? (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800">
+                    Name
+                  </label>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-800">
-                  Email
-                </label>
+                  <p className="mt-2 break-words rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
+                    {name}
+                  </p>
+                </div>
+              ) : null}
 
-                <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
-                  {email || "—"}
-                </p>
-              </div>
+              {email ? (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800">
+                    Email
+                  </label>
+
+                  <p className="mt-2 break-words rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
+                    {email}
+                  </p>
+                </div>
+              ) : null}
 
               <form onSubmit={handleSave}>
                 <label
@@ -200,7 +233,7 @@ function Profile() {
         </div>
 
         {!loading && (
-          <div className="mt-6 grid grid-cols-2 gap-4">
+          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
             <button
               type="button"
               onClick={() => navigate("/profile/asked")}
@@ -226,8 +259,32 @@ function Profile() {
                 Questions Saved
               </div>
             </button>
+
+            {/* Third tile, so it spans the row on a phone rather than
+                sitting beside a gap. The number counts rows, which is why
+                the page it opens accounts for closed roles too instead of
+                quietly showing fewer cards than this says. */}
+            <button
+              type="button"
+              onClick={() => navigate("/profile/saved-jobs")}
+              className="col-span-2 rounded-2xl border border-slate-200 bg-white px-5 py-6 text-center shadow-sm transition hover:bg-slate-50 sm:col-span-1"
+            >
+              <div className="text-3xl font-bold text-slate-900">
+                {savedJobsCount}
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-600">
+                Roles Saved
+              </div>
+            </button>
           </div>
         )}
+
+        {/* The job board half of the profile: applications, the resume on
+            file, and Delete my job board data -- which lives here because the privacy
+            policy says it does. Kept in its own component so this page, which
+            the community has used since before the job board existed, gains
+            one line rather than two hundred. */}
+        {!loading && <ProfileJobBoard userId={userId} />}
 
       </section>
 

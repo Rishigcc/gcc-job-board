@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { setPostLoginRedirect } from "../lib/postLoginRedirect";
+import { isRecruiterUser } from "../lib/accountType";
 import NotificationsBell from "./NotificationsBell";
 
 function SiteHeader() {
@@ -39,12 +40,25 @@ function SiteHeader() {
     navigate("/", { replace: true });
   };
 
+  // Recruiter accounts get a deliberately narrow header: the community
+  // areas are hidden, because a recruiter asking or answering is prompted
+  // for a display name, and saving one creates a community `profiles` row.
+  // My Dashboard stays (it redirects to /recruiter).
+  //
+  // PROFILE AND SETTINGS ARE ONE SLOT, NOT TWO. A recruiter sees Settings
+  // (/recruiter/settings); everyone else sees Profile (/profile). They are
+  // mutually exclusive on purpose — two near-identical links side by side
+  // would be the thing to avoid, and /profile is behind blockRecruiters as
+  // of 25 Nov 2026, so showing it to a recruiter would offer a link that
+  // bounces straight back to /recruiter.
+  const isRecruiter = session ? isRecruiterUser(session.user) : false;
+
   const navItems = [
     {
       key: "jobs",
       label: "Explore GCC Jobs",
       to: "/jobs",
-      show: true,
+      show: !isRecruiter,
       icon: (
         <>
           <rect x="3" y="7" width="18" height="13" rx="2" />
@@ -57,7 +71,7 @@ function SiteHeader() {
       key: "questions",
       label: "Ask, Answer & Connect",
       to: "/questions",
-      show: true,
+      show: !isRecruiter,
       icon: (
         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
       ),
@@ -80,11 +94,23 @@ function SiteHeader() {
       key: "profile",
       label: "Profile",
       to: "/profile",
-      show: Boolean(session),
+      show: Boolean(session) && !isRecruiter,
       icon: (
         <>
           <circle cx="12" cy="8" r="4" />
           <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+        </>
+      ),
+    },
+    {
+      key: "settings",
+      label: "Settings",
+      to: "/recruiter/settings",
+      show: Boolean(session) && isRecruiter,
+      icon: (
+        <>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2.5v2.2M12 19.3v2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6" />
         </>
       ),
     },
