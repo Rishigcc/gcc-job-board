@@ -235,10 +235,18 @@ function AppRoutes() {
       {/* Public job listings, collated from elsewhere */}
       <Route path="/jobs" element={<Jobs />} />
 
-      {/* Roles posted directly on iWorkAtGCC. Public, but noindex until
-          stage 10 renders them server-side, and not prerendered -- the route
-          list in scripts/prerender.mjs is explicit, so these are excluded by
-          not being added to it. */}
+      {/* Roles posted directly on iWorkAtGCC. BOTH ROUTES ARE PUBLIC AND
+          INDEXABLE. /gcc-jobs is prerendered by scripts/prerender.mjs;
+          /gcc-jobs/:slugId is served with its JobPosting markup by
+          api/public.js via a vercel.json rewrite, so it is not in the
+          prerender route list and must not be added to it.
+
+          This comment used to say "noindex until stage 10 renders them
+          server-side, and not prerendered". Stage 10 did that, and the
+          noindex and the missing prerender entry were both left behind --
+          found on production on 26 Nov 2026, an hour after the merge, by
+          Search Console reporting the board index as excluded by noindex.
+          See the header of src/Pages/GccJobs.jsx. */}
       <Route path="/gcc-jobs" element={<GccJobs />} />
       <Route path="/gcc-jobs/:slugId" element={<GccJobDetail />} />
 

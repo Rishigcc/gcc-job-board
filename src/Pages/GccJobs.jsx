@@ -15,9 +15,30 @@ import { useViewer, showsCandidateControls } from "../lib/useViewer";
 // Separate from /jobs, which lists roles collated from elsewhere. Candidates
 // can apply to these; the collated ones send them off-site.
 //
-// noindex until stage 10, which renders job pages server-side. A page whose
-// content arrives after JavaScript has run is worth nothing to a crawler, and
-// a half-indexed job board is worse than an unindexed one.
+// INDEXABLE AND PRERENDERED since 26 Nov 2026. It was neither before, and the
+// note that stood here said why: "noindex until stage 10, which renders job
+// pages server-side. A page whose content arrives after JavaScript has run is
+// worth nothing to a crawler, and a half-indexed job board is worse than an
+// unindexed one."
+//
+// That reasoning was right and its condition was met. Stage 10 shipped, and it
+// removed the matching noindex from GccJobDetail.jsx on 24 Nov -- but not the
+// one here, and did not add this route to scripts/prerender.mjs. So the board
+// index went live on 26 Nov publicly reachable and telling Google to ignore
+// it, which Search Console reported within the hour: "Excluded by 'noindex'
+// tag". The detail pages were indexable and the page listing them was not.
+//
+// THE TWO HALVES GO TOGETHER AND NEITHER IS SUFFICIENT. Dropping the noindex
+// alone would invite a crawler to a page whose roles arrive after JavaScript,
+// which is the original objection. Prerendering alone would have baked
+// noindex into the served HTML, because meta[name="robots"] is in the
+// prerenderer's MANAGED_HEAD_TAGS and it captures the hydrated DOM. Remove
+// the noindex first, prerender second.
+//
+// This page therefore publishes its own readiness as data-board-list, exactly
+// as /jobs publishes data-board-promo, because the roles are fetched in an
+// effect after hydration and networkidle resolves before they land. A build
+// that saved this page early would ship "Loading roles…" as the content.
 //
 // FILTER AND SEARCH STATE LIVES IN THE URL, not in useState. That makes a
 // filtered list a link someone can send, and makes the browser Back button
@@ -135,13 +156,19 @@ function GccJobs() {
   const first = result.total === 0 ? 0 : (page - 1) * JOBS_PER_PAGE + 1;
   const last = Math.min(page * JOBS_PER_PAGE, result.total);
 
+  // data-board-list is read by scripts/prerender.mjs, which refuses to save
+  // this page while it says "pending". `loading` is derived from whether the
+  // result in state answers the query in the URL, so it cannot drift out of
+  // step with what is actually rendered below.
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div
+      className="min-h-screen bg-slate-100"
+      data-board-list={loading ? "pending" : "ready"}
+    >
       <Seo
         title="Roles posted on iWorkAtGCC"
         description="Roles posted directly by recruiters hiring into India's Global Capability Centres."
         path="/gcc-jobs"
-        noindex
       />
 
       <SiteHeader />
@@ -242,8 +269,16 @@ function GccJobs() {
               : `Showing ${first}–${last} of ${result.total} role${result.total === 1 ? "" : "s"}`}
         </p>
 
+        {/* data-fetch-error is the signal scripts/prerender.mjs waits on to
+            FAIL rather than resolve -- the same attribute QuestionDetail.jsx
+            publishes. Without it a build that could not reach Supabase would
+            save this apology as the board's indexable content. */}
         {error ? (
-          <div role="alert" className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-5">
+          <div
+            role="alert"
+            data-fetch-error
+            className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-5"
+          >
             <p className="font-semibold text-red-900">These roles could not be loaded.</p>
             <p className="mt-1 font-mono text-xs text-red-700">{error.message}</p>
           </div>

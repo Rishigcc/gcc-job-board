@@ -115,6 +115,10 @@ function buildRoutes(questions) {
   return [
     { path: "/", kind: "home", out: "index.html" },
     { path: "/jobs", kind: "jobs", out: "jobs/index.html" },
+    // The board INDEX only. Individual roles are served by api/public.js
+    // through a vercel.json rewrite and must never be added here -- they are
+    // not in dist/ and the function is what puts JobPosting markup on them.
+    { path: "/gcc-jobs", kind: "gccJobs", out: "gcc-jobs/index.html" },
     { path: "/questions", kind: "questions", out: "questions/index.html" },
     { path: "/post-a-job", kind: "static", out: "post-a-job/index.html" },
     { path: "/privacy", kind: "static", out: "privacy/index.html" },
@@ -242,6 +246,40 @@ async function waitForContent(page, route) {
     return;
   }
 
+  if (route.kind === "gccJobs") {
+    // The board index. Its roles come from Supabase in an effect after
+    // hydration, so networkidle can be declared before they land and the
+    // default predicate would happily save "Loading roles…" as the content
+    // of a page that is now indexable. The page publishes its own readiness
+    // instead, the same arrangement /jobs uses for data-board-promo.
+    //
+    // AN EMPTY BOARD IS A LEGITIMATE OUTCOME and must prerender cleanly --
+    // there are no roles at all until the first recruiter posts. So this
+    // waits for the page to have DECIDED, not for cards to exist. Waiting
+    // for cards would hang on the correct state.
+    await waitForOutcome(
+      page,
+      ({ errorSelector }) => {
+        // Checked first, for the same reason as a question page: it is the
+        // one state that will never resolve on its own.
+        if (document.querySelector(errorSelector)) return "error";
+
+        const h1 = document.querySelector("h1");
+        if (!h1 || h1.textContent.trim().length === 0) return false;
+
+        const board = document.querySelector("[data-board-list]");
+        if (!board) return false;
+
+        // Compared to "ready" rather than tested for "not pending", so a
+        // future third state times out loudly instead of being saved.
+        return board.getAttribute("data-board-list") === "ready" ? "ok" : false;
+      },
+      { errorSelector: FETCH_ERROR_SELECTOR },
+      options
+    );
+    return;
+  }
+
   await page.waitForFunction(noLoadingCards, undefined, options);
 }
 
@@ -340,6 +378,12 @@ function escapeXml(value) {
 const STATIC_SITEMAP_PATHS = [
   "/",
   "/jobs",
+  // Added 26 Nov 2026. Without it the board index was in NEITHER sitemap --
+  // sitemap.xml lists these paths plus every question, sitemap-jobs.xml lists
+  // individual roles -- so the only route to it was the promo card on /jobs,
+  // which is itself hidden while live_job_count() is 0. Public, unlinked and
+  // unlisted at once.
+  "/gcc-jobs",
   "/questions",
   "/post-a-job",
   "/privacy",
