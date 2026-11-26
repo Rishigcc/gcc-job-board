@@ -126,6 +126,28 @@ export function buildJobPageHead({ job, company, canonicalUrl, indexable }) {
 // Returns null rather than a mangled document if there is no </head> to
 // insert before. The caller then serves the shell untouched: a page with no
 // markup is a working page, and a page with a <title> in its <body> is not.
+//
+// THE SHELL'S OWN <title> IS REMOVED, AND THAT IS THE WHOLE POINT OF IT.
+//   The markup is inserted immediately before </head>, which puts it AFTER
+//   everything the shell already has -- including the shell's
+//   <title>iWorkAtGCC Community</title>. A document may contain more than one
+//   <title> without being invalid, and THE FIRST ONE IN TREE ORDER WINS:
+//   document.title returns it, and a crawler reads it.
+//
+//   So until 26 Nov 2026 every job page served by api/public.js carried its
+//   own title in second place, where nothing reads it, and presented the
+//   generic shell title to Google instead. Measured in a real browser with
+//   JavaScript disabled: document.title was "iWorkAtGCC Community" on a page
+//   whose own <title> was three tags further down. React does not correct it
+//   after hydration either.
+//
+//   The prerenderer never had this bug because it edits a live DOM, so its
+//   managed title lands first. This function builds a string, so it has to
+//   remove what it is replacing.
+//
+//   ONLY WHEN WE ARE DEFINITELY PROVIDING ONE. If headHtml carries no title,
+//   the shell keeps its own -- a generic title is wrong, no title at all is
+//   worse, and the fail-safe direction is the one that still names the site.
 // ---------------------------------------------------------------------------
 export function injectHead(shell, headHtml) {
   if (typeof shell !== "string" || !shell) return null;
@@ -136,7 +158,15 @@ export function injectHead(shell, headHtml) {
 
   const at = match.index;
 
-  return `${shell.slice(0, at)}    ${headHtml}\n  ${shell.slice(at)}`;
+  // Scoped to the head, so a <title> inside the body -- which would not be a
+  // document we recognise anyway -- is left alone. Non-global: one shell, one
+  // title, and a second would not be ours to decide about.
+  const providesTitle = /<title\b[^>]*>/i.test(headHtml);
+  const head = providesTitle
+    ? shell.slice(0, at).replace(/<title\b[^>]*>[\s\S]*?<\/title>\s*/i, "")
+    : shell.slice(0, at);
+
+  return `${head}    ${headHtml}\n  ${shell.slice(at)}`;
 }
 
 // ---------------------------------------------------------------------------

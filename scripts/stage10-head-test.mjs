@@ -278,6 +278,72 @@ check("an empty head returns null", injectHead(SHELL, ""), null);
 check("a null head returns null", injectHead(SHELL, null), null);
 
 // ---------------------------------------------------------------------------
+// 6a. THE SHELL'S OWN <title> IS REPLACED, NOT JOINED
+//
+// REGRESSION TEST FOR A LIVE DEFECT, found 26 Nov 2026 on production within
+// an hour of the merge. A document may hold two <title> elements without
+// being invalid, and the FIRST IN TREE ORDER is the one document.title
+// returns and a crawler reads. injectHead writes before </head>, so the
+// job's title landed SECOND and the shell's generic one won.
+//
+// Measured in Chromium with JavaScript disabled against the live job page:
+// document.title was "iWorkAtGCC Community" while the page's own title sat
+// three tags further down. Hydration did not correct it.
+//
+// WHY NO EXISTING ASSERTION CAUGHT IT. Every check above tests the FRAGMENT
+// buildJobPageHead emits, and the fragment was always right. The defect only
+// exists in the assembled document, so these assert that instead.
+// ---------------------------------------------------------------------------
+
+const titleCount = (html) => (html.match(/<title\b[^>]*>/gi) || []).length;
+const firstTitle = (html) => /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
+
+check("the assembled document has exactly one <title>", titleCount(injected), 1);
+check(
+  "and it is the job's title, not the shell's",
+  firstTitle(injected),
+  "Senior SAP FICO Consultant at Acme GCC — iWorkAtGCC"
+);
+checkFalse("the shell's generic title is gone", injected.includes("<title>iWorkAtGCC</title>"));
+checkTrue("the surviving title is still inside the head",
+  injected.indexOf("<title") < injected.indexOf("</head>"));
+
+// A noindex page still has a title a human reads in a tab, and `indexable`
+// governs the robots meta and the markup -- not the title. So this asserts
+// the job's own title survives here too, rather than some withheld wording:
+// the "This role is no longer open" string is api/public.js's substitute JOB,
+// passed into buildJobPageHead, not a branch inside it.
+check("a noindex page also has exactly one <title>",
+  titleCount(injectHead(SHELL, withheld)), 1);
+check("and it is still the job's own title",
+  firstTitle(injectHead(SHELL, withheld)),
+  "Senior SAP FICO Consultant at Acme GCC — iWorkAtGCC");
+
+// Case is a bundler's to choose, not ours to assume -- as with </HEAD> above.
+const upperShell = "<html><head><TITLE>iWorkAtGCC</TITLE></head><body></body></html>";
+check("an uppercase <TITLE> is replaced too", titleCount(injectHead(upperShell, indexed)), 1);
+
+// Scoped to the head. A <title> in the body is not a document we would
+// recognise, and removing things from a stranger's body is not this
+// function's job.
+const bodyTitle = injectHead(
+  "<html><head><title>Shell</title></head><body><title>Body</title></body></html>",
+  indexed
+);
+checkTrue("a <title> in the body is left alone", bodyTitle.includes("<title>Body</title>"));
+checkFalse("while the head's is still replaced", bodyTitle.includes("<title>Shell</title>"));
+
+// FAIL-SAFE DIRECTION. If the head being injected carries no title, the
+// shell keeps its own: a generic title is wrong, and no title at all is
+// worse. The same reasoning as QuestionCard's canSave having no default --
+// the forgetful path fails towards the harmless state.
+const noTitleHead = '<meta name="robots" content="noindex, nofollow">';
+check("a head with no title leaves the shell's in place",
+  titleCount(injectHead(SHELL, noTitleHead)), 1);
+check("...and the one left is the shell's",
+  firstTitle(injectHead(SHELL, noTitleHead)), "iWorkAtGCC");
+
+// ---------------------------------------------------------------------------
 // 7. isAppShell -- THE REGRESSION TEST FOR A REAL INCIDENT
 //
 // api/job-page.js used to fetch the shell over HTTP and trust it if the
